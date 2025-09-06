@@ -1,0 +1,298 @@
+{
+    "master": {
+      "tasks": [
+        {
+          "id": 1,
+          "title": "Project Scaffolding and Environment Setup",
+          "description": "Set up the initial project structure with Python 3.11+, development tools, and directory layout according to the PRD specifications.",
+          "details": "1. Create a new Python project with Python 3.11+ support\n2. Set up development tools: uv, ruff, black, mypy, pytest\n3. Create directory structure following the Clean/Hex architecture:\n   - domain/\n   - application/\n   - adapters/\n   - ports/\n   - cli/\n4. Initialize pyproject.toml with entry points: `sloptest = smart_test_generator.cli.main:app`\n5. Set up .gitignore, README.md, and LICENSE files\n6. Configure development environment with virtual environment\n7. Create initial package structure with __init__.py files",
+          "testStrategy": "Verify project structure exists with correct directories. Ensure all development tools can be invoked. Validate pyproject.toml configuration with a simple import test.",
+          "priority": "high",
+          "dependencies": [],
+          "status": "pending",
+          "subtasks": []
+        },
+        {
+          "id": 2,
+          "title": "Implement Domain Models",
+          "description": "Create the core domain models using dataclasses/pydantic to represent the fundamental entities in the system.",
+          "details": "1. Create domain/models.py with the following models:\n   - TestGenerationPlan (elements_to_test, existing_tests, coverage_before)\n   - TestElement (name, type, line_range, docstring)\n   - CoverageResult (line_coverage, branch_coverage, missing_lines)\n   - GenerationResult (file_path, content, success, error_message)\n   - RefineOutcome (updated_files, rationale, plan)\n   - AnalysisReport (files_to_process, reasons, existing_test_presence)\n2. Use pydantic for validation and serialization\n3. Implement proper type hints for all models\n4. Add docstrings explaining each model's purpose and fields\n5. Ensure models are immutable where appropriate",
+          "testStrategy": "Unit tests for each model verifying initialization, validation rules, serialization/deserialization, and edge cases like empty values or invalid inputs.",
+          "priority": "high",
+          "dependencies": [
+            1
+          ],
+          "status": "pending",
+          "subtasks": []
+        },
+        {
+          "id": 3,
+          "title": "Implement Configuration System",
+          "description": "Create a typed configuration system using pydantic that validates on load, provides sensible defaults, and supports all required configuration segments.",
+          "details": "1. Create config/model.py with pydantic models for each configuration segment:\n   - TestGenerationConfig (minimum_line_coverage, etc.)\n   - CoverageConfig (minimum_line_coverage)\n   - MergeConfig (strategy: Literal[\"append\", \"ast-merge\"])\n   - TestRunnerConfig (enable: bool)\n   - RefineConfig (enable: bool, max_retries, backoff, caps)\n   - ContextConfig (retrieval settings, hybrid weights, rerank model, hyde: bool)\n   - SecurityConfig (block_patterns: list[str], max_generated_file_size)\n   - CostConfig (daily_limit, per_request_limit)\n   - EnvironmentConfig\n   - QualityConfig\n   - PromptEngineeringConfig\n2. Create config/loader.py to merge YAML+env+CLI sources\n3. Implement validation logic for all configuration parameters\n4. Add sensible defaults for all non-required fields\n5. Support environment variable overrides with prefix\n6. Add helper methods for accessing nested configuration",
+          "testStrategy": "Unit tests verifying configuration loading from different sources, validation of required fields, default values, environment variable overrides, and error handling for invalid configurations.",
+          "priority": "high",
+          "dependencies": [
+            1
+          ],
+          "status": "pending",
+          "subtasks": []
+        },
+        {
+          "id": 4,
+          "title": "Define Interface Ports",
+          "description": "Implement the interface ports using Python Protocols to define the contracts between the application layer and adapters.",
+          "details": "1. Create ports/ directory with the following protocol definitions:\n   - LLMPort (generate_tests method returning dict)\n   - CoveragePort (measure, report methods)\n   - WriterPort (write method)\n   - ParserPort (parse_file, map_tests methods)\n   - ContextPort (index, retrieve, summarize methods)\n   - PromptPort (get_system_prompt, get_user_prompt, get_schema methods)\n   - RefinePort (refine method returning RefineOutcome)\n   - StatePort (get_state, update_state methods)\n   - ReportPort (generate_report method)\n   - UIPort (display_progress, display_results methods)\n   - CostPort (track_usage, get_summary methods)\n   - TelemetryPort (start_span, record_metric methods)\n2. Use Python's typing.Protocol for interface definitions\n3. Add detailed docstrings for each method\n4. Define proper type hints for all parameters and return values\n5. Ensure no imports from adapters in these files",
+          "testStrategy": "Create test implementations of each protocol to verify interface compliance. Use mypy to verify type checking works correctly with the protocols.",
+          "priority": "high",
+          "dependencies": [
+            2
+          ],
+          "status": "pending",
+          "subtasks": []
+        },
+        {
+          "id": 5,
+          "title": "Implement Parser Adapters",
+          "description": "Create adapters for parsing Python code and mapping tests to source code elements.",
+          "details": "1. Create adapters/parsing/codebase_parser.py:\n   - Implement AST-based parsing of Python files\n   - Extract functions, classes, methods with signatures\n   - Parse docstrings and type annotations\n   - Identify import statements and dependencies\n2. Create adapters/parsing/test_mapper.py:\n   - Map test functions to source code elements\n   - Identify existing test coverage for elements\n   - Support pytest naming conventions\n3. Implement helper functions for:\n   - Building directory trees with bounded depth/width\n   - Extracting element signatures\n   - Identifying uncovered elements\n4. Add caching for parsed files to improve performance",
+          "testStrategy": "Unit tests with sample Python files to verify correct parsing of functions, classes, methods, and imports. Test mapping of test functions to source elements with various naming conventions. Verify directory tree generation with different depth/width constraints.",
+          "priority": "high",
+          "dependencies": [
+            4
+          ],
+          "status": "pending",
+          "subtasks": []
+        },
+        {
+          "id": 6,
+          "title": "Implement Coverage Adapters",
+          "description": "Create adapters for measuring code coverage using pytest+coverage with AST fallback.",
+          "details": "1. Create adapters/coverage/pytest_coverage.py:\n   - Implement command builder (cwd, env, pythonpath)\n   - Run pytest with coverage\n   - Parse .coverage and JUnit XML output\n   - Handle timeouts and errors\n   - Store artifacts in .sloptest/coverage/<run_id>\n2. Create adapters/coverage/ast_fallback.py:\n   - Estimate line/branch coverage using AST\n   - Calculate function coverage\n   - Use when pytest coverage fails\n3. Create adapters/coverage/composite.py:\n   - Try pytest coverage first\n   - Fall back to AST on failure\n   - Record reason for fallback\n   - Provide unified interface\n4. Implement helper functions for coverage reporting and visualization",
+          "testStrategy": "Unit tests with sample Python projects to verify coverage measurement with pytest. Test AST fallback with various Python constructs. Verify composite adapter correctly falls back when pytest fails. Test error handling and timeout scenarios.",
+          "priority": "high",
+          "dependencies": [
+            4,
+            5
+          ],
+          "status": "pending",
+          "subtasks": []
+        },
+        {
+          "id": 7,
+          "title": "Implement Writer Adapters",
+          "description": "Create adapters for safely writing generated tests to the filesystem with different strategies.",
+          "details": "1. Create adapters/io/writer_append.py:\n   - Implement simple append to existing test files\n   - Create new files when missing\n   - Support dry-run mode\n2. Create adapters/io/writer_ast_merge.py:\n   - Parse existing and new test files\n   - Merge structurally to avoid duplicates\n   - Format with Black (optional)\n   - Generate unified diff for dry-run\n3. Implement safety policies:\n   - Only write to tests/ directory\n   - Enforce file size caps\n   - Block dangerous patterns\n   - Validate syntax before writing\n4. Add helper functions for path resolution and validation",
+          "testStrategy": "Unit tests for append and AST merge strategies with various test files. Verify safety policies block writes outside tests/ directory and files with dangerous patterns. Test dry-run mode generates correct diffs without modifying files.",
+          "priority": "high",
+          "dependencies": [
+            4,
+            5
+          ],
+          "status": "pending",
+          "subtasks": []
+        },
+        {
+          "id": 8,
+          "title": "Implement State Management",
+          "description": "Create adapters for managing state across runs, including coverage history and generation logs.",
+          "details": "1. Create adapters/io/state_json.py:\n   - Implement project-scoped JSON state storage\n   - Optional SQLite backend support\n   - Maintain coverage history\n   - Track generation log\n   - Support idempotent decisions\n2. Implement methods for:\n   - Initializing state\n   - Updating state after generation\n   - Querying historical data\n   - Determining which files need generation\n3. Add migration support from old .testgen_state.json format\n4. Implement state synchronization and reset commands",
+          "testStrategy": "Unit tests for state initialization, updates, and queries. Test migration from old state format. Verify idempotent decisions work correctly across multiple runs. Test state reset and synchronization.",
+          "priority": "medium",
+          "dependencies": [
+            4
+          ],
+          "status": "pending",
+          "subtasks": []
+        },
+        {
+          "id": 9,
+          "title": "Implement Telemetry and Cost Management",
+          "description": "Create adapters for OpenTelemetry tracing, metrics collection, and cost management.",
+          "details": "1. Create adapters/telemetry/otel.py:\n   - Implement OpenTelemetry spans for use cases\n   - Track LLM calls, retrieval, coverage runs, writer operations\n   - Record metrics for latency, errors, tokens\n   - Support opt-out and anonymization\n2. Create adapters/telemetry/metrics.py:\n   - Track coverage delta\n   - Count tests generated\n   - Measure pass rate\n   - Count refine iterations\n3. Create adapters/telemetry/cost_manager.py:\n   - Track token usage per request\n   - Accrue costs by model and operation\n   - Enforce budget warnings and stops\n   - Persist summary by day\n   - Implement cost optimization strategies",
+          "testStrategy": "Unit tests for span creation and attribute recording. Test metrics collection and aggregation. Verify cost tracking across multiple requests and budget enforcement. Test opt-out functionality and anonymization.",
+          "priority": "medium",
+          "dependencies": [
+            4
+          ],
+          "status": "pending",
+          "subtasks": []
+        },
+        {
+          "id": 10,
+          "title": "Implement Reporting and Artifact Storage",
+          "description": "Create adapters for generating reports and storing artifacts from test generation runs.",
+          "details": "1. Create adapters/io/reporter_json.py:\n   - Generate structured JSON reports\n   - Include coverage delta, tests generated, pass rate\n   - Record prompts and schemas (when verbose)\n   - Summarize retrieval diagnostics\n2. Create adapters/io/artifact_store.py:\n   - Store coverage reports\n   - Save generated tests\n   - Preserve LLM responses\n   - Manage run history\n   - Implement cleanup policies\n3. Implement helper functions for:\n   - Formatting tables for CLI output\n   - Generating spinners and progress indicators\n   - Creating concise summaries",
+          "testStrategy": "Unit tests for report generation with various inputs. Test artifact storage and retrieval. Verify cleanup policies work correctly. Test formatting functions for CLI output.",
+          "priority": "medium",
+          "dependencies": [
+            4
+          ],
+          "status": "pending",
+          "subtasks": []
+        },
+        {
+          "id": 11,
+          "title": "Implement Prompt Registry and Templates",
+          "description": "Create a registry for versioned prompt templates with system and user prompts for generation and refinement.",
+          "details": "1. Create prompts/registry.py:\n   - Implement versioned templates\n   - Store system prompts for generation and refinement\n   - Store user prompt templates\n   - Define JSON schemas for structured outputs\n2. Create generation system prompt with:\n   - Role: \"Python Test Generation Agent\"\n   - Constraints on output format and safety\n   - Guardrails against modifying source files\n3. Create refinement system prompt with:\n   - Role: \"Python Test Refiner\"\n   - Constraints on fixing specific issues\n4. Implement JSON schemas for:\n   - Generation output (file path and content)\n   - Refinement output (updated files, rationale, plan)\n5. Add anti-injection defenses in prompts",
+          "testStrategy": "Unit tests for prompt template rendering with various inputs. Verify JSON schemas validate correct outputs and reject invalid ones. Test anti-injection defenses with potentially problematic inputs.",
+          "priority": "high",
+          "dependencies": [
+            2,
+            3
+          ],
+          "status": "pending",
+          "subtasks": []
+        },
+        {
+          "id": 12,
+          "title": "Implement Context Pipeline",
+          "description": "Create adapters for indexing, retrieving, and summarizing code context from the repository.",
+          "details": "1. Create context/indexer.py:\n   - Implement hybrid index (BM25 + dense)\n   - Store chunk metadata (path, symbol, imports)\n   - Support adaptive chunking (semantic boundaries, AST nodes)\n   - Typical chunk size 300-800 tokens\n2. Create context/retriever.py:\n   - Build queries from filename, symbols, docstrings\n   - Include uncovered lines context\n   - Support optional recent git diffs\n   - Implement HyDE expansion and query rewriting\n   - Rerank with cross-encoder\n   - Select top-k snippets\n3. Create context/summarizer.py:\n   - Generate directory tree with bounded breadth/depth\n   - Summarize imports and class signatures\n   - Enforce max chars for user prompt content\n4. Implement context budgeting and truncation strategies",
+          "testStrategy": "Unit tests for indexing with sample repositories. Test retrieval with various queries and verify relevant snippets are returned. Test summarization with different directory structures. Verify context budgeting works correctly with large repositories.",
+          "priority": "high",
+          "dependencies": [
+            4,
+            5
+          ],
+          "status": "pending",
+          "subtasks": []
+        },
+        {
+          "id": 13,
+          "title": "Implement LLM Adapters",
+          "description": "Create adapters for different LLM providers with common helpers for response parsing, validation, and error handling.",
+          "details": "1. Create llm/common.py:\n   - Implement response parsing with brace balancing\n   - Add strict JSON Schema validation\n   - Support repair attempts for minor issues\n   - Normalize output (strip code fences, unescape)\n   - Log cost and token usage\n   - Implement retries with jitter\n   - Respect rate limits\n   - Set timeouts\n2. Create provider-specific adapters:\n   - llm/claude.py for Anthropic Claude\n   - llm/openai.py for OpenAI models\n   - llm/azure.py for Azure OpenAI\n   - llm/bedrock.py for AWS Bedrock\n3. Implement model routing based on file complexity\n4. Use deterministic settings for structure (temperature 0.2-0.3 for generation; lower for refine)\n5. Support streaming responses for large outputs",
+          "testStrategy": "Unit tests for each provider adapter with mocked responses. Test response parsing with various formats including malformed JSON. Verify retry logic works with different error types. Test model routing with files of varying complexity.",
+          "priority": "high",
+          "dependencies": [
+            4,
+            11
+          ],
+          "status": "pending",
+          "subtasks": []
+        },
+        {
+          "id": 14,
+          "title": "Implement Refinement System",
+          "description": "Create adapters for refining generated tests based on pytest failures and other issues.",
+          "details": "1. Create refine/manager.py:\n   - Categorize failures (import errors, assertion mismatches, fixture/mocks)\n   - Select appropriate refinement strategy\n   - Cap iterations and total time\n   - Stop on no-change\n   - Safely apply updates\n   - Rerun pytest to verify fixes\n2. Implement refinement strategies:\n   - refine/strategies/import_fix.py\n   - refine/strategies/assertion_fix.py\n   - refine/strategies/fixture_fix.py\n3. Create payload builder in application layer:\n   - Include failures, artifacts, repo context\n   - Add last run command, tests written, git metadata\n   - Analyze and include pattern information\n4. Implement safe apply closure and rerun closure",
+          "testStrategy": "Unit tests for failure categorization with sample pytest outputs. Test each refinement strategy with specific failure types. Verify iteration caps and time limits work correctly. Test safe apply with various test files.",
+          "priority": "medium",
+          "dependencies": [
+            6,
+            7,
+            13
+          ],
+          "status": "pending",
+          "subtasks": []
+        },
+        {
+          "id": 15,
+          "title": "Implement Analyze Use Case",
+          "description": "Create the application layer use case for analyzing what would be generated and why.",
+          "details": "1. Create application/analyze_usecase.py:\n   - Implement steps: sync state → find files → coverage.measure\n   - For each file call state.should_generate\n   - Build plans (elements from parser; reasons; existing test presence)\n   - Produce AnalysisReport DTO\n2. Use dependency injection for ports\n3. Keep business logic pure (no direct adapter calls)\n4. Implement helper functions for:\n   - Determining which elements need tests\n   - Calculating coverage gaps\n   - Prioritizing files for generation",
+          "testStrategy": "Unit tests with mocked ports to verify correct analysis flow. Test with various repository states and coverage levels. Verify correct identification of elements needing tests and reasons for generation.",
+          "priority": "medium",
+          "dependencies": [
+            4,
+            5,
+            6,
+            8
+          ],
+          "status": "pending",
+          "subtasks": []
+        },
+        {
+          "id": 16,
+          "title": "Implement Coverage Use Case",
+          "description": "Create the application layer use case for measuring and reporting code coverage.",
+          "details": "1. Create application/coverage_usecase.py:\n   - Implement steps: sync state → find files → coverage.measure → coverage.report\n   - Support filtering by file patterns\n   - Calculate overall and per-file coverage\n   - Generate coverage reports\n2. Use dependency injection for ports\n3. Keep business logic pure (no direct adapter calls)\n4. Implement helper functions for:\n   - Formatting coverage results\n   - Identifying coverage trends over time\n   - Suggesting files for improvement",
+          "testStrategy": "Unit tests with mocked ports to verify correct coverage measurement and reporting. Test with various repository states and coverage levels. Verify correct calculation of overall and per-file coverage.",
+          "priority": "medium",
+          "dependencies": [
+            4,
+            6,
+            8
+          ],
+          "status": "pending",
+          "subtasks": []
+        },
+        {
+          "id": 17,
+          "title": "Implement Generate Use Case",
+          "description": "Create the application layer use case for generating tests, the core functionality of the system.",
+          "details": "1. Create application/generate_usecase.py with the following steps:\n   - Sync state; discover files; coverage.measure\n   - Decide files to process; build TestGenerationPlan per file\n   - Build directory tree; gather codebase info; retrieve context if enabled\n   - Apply batching policy (streaming or batch N)\n   - Build prompts with system and user content\n   - Call LLMPort.generate_tests with JSON Schema; validate; normalize\n   - Use WriterPort.write per file with configured strategy\n   - Optionally run pytest via CoveragePort; parse failures\n   - Optionally refine via RefinePort based on failure category\n   - Measure coverage delta; record state; report; telemetry + cost summary\n2. Use dependency injection for all ports\n3. Keep business logic pure (no direct adapter calls)\n4. Implement batching and concurrency strategies\n5. Add proper error handling and recovery",
+          "testStrategy": "Unit tests with mocked ports to verify correct generation flow. Test with various repository states, coverage levels, and configuration options. Verify correct handling of LLM responses, writing strategies, and refinement. Test error handling and recovery scenarios.",
+          "priority": "high",
+          "dependencies": [
+            4,
+            5,
+            6,
+            7,
+            8,
+            9,
+            10,
+            11,
+            12,
+            13,
+            14
+          ],
+          "status": "pending",
+          "subtasks": []
+        },
+        {
+          "id": 18,
+          "title": "Implement Status and Utility Use Cases",
+          "description": "Create application layer use cases for viewing generation state/history and utility functions.",
+          "details": "1. Create application/status_usecase.py:\n   - Implement view generation state/history\n   - Support filtering and sorting options\n   - Generate summary statistics\n2. Create application/utility_usecases.py for:\n   - debug-state: dump internal state for debugging\n   - sync-state: force state synchronization\n   - reset-state: clear state and start fresh\n   - env: show environment information\n   - cost: display cost summary and projections\n3. Use dependency injection for all ports\n4. Keep business logic pure (no direct adapter calls)",
+          "testStrategy": "Unit tests with mocked ports to verify correct status reporting and utility functions. Test with various repository states and history records. Verify correct handling of state operations and environment information.",
+          "priority": "low",
+          "dependencies": [
+            4,
+            8,
+            9
+          ],
+          "status": "pending",
+          "subtasks": []
+        },
+        {
+          "id": 19,
+          "title": "Implement CLI Interface",
+          "description": "Create the command-line interface for all commands with proper argument parsing and output formatting.",
+          "details": "1. Create cli/main.py:\n   - Implement commands: generate, analyze, coverage, status\n   - Add utility commands: init-config, env, cost, debug-state, sync-state, reset-state\n   - Support flags: batch-size, streaming, force, dry-run, model options, etc.\n   - Format output with concise tables, spinners, summaries\n   - Add verbose mode for detailed diagnostics\n2. Create cli/config_init.py:\n   - Generate full YAML with commented guidance\n   - Provide minimal preset option\n3. Implement dependency injection for use cases\n4. Add proper error handling and user-friendly messages\n5. Support plugin discovery via entry points",
+          "testStrategy": "Unit tests for command-line argument parsing and validation. Test output formatting with various results. Verify error handling provides useful messages. Test config initialization with different options.",
+          "priority": "medium",
+          "dependencies": [
+            3,
+            15,
+            16,
+            17,
+            18
+          ],
+          "status": "pending",
+          "subtasks": []
+        },
+        {
+          "id": 20,
+          "title": "Implement Evaluation Harness and Documentation",
+          "description": "Create an evaluation system for testing the quality of generated tests and comprehensive documentation.",
+          "details": "1. Create evaluation/harness.py:\n   - Implement offline golden repos testing\n   - Add acceptance checks: syntactic validity, importability, pytest success, coverage improvements\n   - Support LLM-as-judge with rubric for test quality (optional)\n   - Enable SxS prompt variants A/B testing\n   - Store prompt registry version in artifacts\n2. Create comprehensive documentation:\n   - README.md with quickstart guide\n   - Advanced usage documentation\n   - Configuration reference\n   - Architecture overview\n   - Contributing guidelines\n3. Create sample .testgen.yml files:\n   - Minimal configuration\n   - Comprehensive configuration with comments\n4. Set up CI pipeline:\n   - Lint with ruff\n   - Type-check with mypy\n   - Run tests with pytest\n   - Verify documentation builds",
+          "testStrategy": "Test the evaluation harness with sample repositories. Verify documentation is accurate and comprehensive. Test CI pipeline with various code changes to ensure it catches issues.",
+          "priority": "low",
+          "dependencies": [
+            17,
+            19
+          ],
+          "status": "pending",
+          "subtasks": []
+        }
+      ],
+      "metadata": {
+        "created": "2025-09-06T20:16:58.061Z",
+        "updated": "2025-09-06T20:16:58.062Z",
+        "description": "Tasks for master context"
+      }
+    }
+  }
