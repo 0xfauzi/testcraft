@@ -1,0 +1,27 @@
+# Task ID: 3
+# Title: Implement Configuration System
+# Status: pending
+# Dependencies: 1
+# Priority: high
+# Description: Create a typed configuration system using pydantic that validates on load, provides sensible defaults, and supports all required configuration segments.
+# Details:
+1. Create config/model.py with pydantic models for each configuration segment:
+   - TestGenerationConfig (minimum_line_coverage, etc.)
+   - CoverageConfig (minimum_line_coverage)
+   - MergeConfig (strategy: Literal["append", "ast-merge"])
+   - TestRunnerConfig (enable: bool)
+   - RefineConfig (enable: bool, max_retries, backoff, caps)
+   - ContextConfig (retrieval settings, hybrid weights, rerank model, hyde: bool)
+   - SecurityConfig (block_patterns: list[str], max_generated_file_size)
+   - CostConfig (daily_limit, per_request_limit)
+   - EnvironmentConfig
+   - QualityConfig
+   - PromptEngineeringConfig
+2. Create config/loader.py to merge YAML+env+CLI sources
+3. Implement validation logic for all configuration parameters
+4. Add sensible defaults for all non-required fields
+5. Support environment variable overrides with prefix
+6. Add helper methods for accessing nested configuration
+
+# Test Strategy:
+Unit tests verifying configuration loading from different sources, validation of required fields, default values, environment variable overrides, and error handling for invalid configurations.

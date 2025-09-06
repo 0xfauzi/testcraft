@@ -1,0 +1,22 @@
+# Task ID: 18
+# Title: Implement Status and Utility Use Cases
+# Status: pending
+# Dependencies: 4, 8, 9
+# Priority: low
+# Description: Create application layer use cases for viewing generation state/history and utility functions.
+# Details:
+1. Create application/status_usecase.py:
+   - Implement view generation state/history
+   - Support filtering and sorting options
+   - Generate summary statistics
+2. Create application/utility_usecases.py for:
+   - debug-state: dump internal state for debugging
+   - sync-state: force state synchronization
+   - reset-state: clear state and start fresh
+   - env: show environment information
+   - cost: display cost summary and projections
+3. Use dependency injection for all ports
+4. Keep business logic pure (no direct adapter calls)
+
+# Test Strategy:
+Unit tests with mocked ports to verify correct status reporting and utility functions. Test with various repository states and history records. Verify correct handling of state operations and environment information.

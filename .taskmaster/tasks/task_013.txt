@@ -1,0 +1,27 @@
+# Task ID: 13
+# Title: Implement LLM Adapters
+# Status: pending
+# Dependencies: 4, 11
+# Priority: high
+# Description: Create adapters for different LLM providers with common helpers for response parsing, validation, and error handling.
+# Details:
+1. Create llm/common.py:
+   - Implement response parsing with brace balancing
+   - Add strict JSON Schema validation
+   - Support repair attempts for minor issues
+   - Normalize output (strip code fences, unescape)
+   - Log cost and token usage
+   - Implement retries with jitter
+   - Respect rate limits
+   - Set timeouts
+2. Create provider-specific adapters:
+   - llm/claude.py for Anthropic Claude
+   - llm/openai.py for OpenAI models
+   - llm/azure.py for Azure OpenAI
+   - llm/bedrock.py for AWS Bedrock
+3. Implement model routing based on file complexity
+4. Use deterministic settings for structure (temperature 0.2-0.3 for generation; lower for refine)
+5. Support streaming responses for large outputs
+
+# Test Strategy:
+Unit tests for each provider adapter with mocked responses. Test response parsing with various formats including malformed JSON. Verify retry logic works with different error types. Test model routing with files of varying complexity.

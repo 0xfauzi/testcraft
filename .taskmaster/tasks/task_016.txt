@@ -1,0 +1,21 @@
+# Task ID: 16
+# Title: Implement Coverage Use Case
+# Status: pending
+# Dependencies: 4, 6, 8
+# Priority: medium
+# Description: Create the application layer use case for measuring and reporting code coverage.
+# Details:
+1. Create application/coverage_usecase.py:
+   - Implement steps: sync state → find files → coverage.measure → coverage.report
+   - Support filtering by file patterns
+   - Calculate overall and per-file coverage
+   - Generate coverage reports
+2. Use dependency injection for ports
+3. Keep business logic pure (no direct adapter calls)
+4. Implement helper functions for:
+   - Formatting coverage results
+   - Identifying coverage trends over time
+   - Suggesting files for improvement
+
+# Test Strategy:
+Unit tests with mocked ports to verify correct coverage measurement and reporting. Test with various repository states and coverage levels. Verify correct calculation of overall and per-file coverage.

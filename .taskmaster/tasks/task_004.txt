@@ -1,0 +1,27 @@
+# Task ID: 4
+# Title: Define Interface Ports
+# Status: pending
+# Dependencies: 2
+# Priority: high
+# Description: Implement the interface ports using Python Protocols to define the contracts between the application layer and adapters.
+# Details:
+1. Create ports/ directory with the following protocol definitions:
+   - LLMPort (generate_tests method returning dict)
+   - CoveragePort (measure, report methods)
+   - WriterPort (write method)
+   - ParserPort (parse_file, map_tests methods)
+   - ContextPort (index, retrieve, summarize methods)
+   - PromptPort (get_system_prompt, get_user_prompt, get_schema methods)
+   - RefinePort (refine method returning RefineOutcome)
+   - StatePort (get_state, update_state methods)
+   - ReportPort (generate_report method)
+   - UIPort (display_progress, display_results methods)
+   - CostPort (track_usage, get_summary methods)
+   - TelemetryPort (start_span, record_metric methods)
+2. Use Python's typing.Protocol for interface definitions
+3. Add detailed docstrings for each method
+4. Define proper type hints for all parameters and return values
+5. Ensure no imports from adapters in these files
+
+# Test Strategy:
+Create test implementations of each protocol to verify interface compliance. Use mypy to verify type checking works correctly with the protocols.

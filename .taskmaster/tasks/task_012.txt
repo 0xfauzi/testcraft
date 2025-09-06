@@ -1,0 +1,27 @@
+# Task ID: 12
+# Title: Implement Context Pipeline
+# Status: pending
+# Dependencies: 4, 5
+# Priority: high
+# Description: Create adapters for indexing, retrieving, and summarizing code context from the repository.
+# Details:
+1. Create context/indexer.py:
+   - Implement hybrid index (BM25 + dense)
+   - Store chunk metadata (path, symbol, imports)
+   - Support adaptive chunking (semantic boundaries, AST nodes)
+   - Typical chunk size 300-800 tokens
+2. Create context/retriever.py:
+   - Build queries from filename, symbols, docstrings
+   - Include uncovered lines context
+   - Support optional recent git diffs
+   - Implement HyDE expansion and query rewriting
+   - Rerank with cross-encoder
+   - Select top-k snippets
+3. Create context/summarizer.py:
+   - Generate directory tree with bounded breadth/depth
+   - Summarize imports and class signatures
+   - Enforce max chars for user prompt content
+4. Implement context budgeting and truncation strategies
+
+# Test Strategy:
+Unit tests for indexing with sample repositories. Test retrieval with various queries and verify relevant snippets are returned. Test summarization with different directory structures. Verify context budgeting works correctly with large repositories.

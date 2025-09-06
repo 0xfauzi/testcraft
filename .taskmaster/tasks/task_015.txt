@@ -1,0 +1,21 @@
+# Task ID: 15
+# Title: Implement Analyze Use Case
+# Status: pending
+# Dependencies: 4, 5, 6, 8
+# Priority: medium
+# Description: Create the application layer use case for analyzing what would be generated and why.
+# Details:
+1. Create application/analyze_usecase.py:
+   - Implement steps: sync state → find files → coverage.measure
+   - For each file call state.should_generate
+   - Build plans (elements from parser; reasons; existing test presence)
+   - Produce AnalysisReport DTO
+2. Use dependency injection for ports
+3. Keep business logic pure (no direct adapter calls)
+4. Implement helper functions for:
+   - Determining which elements need tests
+   - Calculating coverage gaps
+   - Prioritizing files for generation
+
+# Test Strategy:
+Unit tests with mocked ports to verify correct analysis flow. Test with various repository states and coverage levels. Verify correct identification of elements needing tests and reasons for generation.

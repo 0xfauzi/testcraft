@@ -1,0 +1,30 @@
+# Task ID: 20
+# Title: Implement Evaluation Harness and Documentation
+# Status: pending
+# Dependencies: 17, 19
+# Priority: low
+# Description: Create an evaluation system for testing the quality of generated tests and comprehensive documentation.
+# Details:
+1. Create evaluation/harness.py:
+   - Implement offline golden repos testing
+   - Add acceptance checks: syntactic validity, importability, pytest success, coverage improvements
+   - Support LLM-as-judge with rubric for test quality (optional)
+   - Enable SxS prompt variants A/B testing
+   - Store prompt registry version in artifacts
+2. Create comprehensive documentation:
+   - README.md with quickstart guide
+   - Advanced usage documentation
+   - Configuration reference
+   - Architecture overview
+   - Contributing guidelines
+3. Create sample .testgen.yml files:
+   - Minimal configuration
+   - Comprehensive configuration with comments
+4. Set up CI pipeline:
+   - Lint with ruff
+   - Type-check with mypy
+   - Run tests with pytest
+   - Verify documentation builds
+
+# Test Strategy:
+Test the evaluation harness with sample repositories. Verify documentation is accurate and comprehensive. Test CI pipeline with various code changes to ensure it catches issues.

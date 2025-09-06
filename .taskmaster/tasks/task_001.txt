@@ -1,0 +1,22 @@
+# Task ID: 1
+# Title: Project Scaffolding and Environment Setup
+# Status: pending
+# Dependencies: None
+# Priority: high
+# Description: Set up the initial project structure with Python 3.11+, development tools, and directory layout according to the PRD specifications.
+# Details:
+1. Create a new Python project with Python 3.11+ support
+2. Set up development tools: uv, ruff, black, mypy, pytest
+3. Create directory structure following the Clean/Hex architecture:
+   - domain/
+   - application/
+   - adapters/
+   - ports/
+   - cli/
+4. Initialize pyproject.toml with entry points: `sloptest = smart_test_generator.cli.main:app`
+5. Set up .gitignore, README.md, and LICENSE files
+6. Configure development environment with virtual environment
+7. Create initial package structure with __init__.py files
+
+# Test Strategy:
+Verify project structure exists with correct directories. Ensure all development tools can be invoked. Validate pyproject.toml configuration with a simple import test.

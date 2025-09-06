@@ -1,0 +1,26 @@
+# Task ID: 11
+# Title: Implement Prompt Registry and Templates
+# Status: pending
+# Dependencies: 2, 3
+# Priority: high
+# Description: Create a registry for versioned prompt templates with system and user prompts for generation and refinement.
+# Details:
+1. Create prompts/registry.py:
+   - Implement versioned templates
+   - Store system prompts for generation and refinement
+   - Store user prompt templates
+   - Define JSON schemas for structured outputs
+2. Create generation system prompt with:
+   - Role: "Python Test Generation Agent"
+   - Constraints on output format and safety
+   - Guardrails against modifying source files
+3. Create refinement system prompt with:
+   - Role: "Python Test Refiner"
+   - Constraints on fixing specific issues
+4. Implement JSON schemas for:
+   - Generation output (file path and content)
+   - Refinement output (updated files, rationale, plan)
+5. Add anti-injection defenses in prompts
+
+# Test Strategy:
+Unit tests for prompt template rendering with various inputs. Verify JSON schemas validate correct outputs and reject invalid ones. Test anti-injection defenses with potentially problematic inputs.

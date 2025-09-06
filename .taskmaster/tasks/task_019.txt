@@ -1,0 +1,22 @@
+# Task ID: 19
+# Title: Implement CLI Interface
+# Status: pending
+# Dependencies: 3, 15, 16, 17, 18
+# Priority: medium
+# Description: Create the command-line interface for all commands with proper argument parsing and output formatting.
+# Details:
+1. Create cli/main.py:
+   - Implement commands: generate, analyze, coverage, status
+   - Add utility commands: init-config, env, cost, debug-state, sync-state, reset-state
+   - Support flags: batch-size, streaming, force, dry-run, model options, etc.
+   - Format output with concise tables, spinners, summaries
+   - Add verbose mode for detailed diagnostics
+2. Create cli/config_init.py:
+   - Generate full YAML with commented guidance
+   - Provide minimal preset option
+3. Implement dependency injection for use cases
+4. Add proper error handling and user-friendly messages
+5. Support plugin discovery via entry points
+
+# Test Strategy:
+Unit tests for command-line argument parsing and validation. Test output formatting with various results. Verify error handling provides useful messages. Test config initialization with different options.

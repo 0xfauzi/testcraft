@@ -1,0 +1,26 @@
+# Task ID: 6
+# Title: Implement Coverage Adapters
+# Status: pending
+# Dependencies: 4, 5
+# Priority: high
+# Description: Create adapters for measuring code coverage using pytest+coverage with AST fallback.
+# Details:
+1. Create adapters/coverage/pytest_coverage.py:
+   - Implement command builder (cwd, env, pythonpath)
+   - Run pytest with coverage
+   - Parse .coverage and JUnit XML output
+   - Handle timeouts and errors
+   - Store artifacts in .sloptest/coverage/<run_id>
+2. Create adapters/coverage/ast_fallback.py:
+   - Estimate line/branch coverage using AST
+   - Calculate function coverage
+   - Use when pytest coverage fails
+3. Create adapters/coverage/composite.py:
+   - Try pytest coverage first
+   - Fall back to AST on failure
+   - Record reason for fallback
+   - Provide unified interface
+4. Implement helper functions for coverage reporting and visualization
+
+# Test Strategy:
+Unit tests with sample Python projects to verify coverage measurement with pytest. Test AST fallback with various Python constructs. Verify composite adapter correctly falls back when pytest fails. Test error handling and timeout scenarios.

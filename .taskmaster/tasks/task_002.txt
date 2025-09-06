@@ -1,0 +1,21 @@
+# Task ID: 2
+# Title: Implement Domain Models
+# Status: pending
+# Dependencies: 1
+# Priority: high
+# Description: Create the core domain models using dataclasses/pydantic to represent the fundamental entities in the system.
+# Details:
+1. Create domain/models.py with the following models:
+   - TestGenerationPlan (elements_to_test, existing_tests, coverage_before)
+   - TestElement (name, type, line_range, docstring)
+   - CoverageResult (line_coverage, branch_coverage, missing_lines)
+   - GenerationResult (file_path, content, success, error_message)
+   - RefineOutcome (updated_files, rationale, plan)
+   - AnalysisReport (files_to_process, reasons, existing_test_presence)
+2. Use pydantic for validation and serialization
+3. Implement proper type hints for all models
+4. Add docstrings explaining each model's purpose and fields
+5. Ensure models are immutable where appropriate
+
+# Test Strategy:
+Unit tests for each model verifying initialization, validation rules, serialization/deserialization, and edge cases like empty values or invalid inputs.

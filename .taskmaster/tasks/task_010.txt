@@ -1,0 +1,25 @@
+# Task ID: 10
+# Title: Implement Reporting and Artifact Storage
+# Status: pending
+# Dependencies: 4
+# Priority: medium
+# Description: Create adapters for generating reports and storing artifacts from test generation runs.
+# Details:
+1. Create adapters/io/reporter_json.py:
+   - Generate structured JSON reports
+   - Include coverage delta, tests generated, pass rate
+   - Record prompts and schemas (when verbose)
+   - Summarize retrieval diagnostics
+2. Create adapters/io/artifact_store.py:
+   - Store coverage reports
+   - Save generated tests
+   - Preserve LLM responses
+   - Manage run history
+   - Implement cleanup policies
+3. Implement helper functions for:
+   - Formatting tables for CLI output
+   - Generating spinners and progress indicators
+   - Creating concise summaries
+
+# Test Strategy:
+Unit tests for report generation with various inputs. Test artifact storage and retrieval. Verify cleanup policies work correctly. Test formatting functions for CLI output.

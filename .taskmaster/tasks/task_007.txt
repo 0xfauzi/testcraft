@@ -1,0 +1,25 @@
+# Task ID: 7
+# Title: Implement Writer Adapters
+# Status: pending
+# Dependencies: 4, 5
+# Priority: high
+# Description: Create adapters for safely writing generated tests to the filesystem with different strategies.
+# Details:
+1. Create adapters/io/writer_append.py:
+   - Implement simple append to existing test files
+   - Create new files when missing
+   - Support dry-run mode
+2. Create adapters/io/writer_ast_merge.py:
+   - Parse existing and new test files
+   - Merge structurally to avoid duplicates
+   - Format with Black (optional)
+   - Generate unified diff for dry-run
+3. Implement safety policies:
+   - Only write to tests/ directory
+   - Enforce file size caps
+   - Block dangerous patterns
+   - Validate syntax before writing
+4. Add helper functions for path resolution and validation
+
+# Test Strategy:
+Unit tests for append and AST merge strategies with various test files. Verify safety policies block writes outside tests/ directory and files with dangerous patterns. Test dry-run mode generates correct diffs without modifying files.

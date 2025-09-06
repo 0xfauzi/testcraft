@@ -1,0 +1,26 @@
+# Task ID: 9
+# Title: Implement Telemetry and Cost Management
+# Status: pending
+# Dependencies: 4
+# Priority: medium
+# Description: Create adapters for OpenTelemetry tracing, metrics collection, and cost management.
+# Details:
+1. Create adapters/telemetry/otel.py:
+   - Implement OpenTelemetry spans for use cases
+   - Track LLM calls, retrieval, coverage runs, writer operations
+   - Record metrics for latency, errors, tokens
+   - Support opt-out and anonymization
+2. Create adapters/telemetry/metrics.py:
+   - Track coverage delta
+   - Count tests generated
+   - Measure pass rate
+   - Count refine iterations
+3. Create adapters/telemetry/cost_manager.py:
+   - Track token usage per request
+   - Accrue costs by model and operation
+   - Enforce budget warnings and stops
+   - Persist summary by day
+   - Implement cost optimization strategies
+
+# Test Strategy:
+Unit tests for span creation and attribute recording. Test metrics collection and aggregation. Verify cost tracking across multiple requests and budget enforcement. Test opt-out functionality and anonymization.

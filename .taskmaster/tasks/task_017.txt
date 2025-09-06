@@ -1,0 +1,25 @@
+# Task ID: 17
+# Title: Implement Generate Use Case
+# Status: pending
+# Dependencies: 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14
+# Priority: high
+# Description: Create the application layer use case for generating tests, the core functionality of the system.
+# Details:
+1. Create application/generate_usecase.py with the following steps:
+   - Sync state; discover files; coverage.measure
+   - Decide files to process; build TestGenerationPlan per file
+   - Build directory tree; gather codebase info; retrieve context if enabled
+   - Apply batching policy (streaming or batch N)
+   - Build prompts with system and user content
+   - Call LLMPort.generate_tests with JSON Schema; validate; normalize
+   - Use WriterPort.write per file with configured strategy
+   - Optionally run pytest via CoveragePort; parse failures
+   - Optionally refine via RefinePort based on failure category
+   - Measure coverage delta; record state; report; telemetry + cost summary
+2. Use dependency injection for all ports
+3. Keep business logic pure (no direct adapter calls)
+4. Implement batching and concurrency strategies
+5. Add proper error handling and recovery
+
+# Test Strategy:
+Unit tests with mocked ports to verify correct generation flow. Test with various repository states, coverage levels, and configuration options. Verify correct handling of LLM responses, writing strategies, and refinement. Test error handling and recovery scenarios.
