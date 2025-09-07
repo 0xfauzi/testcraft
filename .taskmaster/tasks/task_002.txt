@@ -3,7 +3,7 @@
 # Status: pending
 # Dependencies: 1
 # Priority: high
-# Description: Create the core domain models using dataclasses/pydantic to represent the fundamental entities in the system.
+# Description: Create the core domain models using pydantic to represent the fundamental entities in the system.
 # Details:
 1. Create domain/models.py with the following models:
    - TestGenerationPlan (elements_to_test, existing_tests, coverage_before)

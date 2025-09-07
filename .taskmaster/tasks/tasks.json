@@ -9,7 +9,7 @@
         "testStrategy": "Verify project structure exists with correct directories. Ensure all development tools can be invoked. Validate pyproject.toml configuration with a simple import test.",
         "priority": "high",
         "dependencies": [],
-        "status": "in-progress",
+        "status": "done",
         "subtasks": [
           {
             "id": 1,
@@ -64,7 +64,7 @@
               "1.4"
             ],
             "details": "Draft a .gitignore tailored for Python projects, write a basic README.md with project overview and setup instructions, and select an appropriate open-source LICENSE. Initialize Git and commit all scaffolding files.",
-            "status": "in-progress",
+            "status": "done",
             "testStrategy": "Verify that .gitignore excludes virtual environment and build artifacts, README.md renders correctly on GitHub, LICENSE is present, and 'git status' shows a clean working directory after commit."
           }
         ]
@@ -72,15 +72,106 @@
       {
         "id": 2,
         "title": "Implement Domain Models",
-        "description": "Create the core domain models using dataclasses/pydantic to represent the fundamental entities in the system.",
-        "details": "1. Create domain/models.py with the following models:\n   - TestGenerationPlan (elements_to_test, existing_tests, coverage_before)\n   - TestElement (name, type, line_range, docstring)\n   - CoverageResult (line_coverage, branch_coverage, missing_lines)\n   - GenerationResult (file_path, content, success, error_message)\n   - RefineOutcome (updated_files, rationale, plan)\n   - AnalysisReport (files_to_process, reasons, existing_test_presence)\n2. Use pydantic for validation and serialization\n3. Implement proper type hints for all models\n4. Add docstrings explaining each model's purpose and fields\n5. Ensure models are immutable where appropriate",
-        "testStrategy": "Unit tests for each model verifying initialization, validation rules, serialization/deserialization, and edge cases like empty values or invalid inputs.",
-        "priority": "high",
+        "description": "Create the core domain models using pydantic to represent the fundamental entities in the system.",
+        "status": "done",
         "dependencies": [
           1
         ],
-        "status": "pending",
-        "subtasks": []
+        "priority": "high",
+        "details": "1. Create domain/models.py with the following models:\n   - TestGenerationPlan (elements_to_test, existing_tests, coverage_before)\n   - TestElement (name, type, line_range, docstring)\n   - CoverageResult (line_coverage, branch_coverage, missing_lines)\n   - GenerationResult (file_path, content, success, error_message)\n   - RefineOutcome (updated_files, rationale, plan)\n   - AnalysisReport (files_to_process, reasons, existing_test_presence)\n2. Use pydantic for validation and serialization\n3. Implement proper type hints for all models\n4. Add docstrings explaining each model's purpose and fields\n5. Ensure models are immutable where appropriate\n6. Implement TestElementType enum for categorizing test elements (function, class, method, module)\n7. Add custom validators for data integrity:\n   - Line ranges must be valid (start <= end, positive numbers)\n   - Coverage percentages must be between 0.0 and 1.0\n   - Missing lines are sorted and deduplicated\n   - Error messages required when generation fails\n   - All required mappings must cover all files in lists",
+        "testStrategy": "Unit tests for each model verifying initialization, validation rules, serialization/deserialization, and edge cases like empty values or invalid inputs. Specifically test custom validators for line ranges, coverage percentages, and other data integrity rules.",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "Implement TestElement model",
+            "description": "Create TestElement model with name, type, line range, and docstring fields",
+            "status": "completed",
+            "dependencies": [],
+            "details": "",
+            "testStrategy": ""
+          },
+          {
+            "id": 2,
+            "title": "Implement CoverageResult model",
+            "description": "Create CoverageResult model with line/branch coverage and missing lines",
+            "status": "completed",
+            "dependencies": [],
+            "details": "",
+            "testStrategy": ""
+          },
+          {
+            "id": 3,
+            "title": "Implement GenerationResult model",
+            "description": "Create GenerationResult model with file path, content, success/failure status and error message",
+            "status": "completed",
+            "dependencies": [],
+            "details": "",
+            "testStrategy": ""
+          },
+          {
+            "id": 4,
+            "title": "Implement TestGenerationPlan model",
+            "description": "Create TestGenerationPlan model with elements to test, existing tests, and coverage information",
+            "status": "completed",
+            "dependencies": [],
+            "details": "",
+            "testStrategy": ""
+          },
+          {
+            "id": 5,
+            "title": "Implement RefineOutcome model",
+            "description": "Create RefineOutcome model with updated files, rationale and plan",
+            "status": "completed",
+            "dependencies": [],
+            "details": "",
+            "testStrategy": ""
+          },
+          {
+            "id": 6,
+            "title": "Implement AnalysisReport model",
+            "description": "Create AnalysisReport model with files to process, reasons, and existing test presence",
+            "status": "completed",
+            "dependencies": [],
+            "details": "",
+            "testStrategy": ""
+          },
+          {
+            "id": 7,
+            "title": "Implement TestElementType enum",
+            "description": "Create enum for categorizing test elements (function, class, method, module)",
+            "status": "completed",
+            "dependencies": [],
+            "details": "",
+            "testStrategy": ""
+          },
+          {
+            "id": 8,
+            "title": "Add custom validators",
+            "description": "Implement validators for line ranges, coverage percentages, missing lines, and other data integrity rules",
+            "status": "completed",
+            "dependencies": [],
+            "details": "",
+            "testStrategy": ""
+          },
+          {
+            "id": 9,
+            "title": "Configure model immutability",
+            "description": "Set models as immutable using `frozen = True` configuration",
+            "status": "completed",
+            "dependencies": [],
+            "details": "",
+            "testStrategy": ""
+          },
+          {
+            "id": 10,
+            "title": "Add field descriptions",
+            "description": "Add detailed field descriptions for better API documentation",
+            "status": "completed",
+            "dependencies": [],
+            "details": "",
+            "testStrategy": ""
+          }
+        ]
       },
       {
         "id": 3,
@@ -92,62 +183,118 @@
         "dependencies": [
           1
         ],
-        "status": "pending",
+        "status": "done",
         "subtasks": []
       },
       {
         "id": 4,
         "title": "Define Interface Ports",
-        "description": "Implement the interface ports using Python Protocols to define the contracts between the application layer and adapters.",
-        "details": "1. Create ports/ directory with the following protocol definitions:\n   - LLMPort (generate_tests method returning dict)\n   - CoveragePort (measure, report methods)\n   - WriterPort (write method)\n   - ParserPort (parse_file, map_tests methods)\n   - ContextPort (index, retrieve, summarize methods)\n   - PromptPort (get_system_prompt, get_user_prompt, get_schema methods)\n   - RefinePort (refine method returning RefineOutcome)\n   - StatePort (get_state, update_state methods)\n   - ReportPort (generate_report method)\n   - UIPort (display_progress, display_results methods)\n   - CostPort (track_usage, get_summary methods)\n   - TelemetryPort (start_span, record_metric methods)\n2. Use Python's typing.Protocol for interface definitions\n3. Add detailed docstrings for each method\n4. Define proper type hints for all parameters and return values\n5. Ensure no imports from adapters in these files",
-        "testStrategy": "Create test implementations of each protocol to verify interface compliance. Use mypy to verify type checking works correctly with the protocols.",
-        "priority": "high",
+        "description": "All 12 interface ports have been implemented using Python Protocols, providing clear contracts between the application layer and adapters. Each port is defined in its own file under testcraft/ports/, with comprehensive docstrings, precise type hints, and no adapter imports. The __init__.py file exports all port interfaces. These protocols are now ready for adapter implementations.",
+        "status": "done",
         "dependencies": [
           2
         ],
-        "status": "pending",
-        "subtasks": []
+        "priority": "high",
+        "details": "1. 12 protocol interface files created in testcraft/ports/:\n   - LLMPort: Large Language Model operations (test generation, analysis, refinement)\n   - CoveragePort: Code coverage measurement and reporting\n   - WriterPort: File writing operations (test files, reports)\n   - ParserPort: Source code parsing and AST analysis\n   - ContextPort: Context management (indexing, retrieval, summarization)\n   - PromptPort: Prompt management (system/user prompts, schemas)\n   - RefinePort: Test refinement operations\n   - StatePort: Application state management\n   - ReportPort: Report generation (analysis, coverage, summaries)\n   - UIPort: User interface operations (progress, results, input)\n   - CostPort: Cost tracking and usage monitoring\n   - TelemetryPort: Observability and metrics collection\n2. All protocols use Python's typing.Protocol for interface definitions\n3. Comprehensive docstrings provided for each method\n4. All parameters and return values have precise type hints\n5. No imports from adapters in any port file\n6. __init__.py updated to export all port interfaces\n7. Consistent naming and structure across all protocols\n8. Custom exception types used for error handling\n9. Rich return types with detailed metadata\n10. Support for configuration options via **kwargs\n11. Integration with domain models (CoverageResult, RefineOutcome, AnalysisReport)\n12. No linting errors detected",
+        "testStrategy": "Test implementations for each protocol verify interface compliance. mypy is used to ensure type checking works correctly with all protocols. Linting and static analysis confirm code quality and adherence to standards.",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "Verify protocol files and exports",
+            "description": "Check that all 12 protocol files exist in testcraft/ports/ and that __init__.py exports each interface.",
+            "status": "done",
+            "dependencies": [],
+            "details": "",
+            "testStrategy": ""
+          },
+          {
+            "id": 2,
+            "title": "Run mypy and linting on ports directory",
+            "description": "Ensure all protocol files pass mypy type checking and linting with no errors.",
+            "status": "done",
+            "dependencies": [],
+            "details": "",
+            "testStrategy": ""
+          },
+          {
+            "id": 3,
+            "title": "Create test implementations for each protocol",
+            "description": "Write minimal test classes for each protocol to verify interface compliance and demonstrate usage.",
+            "status": "done",
+            "dependencies": [],
+            "details": "",
+            "testStrategy": ""
+          }
+        ]
       },
       {
         "id": 5,
         "title": "Implement Parser Adapters",
-        "description": "Create adapters for parsing Python code and mapping tests to source code elements.",
-        "details": "1. Create adapters/parsing/codebase_parser.py:\n   - Implement AST-based parsing of Python files\n   - Extract functions, classes, methods with signatures\n   - Parse docstrings and type annotations\n   - Identify import statements and dependencies\n2. Create adapters/parsing/test_mapper.py:\n   - Map test functions to source code elements\n   - Identify existing test coverage for elements\n   - Support pytest naming conventions\n3. Implement helper functions for:\n   - Building directory trees with bounded depth/width\n   - Extracting element signatures\n   - Identifying uncovered elements\n4. Add caching for parsed files to improve performance",
-        "testStrategy": "Unit tests with sample Python files to verify correct parsing of functions, classes, methods, and imports. Test mapping of test functions to source elements with various naming conventions. Verify directory tree generation with different depth/width constraints.",
-        "priority": "high",
+        "description": "Create adapters for parsing Python code and mapping tests to source code elements. The parser must extract both structural metadata and the actual source code content for each code element to support test generation.",
+        "status": "done",
         "dependencies": [
           4
         ],
-        "status": "pending",
+        "priority": "high",
+        "details": "1. Create adapters/parsing/codebase_parser.py:\n   - Implement AST-based parsing of Python files\n   - Extract functions, classes, methods with signatures\n   - Parse docstrings and type annotations\n   - Identify import statements and dependencies\n   - Extract the raw source code content for each code element (function, class, method) in addition to metadata\n   - Ensure parsing results include both metadata (name, type, line_range, docstring) and the actual implementation code\n   - Consider whether the TestElement domain model should be extended with a 'source_code' field, or if this content should be handled separately in the parsing pipeline\n2. Create adapters/parsing/test_mapper.py:\n   - Map test functions to source code elements\n   - Identify existing test coverage for elements\n   - Support pytest naming conventions\n   - Ensure mapping logic can access both metadata and source code content for each element\n3. Implement helper functions for:\n   - Building directory trees with bounded depth/width\n   - Extracting element signatures and source code\n   - Identifying uncovered elements\n   - Caching parsed files to improve performance, including both metadata and source code content",
+        "testStrategy": "Unit tests with sample Python files to verify correct parsing of functions, classes, methods, and imports. Test that both metadata and actual source code content are extracted for each code element. Test mapping of test functions to source elements with various naming conventions, ensuring access to source code content. Verify directory tree generation with different depth/width constraints.",
         "subtasks": []
       },
       {
         "id": 6,
         "title": "Implement Coverage Adapters",
-        "description": "Create adapters for measuring code coverage using pytest+coverage with AST fallback.",
-        "details": "1. Create adapters/coverage/pytest_coverage.py:\n   - Implement command builder (cwd, env, pythonpath)\n   - Run pytest with coverage\n   - Parse .coverage and JUnit XML output\n   - Handle timeouts and errors\n   - Store artifacts in .sloptest/coverage/<run_id>\n2. Create adapters/coverage/ast_fallback.py:\n   - Estimate line/branch coverage using AST\n   - Calculate function coverage\n   - Use when pytest coverage fails\n3. Create adapters/coverage/composite.py:\n   - Try pytest coverage first\n   - Fall back to AST on failure\n   - Record reason for fallback\n   - Provide unified interface\n4. Implement helper functions for coverage reporting and visualization",
-        "testStrategy": "Unit tests with sample Python projects to verify coverage measurement with pytest. Test AST fallback with various Python constructs. Verify composite adapter correctly falls back when pytest fails. Test error handling and timeout scenarios.",
-        "priority": "high",
+        "description": "All coverage adapters for measuring code coverage using pytest+coverage with AST fallback are now implemented and production-ready. The solution provides robust coverage measurement, fallback capabilities, and comprehensive reporting.\n\nKey components:\n- adapters/coverage/pytest_coverage.py: Full pytest+coverage integration with command building, environment setup, coverage parsing (JSON/XML), timeout handling, and artifact storage in .testcraft/coverage/<run_id>\n- adapters/coverage/ast_fallback.py: AST-based coverage estimation with executable line detection, complex construct analysis, private function filtering, and realistic coverage estimation\n- adapters/coverage/composite.py: Composite adapter that tries pytest first and falls back to AST with reason tracking and unified interface\n- adapters/coverage/main_adapter.py: Primary adapter implementing CoveragePort interface with all required methods, HTML/JSON report generation, and comprehensive coverage analysis\n- adapters/coverage/__init__.py: Exports all adapters\n- test_coverage_adapters.py: Comprehensive test suite with unit and integration tests for all adapters\n\nAll adapters handle error cases, timeouts, and edge cases. Code is lint-free and follows project standards.",
+        "status": "done",
         "dependencies": [
           4,
           5
         ],
-        "status": "pending",
+        "priority": "high",
+        "details": "Coverage adapters are implemented as follows:\n\n1. adapters/coverage/pytest_coverage.py:\n   - Builds and runs pytest+coverage commands with correct cwd, env, and pythonpath\n   - Parses coverage results from JSON and XML outputs\n   - Handles timeouts, subprocess errors, and stores artifacts in .testcraft/coverage/<run_id>\n2. adapters/coverage/ast_fallback.py:\n   - Estimates line and branch coverage using AST analysis\n   - Detects executable lines, analyzes complex constructs, filters private functions\n   - Provides realistic fallback coverage estimation when pytest coverage fails\n3. adapters/coverage/composite.py:\n   - Attempts pytest coverage first, falls back to AST estimation on failure\n   - Records reason for fallback and exposes a unified interface\n4. adapters/coverage/main_adapter.py:\n   - Implements CoveragePort interface\n   - Provides HTML and JSON report generation\n   - Aggregates and analyzes coverage results from all adapters\n5. __init__.py exports all adapters for external use\n6. Comprehensive test suite (test_coverage_adapters.py):\n   - Unit tests for each adapter\n   - Integration tests for composite behavior and error handling\n   - Tests for edge cases, timeouts, and artifact correctness\n\nAll code is linted and adheres to project standards.",
+        "testStrategy": "Comprehensive test suite with unit tests for all adapters and integration tests for composite behavior. Tests verify coverage measurement with pytest, AST fallback with various Python constructs, correct fallback logic, error and timeout handling, and artifact storage. All adapters are validated against edge cases and project linting standards.",
         "subtasks": []
       },
       {
         "id": 7,
         "title": "Implement Writer Adapters",
-        "description": "Create adapters for safely writing generated tests to the filesystem with different strategies.",
-        "details": "1. Create adapters/io/writer_append.py:\n   - Implement simple append to existing test files\n   - Create new files when missing\n   - Support dry-run mode\n2. Create adapters/io/writer_ast_merge.py:\n   - Parse existing and new test files\n   - Merge structurally to avoid duplicates\n   - Format with Black (optional)\n   - Generate unified diff for dry-run\n3. Implement safety policies:\n   - Only write to tests/ directory\n   - Enforce file size caps\n   - Block dangerous patterns\n   - Validate syntax before writing\n4. Add helper functions for path resolution and validation",
-        "testStrategy": "Unit tests for append and AST merge strategies with various test files. Verify safety policies block writes outside tests/ directory and files with dangerous patterns. Test dry-run mode generates correct diffs without modifying files.",
-        "priority": "high",
+        "description": "Create adapters for safely writing generated tests to the filesystem with different strategies. All writes must be formatted with Black and isort for consistent code formatting.",
+        "status": "done",
         "dependencies": [
           4,
           5
         ],
-        "status": "pending",
-        "subtasks": []
+        "priority": "high",
+        "details": "1. Create adapters/io/writer_append.py:\n   - Implement simple append to existing test files\n   - Create new files when missing\n   - Support dry-run mode\n   - Format all writes with Black and isort\n2. Create adapters/io/writer_ast_merge.py:\n   - Parse existing and new test files\n   - Merge structurally to avoid duplicates\n   - Format all writes with Black and isort\n   - Generate unified diff for dry-run\n3. Implement safety policies:\n   - Only write to tests/ directory\n   - Enforce file size caps\n   - Block dangerous patterns\n   - Validate syntax before writing\n4. Add helper functions for path resolution and validation\n5. Integrate Black and isort formatting into all write operations, including dry-run output.",
+        "testStrategy": "Unit tests for append and AST merge strategies with various test files. Verify safety policies block writes outside tests/ directory and files with dangerous patterns. Test dry-run mode generates correct diffs without modifying files. Validate that all written and diffed files are formatted with Black and isort.",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "Integrate Black and isort formatting into writer_append.py",
+            "description": "Update writer_append.py so that all writes (including dry-run output) are formatted using Black and isort before being written or diffed.",
+            "status": "done",
+            "dependencies": [],
+            "details": "<info added on 2025-09-07T15:03:58.368Z>\n✅ COMPLETED - Black and isort formatting integration in writer_append.py\n\nImplementation Details:\n- Added _format_content() method that uses subprocess to call both isort and Black\n- Format pipeline: content → isort (import sorting) → Black (code formatting) → formatted output\n- Graceful fallback: returns original content if formatting tools aren't available\n- All write operations automatically format content before writing or showing diffs\n- Dry-run mode also shows formatted content in previews\n\nKey Features:\n- Temporary file approach for safe formatting without affecting original content\n- Error handling prevents failures when Black/isort not installed\n- Consistent formatting applied to both new files and appended content\n- Integration verified through unit tests with subprocess mocking\n</info added on 2025-09-07T15:03:58.368Z>",
+            "testStrategy": ""
+          },
+          {
+            "id": 2,
+            "title": "Integrate Black and isort formatting into writer_ast_merge.py",
+            "description": "Update writer_ast_merge.py so that all merged output (including dry-run diff) is formatted using Black and isort before being written or diffed.",
+            "status": "done",
+            "dependencies": [],
+            "details": "<info added on 2025-09-07T15:04:17.585Z>\n✅ COMPLETED - Black and isort formatting integration in writer_ast_merge.py\n\nImplementation Details:\n- Added a _format_content() method, mirroring the approach used in writer_append.py, to ensure consistent formatting logic across writer adapters.\n- The formatting pipeline applies isort for import sorting followed by Black for code formatting to all merged content before output, guaranteeing standardized and readable code.\n- Both the final merged output and the dry-run diff generation now utilize this formatting pipeline, ensuring that diffs accurately reflect the formatted result.\n- The implementation includes graceful fallback handling: if Black or isort are unavailable, the merge proceeds without formatting rather than failing.\n\nAST Merge Features Enhanced:\n- The AST merging logic now preserves the existing code structure while intelligently adding new elements, minimizing unnecessary changes.\n- Enhanced deduplication ensures that imports, functions, and classes are merged without introducing duplicates.\n- The merge process is structurally aware: imports are placed first, followed by constants, classes, functions, and then other statements, resulting in a logical and maintainable code order.\n- If AST parsing fails, the system falls back to simple concatenation to avoid blocking the merge process.\n- Dry-run mode now generates a unified diff that precisely shows the changes that would be made after formatting, improving transparency and reviewability.\n</info added on 2025-09-07T15:04:17.585Z>",
+            "testStrategy": ""
+          },
+          {
+            "id": 3,
+            "title": "Update unit tests to validate Black and isort formatting",
+            "description": "Extend unit tests to check that all written and diffed files are correctly formatted with Black and isort.",
+            "status": "done",
+            "dependencies": [],
+            "details": "<info added on 2025-09-07T15:04:22.973Z>\nComprehensive unit tests have been implemented to validate all core writer adapter behaviors, including strict enforcement of Black and isort formatting on written and diffed files. Tests cover SafetyPolicies (path validation, size limits, dangerous pattern detection, Python syntax validation, test file naming), WriterAppendAdapter (file creation, append, dry-run, backup, directory creation, formatting integration), and WriterASTMergeAdapter (AST merge logic, deduplication, diff generation, merge fallbacks). Key features include mocked subprocess calls for Black/isort, fallback behavior when formatting fails, exhaustive safety policy scenarios, dry-run mode validation, complex AST merge cases, and robust error/exception handling.\n</info added on 2025-09-07T15:04:22.973Z>",
+            "testStrategy": ""
+          }
+        ]
       },
       {
         "id": 8,
@@ -199,7 +346,7 @@
           2,
           3
         ],
-        "status": "pending",
+        "status": "done",
         "subtasks": []
       },
       {
@@ -213,7 +360,7 @@
           4,
           5
         ],
-        "status": "pending",
+        "status": "done",
         "subtasks": []
       },
       {
@@ -344,11 +491,25 @@
         ],
         "status": "pending",
         "subtasks": []
+      },
+      {
+        "id": 21,
+        "title": "Implement Rich-based UI System for CLI",
+        "description": "Create a comprehensive UI system using the Rich library to provide beautiful, interactive command-line interfaces with progress bars, tables, panels, syntax highlighting, and interactive components.",
+        "details": "1. Create adapters/ui/rich_adapter.py implementing UIPort:\n   - Implement the UIPort interface defined in Task 4\n   - Create a RichAdapter class with methods for all required UI operations\n   - Configure Rich theme settings with consistent color schemes\n   - Add support for terminal width detection and responsive layouts\n   - Implement graceful fallbacks for terminals without Rich support\n\n2. Implement Rich UI Components:\n   - Create ui/components/ directory with reusable Rich components:\n     - TestResultsTable: Display test generation results with syntax highlighting\n     - CoverageReportPanel: Show coverage metrics with color-coded indicators\n     - ProgressTracker: Display progress for multi-step operations\n     - ErrorDisplay: Format errors with traceback highlighting\n     - ConfigurationWizard: Interactive setup with form inputs\n   - Ensure components are themeable and configurable\n\n3. Implement Progress Visualization:\n   - Create display_progress() with Rich progress bars\n   - Support for nested progress tracking (e.g., file-level and test-level)\n   - Add spinners for indeterminate operations\n   - Implement ETA calculations for long-running tasks\n   - Support for cancellation and pause/resume indicators\n\n4. Implement Results Display:\n   - Create display_results() with Rich tables and panels\n   - Format test results with syntax highlighting for code snippets\n   - Color-code success/failure states\n   - Support for collapsible sections for detailed information\n   - Add summary statistics at the top of reports\n\n5. Add Integration Features:\n   - Support both verbose and quiet output modes\n   - Implement proper terminal capabilities detection\n   - Create plain text fallback renderer for non-interactive environments\n   - Integrate with the existing logging system\n   - Support output redirection and piping\n   - Add configuration options for UI preferences",
+        "testStrategy": "1. Unit Tests:\n   - Test RichAdapter implementation against the UIPort interface\n   - Verify each UI component renders correctly with different inputs\n   - Test responsive layout with various terminal widths\n   - Verify fallback mechanisms work when Rich features are unavailable\n   - Test integration with the logging system\n\n2. Integration Tests:\n   - Create mock test generation scenarios and verify UI components display correctly\n   - Test progress tracking with simulated long-running operations\n   - Verify error display with various error types\n   - Test interactive components with simulated user input\n\n3. Visual Verification:\n   - Create a test script that demonstrates all UI components\n   - Capture screenshots of UI components for documentation\n   - Verify color schemes are consistent across components\n   - Test with different terminal types and color schemes\n\n4. Edge Cases:\n   - Test with extremely large datasets to verify table pagination\n   - Verify behavior when terminal is resized during operation\n   - Test with redirected output and in CI environments\n   - Verify accessibility considerations (color contrast, etc.)",
+        "status": "pending",
+        "dependencies": [
+          4,
+          19
+        ],
+        "priority": "medium",
+        "subtasks": []
       }
     ],
     "metadata": {
       "created": "2025-01-27T20:16:58.061Z",
-      "updated": "2025-09-06T21:23:45.983Z",
+      "updated": "2025-09-07T20:24:34.659Z",
       "description": "Tasks for master context"
     }
   }
