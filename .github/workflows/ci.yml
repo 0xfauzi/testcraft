@@ -1,0 +1,389 @@
+name: CI
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+  workflow_dispatch:
+
+env:
+  PYTHON_VERSION: "3.11"
+  UV_SYSTEM_PYTHON: 1
+
+jobs:
+  lint-and-format:
+    name: Lint and Format Check
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ env.PYTHON_VERSION }}
+
+    - name: Install uv
+      uses: astral-sh/setup-uv@v3
+
+    - name: Install dependencies
+      run: |
+        uv sync --dev
+        uv pip install -e .
+
+    - name: Run ruff check (lint)
+      run: |
+        uv run ruff check . --output-format=github
+
+    - name: Run ruff format check
+      run: |
+        uv run ruff format --check .
+
+    - name: Run black check
+      run: |
+        uv run black --check --diff .
+
+  type-check:
+    name: Type Check
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ env.PYTHON_VERSION }}
+
+    - name: Install uv
+      uses: astral-sh/setup-uv@v3
+
+    - name: Install dependencies
+      run: |
+        uv sync --dev
+        uv pip install -e .
+
+    - name: Run mypy
+      run: |
+        uv run mypy testcraft/ --show-error-codes --pretty
+
+  test:
+    name: Test Suite
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.11", "3.12"]
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ matrix.python-version }}
+
+    - name: Install uv
+      uses: astral-sh/setup-uv@v3
+
+    - name: Install dependencies
+      run: |
+        uv sync --dev
+        uv pip install -e .
+
+    - name: Run pytest
+      run: |
+        uv run pytest \
+          --cov=testcraft \
+          --cov-report=xml \
+          --cov-report=html \
+          --cov-report=term-missing \
+          --junitxml=pytest-results.xml \
+          -v
+
+    - name: Upload test results
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: pytest-results-${{ matrix.python-version }}
+        path: |
+          pytest-results.xml
+          htmlcov/
+        retention-days: 30
+
+    - name: Upload coverage to Codecov
+      uses: codecov/codecov-action@v4
+      if: matrix.python-version == '3.11'
+      with:
+        file: ./coverage.xml
+        fail_ci_if_error: false
+        verbose: true
+
+  test-evaluation-harness:
+    name: Test Evaluation Harness
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ env.PYTHON_VERSION }}
+
+    - name: Install uv
+      uses: astral-sh/setup-uv@v3
+
+    - name: Install dependencies
+      run: |
+        uv sync --dev
+        uv pip install -e .
+
+    - name: Run evaluation harness tests
+      run: |
+        uv run pytest tests/test_evaluation_integration.py -v --tb=short
+
+    - name: Run evaluation adapter tests
+      run: |
+        uv run pytest tests/ -k "evaluation" -v --tb=short
+
+  docs-check:
+    name: Documentation Check
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ env.PYTHON_VERSION }}
+
+    - name: Install uv
+      uses: astral-sh/setup-uv@v3
+
+    - name: Install dependencies
+      run: |
+        uv sync --dev
+        uv pip install -e .
+
+    - name: Install markdown package for docs check
+      run: |
+        uv pip install markdown
+
+    - name: Run comprehensive documentation check
+      run: |
+        python scripts/doc_check.py --project-root=.
+
+  prompt-regression-check:
+    name: Prompt Regression Check
+    runs-on: ubuntu-latest
+    if: contains(github.event.head_commit.message, 'prompts/') || github.event_name == 'pull_request'
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 2  # Need previous commit for comparison
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ env.PYTHON_VERSION }}
+
+    - name: Install uv
+      uses: astral-sh/setup-uv@v3
+
+    - name: Install dependencies
+      run: |
+        uv sync --dev
+        uv pip install -e .
+
+    - name: Check for prompt changes
+      id: prompt-changes
+      run: |
+        if git diff --name-only HEAD~1 HEAD | grep -q "testcraft/prompts/"; then
+          echo "prompt_changed=true" >> $GITHUB_OUTPUT
+          echo "📝 Prompt changes detected - running regression tests"
+        else
+          echo "prompt_changed=false" >> $GITHUB_OUTPUT
+          echo "✅ No prompt changes detected"
+        fi
+
+    - name: Run comprehensive prompt regression tests
+      if: steps.prompt-changes.outputs.prompt_changed == 'true'
+      run: |
+        python scripts/prompt_regression_test.py --verbose --output-dir=prompt-regression-artifacts
+
+    - name: Upload prompt regression artifacts
+      if: steps.prompt-changes.outputs.prompt_changed == 'true'
+      uses: actions/upload-artifact@v4
+      with:
+        name: prompt-regression-artifacts
+        path: prompt-regression-artifacts/
+        retention-days: 90
+
+  security-scan:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ env.PYTHON_VERSION }}
+
+    - name: Install uv
+      uses: astral-sh/setup-uv@v3
+
+    - name: Install dependencies
+      run: |
+        uv sync --dev
+        uv pip install -e .
+
+    - name: Run safety check
+      run: |
+        uv pip install safety
+        uv run safety check --json --output safety-report.json || true
+
+    - name: Upload security scan results
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: security-scan-results
+        path: safety-report.json
+        retention-days: 30
+
+  collect-artifacts:
+    name: Collect CI Artifacts
+    runs-on: ubuntu-latest
+    needs: [test, prompt-regression-check, security-scan]
+    if: always()
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ env.PYTHON_VERSION }}
+
+    - name: Install uv
+      uses: astral-sh/setup-uv@v3
+
+    - name: Install dependencies
+      run: |
+        uv sync --dev
+        uv pip install -e .
+
+    - name: Download all workflow artifacts
+      uses: actions/download-artifact@v4
+      with:
+        path: downloaded-artifacts/
+
+    - name: Organize and compress artifacts
+      run: |
+        # Move downloaded artifacts to expected locations for processing
+        if [ -d "downloaded-artifacts" ]; then
+          find downloaded-artifacts/ -name "*.xml" -exec cp {} . \;
+          find downloaded-artifacts/ -name "coverage.xml" -exec cp {} . \;
+          find downloaded-artifacts/ -name "safety-report.json" -exec cp {} . \;
+          
+          # Move prompt regression artifacts if they exist
+          if [ -d "downloaded-artifacts/prompt-regression-artifacts" ]; then
+            cp -r downloaded-artifacts/prompt-regression-artifacts ./
+          fi
+        fi
+        
+        # Run artifact collection and compression
+        python scripts/ci_artifacts.py --retention-days=30
+
+    - name: Generate CI summary report
+      run: |
+        python -c "
+        import json
+        from datetime import datetime
+        from pathlib import Path
+        
+        # Create CI summary
+        summary = {
+            'ci_run': {
+                'timestamp': datetime.now().isoformat(),
+                'github_sha': '${{ github.sha }}',
+                'github_ref': '${{ github.ref }}',
+                'workflow': '${{ github.workflow }}',
+                'job_results': {
+                    'lint_and_format': '${{ needs.lint-and-format.result }}' if '${{ needs.lint-and-format.result }}' else 'skipped',
+                    'type_check': '${{ needs.type-check.result }}' if '${{ needs.type-check.result }}' else 'skipped', 
+                    'test': '${{ needs.test.result }}' if '${{ needs.test.result }}' else 'skipped',
+                    'docs_check': '${{ needs.docs-check.result }}' if '${{ needs.docs-check.result }}' else 'skipped',
+                    'prompt_regression': '${{ needs.prompt-regression-check.result }}' if '${{ needs.prompt-regression-check.result }}' else 'skipped',
+                    'security_scan': '${{ needs.security-scan.result }}' if '${{ needs.security-scan.result }}' else 'skipped'
+                }
+            }
+        }
+        
+        # Save summary
+        Path('ci-artifacts').mkdir(exist_ok=True)
+        with open('ci-artifacts/ci-summary.json', 'w') as f:
+            json.dump(summary, f, indent=2)
+        
+        # Print summary
+        print('📊 CI Pipeline Summary:')
+        for job, result in summary['ci_run']['job_results'].items():
+            status_icon = '✅' if result == 'success' else '❌' if result == 'failure' else '⏭️'
+            print(f'  {status_icon} {job}: {result}')
+        "
+
+    - name: Upload consolidated artifacts
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: ci-artifacts-consolidated
+        path: ci-artifacts/
+        retention-days: 30
+
+  integration-check:
+    name: Integration Check
+    runs-on: ubuntu-latest
+    needs: [lint-and-format, type-check, test, docs-check]
+    if: always()
+    steps:
+    - name: Check job results
+      run: |
+        echo "🔍 Checking integration results..."
+        
+        # Check critical jobs
+        if [ "${{ needs.lint-and-format.result }}" != "success" ]; then
+          echo "❌ Lint and format check failed"
+          exit 1
+        fi
+        if [ "${{ needs.type-check.result }}" != "success" ]; then
+          echo "❌ Type check failed"
+          exit 1
+        fi
+        if [ "${{ needs.test.result }}" != "success" ]; then
+          echo "❌ Test suite failed"  
+          exit 1
+        fi
+        if [ "${{ needs.docs-check.result }}" != "success" ]; then
+          echo "❌ Documentation check failed"
+          exit 1
+        fi
+        
+        echo "✅ All critical integration checks passed"
+
+    - name: Report final status
+      run: |
+        echo "🎉 CI pipeline completed successfully!"
+        echo "📊 All quality gates passed:"
+        echo "  ✅ Code formatting and linting"  
+        echo "  ✅ Type checking"
+        echo "  ✅ Test suite execution"
+        echo "  ✅ Documentation validation"
+        echo ""
+        echo "🔗 Additional checks completed:"
+        echo "  📝 Prompt regression testing: ${{ needs.prompt-regression-check.result || 'conditional' }}"
+        echo "  🔒 Security scanning: ${{ needs.security-scan.result || 'completed' }}"
+        echo "  📦 Artifact collection: ${{ needs.collect-artifacts.result || 'completed' }}"

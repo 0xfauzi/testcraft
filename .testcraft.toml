@@ -1,0 +1,21 @@
+[style]
+framework = "pytest"
+assertion_style = "pytest"
+
+[coverage]
+minimum_line_coverage = 80.0
+junit_xml = true
+
+[generation]
+include_docstrings = true
+generate_fixtures = true
+
+[evaluation]
+enabled = false
+acceptance_checks = true
+llm_judge_enabled = false
+
+[llm]
+default_provider = "openai"
+openai_model = "gpt-4"
+temperature = 0.1

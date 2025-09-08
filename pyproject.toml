@@ -6,6 +6,20 @@ readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
     "click>=8.2.1",
+    "rich>=13.0.0",
+    # Core config and validation
+    "pydantic>=2.0.0",
+    "pydantic-settings>=2.0.0",
+    "tomli-w>=1.0.0",         # TOML writing support (reading via built-in tomllib)
+    # AI/LLM SDKs - Latest versions as of September 2025
+    "openai>=1.106.1",        # OpenAI SDK v1.106.1
+    "anthropic>=0.66.0",      # Anthropic Claude SDK v0.66.0
+    # Azure OpenAI uses the same openai package with Azure endpoint configuration
+    "langchain-aws>=0.1.0",   # AWS Bedrock via LangChain ChatBedrock
+    "azure-identity>=1.15.0", # Azure AD authentication
+    # HTTP and async support
+    "httpx>=0.24.0",          # Modern HTTP client for async support
+    "aiofiles>=23.0.0",       # Async file operations
 ]
 
 [project.scripts]
@@ -84,14 +98,15 @@ testpaths = ["tests"]
 python_files = ["test_*.py", "*_test.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
+markers = [
+    "asyncio: marks tests as async (deselect with '-m \"not asyncio\"')",
+    "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+    "integration: marks tests as integration tests",
+]
 addopts = [
     "--strict-markers",
     "--strict-config",
     "--cov=testcraft",
     "--cov-report=term-missing",
     "--cov-report=html",
-]
-markers = [
-    "slow: marks tests as slow (deselect with '-m \"not slow\"')",
-    "integration: marks tests as integration tests",
 ]

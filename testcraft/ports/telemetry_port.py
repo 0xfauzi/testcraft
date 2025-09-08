@@ -1,174 +1,243 @@
 """
 Telemetry Port interface definition.
 
-This module defines the interface for telemetry operations,
-including span tracking and metric recording.
+This module defines the interface for telemetry operations, including
+tracing, metrics collection, and observability features.
 """
 
-from typing import Dict, Any, Optional, List, Union
+from typing import Dict, Any, Optional, Union, List, ContextManager
 from typing_extensions import Protocol
+from enum import Enum
+from dataclasses import dataclass
 from datetime import datetime
+
+
+class SpanKind(Enum):
+    """Types of telemetry spans."""
+    INTERNAL = "internal"
+    SERVER = "server"
+    CLIENT = "client"
+    PRODUCER = "producer"
+    CONSUMER = "consumer"
+
+
+@dataclass
+class SpanContext:
+    """Context information for a telemetry span."""
+    trace_id: str
+    span_id: str
+    parent_span_id: Optional[str] = None
+    baggage: Optional[Dict[str, Any]] = None
+
+
+@dataclass
+class MetricValue:
+    """A metric value with metadata."""
+    name: str
+    value: Union[int, float]
+    unit: Optional[str] = None
+    labels: Optional[Dict[str, str]] = None
+    timestamp: Optional[datetime] = None
 
 
 class TelemetryPort(Protocol):
     """
     Interface for telemetry operations.
     
-    This protocol defines the contract for telemetry operations, including
-    span tracking, metric recording, and observability data collection.
+    This protocol defines the contract for telemetry backends, supporting
+    different providers like OpenTelemetry, Datadog, New Relic, etc.
     """
     
-    def start_span(
+    def create_span(
         self,
-        span_name: str,
-        span_type: str = "operation",
-        **kwargs: Any
-    ) -> str:
+        name: str,
+        kind: SpanKind = SpanKind.INTERNAL,
+        attributes: Optional[Dict[str, Any]] = None,
+        parent_context: Optional[SpanContext] = None
+    ) -> ContextManager[SpanContext]:
         """
-        Start a new telemetry span for tracking operations.
+        Create a new telemetry span.
         
         Args:
-            span_name: Name of the span
-            span_type: Type of span (operation, request, etc.)
-            **kwargs: Additional span parameters
+            name: Name of the operation being traced
+            kind: Type of span being created
+            attributes: Key-value attributes to attach to the span
+            parent_context: Parent span context for nested spans
             
         Returns:
-            Span ID for tracking the span
+            Context manager that yields the span context
             
-        Raises:
-            TelemetryError: If span creation fails
-        """
-        ...
-    
-    def end_span(
-        self,
-        span_id: str,
-        status: str = "success",
-        **kwargs: Any
-    ) -> Dict[str, Any]:
-        """
-        End a telemetry span and record its completion.
-        
-        Args:
-            span_id: ID of the span to end
-            status: Status of the span completion (success, error, etc.)
-            **kwargs: Additional span ending parameters
-            
-        Returns:
-            Dictionary containing:
-                - 'span_id': ID of the ended span
-                - 'duration': Duration of the span
-                - 'status': Final status of the span
-                - 'span_metadata': Additional span metadata
-                
-        Raises:
-            TelemetryError: If span ending fails
+        Usage:
+            with telemetry.create_span("llm_call", attributes={"model": "o4-mini"}) as span:
+                # Do work here
+                span.set_attribute("tokens_used", 150)
         """
         ...
     
     def record_metric(
         self,
-        metric_name: str,
-        metric_value: Union[int, float],
-        metric_type: str = "counter",
-        **kwargs: Any
-    ) -> Dict[str, Any]:
+        metric: MetricValue
+    ) -> None:
         """
-        Record a telemetry metric.
+        Record a metric value.
         
         Args:
-            metric_name: Name of the metric
-            metric_value: Value of the metric
-            metric_type: Type of metric (counter, gauge, histogram, etc.)
-            **kwargs: Additional metric parameters
+            metric: The metric value to record
             
-        Returns:
-            Dictionary containing:
-                - 'metric_id': Unique identifier for the recorded metric
-                - 'metric_name': Name of the recorded metric
-                - 'metric_value': Value that was recorded
-                - 'metric_metadata': Additional metric metadata
-                
-        Raises:
-            TelemetryError: If metric recording fails
+        Usage:
+            telemetry.record_metric(MetricValue(
+                name="tests_generated",
+                value=5,
+                labels={"framework": "pytest"}
+            ))
         """
         ...
     
-    def add_span_attribute(
+    def record_metrics(
         self,
-        span_id: str,
-        attribute_name: str,
-        attribute_value: Any,
-        **kwargs: Any
-    ) -> Dict[str, Any]:
+        metrics: List[MetricValue]
+    ) -> None:
         """
-        Add an attribute to an existing span.
+        Record multiple metric values efficiently.
         
         Args:
-            span_id: ID of the span to add the attribute to
-            attribute_name: Name of the attribute
-            attribute_value: Value of the attribute
-            **kwargs: Additional attribute parameters
-            
-        Returns:
-            Dictionary containing:
-                - 'success': Whether the attribute was added successfully
-                - 'span_id': ID of the span
-                - 'attribute_name': Name of the added attribute
-                - 'attribute_metadata': Additional attribute metadata
-                
-        Raises:
-            TelemetryError: If attribute addition fails
+            metrics: List of metric values to record
         """
         ...
     
-    def record_event(
+    def increment_counter(
         self,
-        event_name: str,
-        event_data: Dict[str, Any],
-        **kwargs: Any
-    ) -> Dict[str, Any]:
+        name: str,
+        value: Union[int, float] = 1,
+        labels: Optional[Dict[str, str]] = None
+    ) -> None:
         """
-        Record a telemetry event.
+        Increment a counter metric.
         
         Args:
-            event_name: Name of the event
-            event_data: Data associated with the event
-            **kwargs: Additional event parameters
-            
-        Returns:
-            Dictionary containing:
-                - 'event_id': Unique identifier for the recorded event
-                - 'event_name': Name of the recorded event
-                - 'event_timestamp': Timestamp when the event was recorded
-                - 'event_metadata': Additional event metadata
-                
-        Raises:
-            TelemetryError: If event recording fails
+            name: Counter name
+            value: Amount to increment (default: 1)
+            labels: Optional labels for the counter
         """
         ...
     
-    def get_telemetry_summary(
+    def record_histogram(
         self,
-        time_period: Optional[str] = None,
-        **kwargs: Any
-    ) -> Dict[str, Any]:
+        name: str,
+        value: Union[int, float],
+        labels: Optional[Dict[str, str]] = None
+    ) -> None:
         """
-        Get a summary of telemetry data for a specified time period.
+        Record a histogram value (for timing, sizes, etc).
         
         Args:
-            time_period: Time period for the summary (e.g., 'hourly', 'daily')
-            **kwargs: Additional summary parameters
+            name: Histogram name
+            value: Value to record
+            labels: Optional labels for the histogram
+        """
+        ...
+    
+    def record_gauge(
+        self,
+        name: str,
+        value: Union[int, float],
+        labels: Optional[Dict[str, str]] = None
+    ) -> None:
+        """
+        Set a gauge value (for current state metrics).
+        
+        Args:
+            name: Gauge name
+            value: Current value to set
+            labels: Optional labels for the gauge
+        """
+        ...
+    
+    def set_global_attributes(
+        self,
+        attributes: Dict[str, Any]
+    ) -> None:
+        """
+        Set attributes that will be attached to all spans and metrics.
+        
+        Args:
+            attributes: Global attributes (e.g., service version, environment)
+        """
+        ...
+    
+    def flush(self, timeout_seconds: Optional[float] = None) -> bool:
+        """
+        Force flush all pending telemetry data.
+        
+        Args:
+            timeout_seconds: Maximum time to wait for flush completion
             
         Returns:
-            Dictionary containing:
-                - 'span_summary': Summary of span data
-                - 'metric_summary': Summary of metric data
-                - 'event_summary': Summary of event data
-                - 'performance_metrics': Performance-related metrics
-                - 'summary_metadata': Additional summary metadata
-                
-        Raises:
-            TelemetryError: If summary generation fails
+            True if flush completed successfully, False otherwise
         """
+        ...
+    
+    def is_enabled(self) -> bool:
+        """
+        Check if telemetry is currently enabled.
+        
+        Returns:
+            True if telemetry is active, False if disabled/no-op
+        """
+        ...
+    
+    def get_trace_context(self) -> Optional[SpanContext]:
+        """
+        Get the current active span context.
+        
+        Returns:
+            Current span context if available, None otherwise
+        """
+        ...
+    
+    def create_child_span(
+        self,
+        name: str,
+        kind: SpanKind = SpanKind.INTERNAL,
+        attributes: Optional[Dict[str, Any]] = None
+    ) -> ContextManager[SpanContext]:
+        """
+        Create a child span from the current active span.
+        
+        Args:
+            name: Name of the operation being traced
+            kind: Type of span being created
+            attributes: Key-value attributes to attach to the span
+            
+        Returns:
+            Context manager that yields the child span context
+        """
+        ...
+
+
+class SpanContextManager(Protocol):
+    """
+    Context manager protocol for span operations.
+    
+    This provides additional methods available within a span context.
+    """
+    
+    def set_attribute(self, key: str, value: Any) -> None:
+        """Set an attribute on the current span."""
+        ...
+    
+    def set_attributes(self, attributes: Dict[str, Any]) -> None:
+        """Set multiple attributes on the current span."""
+        ...
+    
+    def add_event(self, name: str, attributes: Optional[Dict[str, Any]] = None) -> None:
+        """Add an event to the current span."""
+        ...
+    
+    def set_status(self, status_code: str, description: Optional[str] = None) -> None:
+        """Set the status of the current span."""
+        ...
+    
+    def record_exception(self, exception: Exception) -> None:
+        """Record an exception that occurred during the span."""
         ...

@@ -125,6 +125,37 @@ class RefinePort(Protocol):
         """
         ...
     
+    def refine_from_failures(
+        self,
+        test_file: Union[str, Path],
+        failure_output: str,
+        source_context: Optional[Dict[str, Any]] = None,
+        max_iterations: int = 3,
+        **kwargs: Any
+    ) -> Dict[str, Any]:
+        """
+        Refine a test file based on pytest failure output.
+        
+        Args:
+            test_file: Path to the test file that failed
+            failure_output: Raw pytest failure output (stdout/stderr)
+            source_context: Optional source code context for fixing
+            max_iterations: Maximum number of refinement attempts
+            **kwargs: Additional refinement parameters
+            
+        Returns:
+            Dictionary containing:
+                - 'success': Whether refinement was successful
+                - 'refined_content': Updated test file content if successful
+                - 'iterations_used': Number of refinement iterations performed
+                - 'final_status': Final pytest run status
+                - 'error': Error message if refinement failed
+                
+        Raises:
+            RefineError: If refinement fails permanently
+        """
+        ...
+    
     def enhance_test_coverage(
         self,
         test_file: Union[str, Path],

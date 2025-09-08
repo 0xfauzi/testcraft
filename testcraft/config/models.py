@@ -669,6 +669,380 @@ class ContextConfig(BaseModel):
     )
 
 
+class TelemetryBackendConfig(BaseModel):
+    """Configuration for specific telemetry backends."""
+    
+    opentelemetry: Dict[str, Any] = Field(
+        default_factory=lambda: {
+            "endpoint": None,  # Auto-detect or use OTEL_EXPORTER_OTLP_ENDPOINT
+            "headers": {},     # Additional headers for OTLP exporter
+            "insecure": False, # Use insecure gRPC connection
+            "timeout": 10,     # Timeout for exports in seconds
+        },
+        description="OpenTelemetry-specific configuration"
+    )
+    
+    datadog: Dict[str, Any] = Field(
+        default_factory=lambda: {
+            "api_key": None,        # DD_API_KEY env var if None
+            "site": "datadoghq.com", # Datadog site
+            "service": "testcraft",  # Service name
+            "env": "development",    # Environment
+            "version": None,         # Service version
+        },
+        description="Datadog-specific configuration"
+    )
+    
+    jaeger: Dict[str, Any] = Field(
+        default_factory=lambda: {
+            "endpoint": "http://localhost:14268/api/traces",
+            "agent_host_name": "localhost",
+            "agent_port": 6831,
+        },
+        description="Jaeger-specific configuration"
+    )
+
+
+class LLMProviderConfig(BaseModel):
+    """Configuration for LLM provider settings."""
+    
+    # OpenAI Configuration
+    openai_api_key: Optional[str] = Field(
+        default=None,
+        description="OpenAI API key (or set OPENAI_API_KEY environment variable)"
+    )
+    openai_model: str = Field(
+        default="o4-mini",
+        description="OpenAI model to use for test generation"
+    )
+    openai_base_url: Optional[str] = Field(
+        default=None,
+        description="Custom OpenAI API base URL (optional)"
+    )
+    openai_max_tokens: int = Field(
+        default=12000,
+        ge=100,
+        le=16384,
+        description="Maximum tokens for OpenAI requests"
+    )
+    openai_timeout: float = Field(
+        default=60.0,
+        ge=5.0,
+        le=600.0,
+        description="Timeout for OpenAI requests (seconds)"
+    )
+    
+    # Anthropic Claude Configuration
+    anthropic_api_key: Optional[str] = Field(
+        default=None,
+        description="Anthropic API key (or set ANTHROPIC_API_KEY environment variable)"
+    )
+    anthropic_model: str = Field(
+        default="claude-3-7-sonnet",
+        description="Anthropic model to use for test generation"
+    )
+    anthropic_max_tokens: int = Field(
+        default=100000,
+        ge=100,
+        le=128000,
+        description="Maximum tokens for Anthropic requests"
+    )
+    anthropic_timeout: float = Field(
+        default=60.0,
+        ge=5.0,
+        le=600.0,
+        description="Timeout for Anthropic requests (seconds)"
+    )
+    
+    # Azure OpenAI Configuration
+    azure_openai_api_key: Optional[str] = Field(
+        default=None,
+        description="Azure OpenAI API key (or set AZURE_OPENAI_API_KEY environment variable)"
+    )
+    azure_openai_endpoint: Optional[str] = Field(
+        default=None,
+        description="Azure OpenAI endpoint URL (or set AZURE_OPENAI_ENDPOINT environment variable)"
+    )
+    azure_openai_deployment: str = Field(
+        default="o4-mini",
+        description="Azure OpenAI deployment name"
+    )
+    azure_openai_api_version: str = Field(
+        default="2024-02-15-preview",
+        description="Azure OpenAI API version"
+    )
+    azure_openai_timeout: float = Field(
+        default=60.0,
+        ge=5.0,
+        le=600.0,
+        description="Timeout for Azure OpenAI requests (seconds)"
+    )
+    
+    # AWS Bedrock Configuration
+    aws_region: Optional[str] = Field(
+        default=None,
+        description="AWS region for Bedrock (or set AWS_REGION environment variable)"
+    )
+    aws_access_key_id: Optional[str] = Field(
+        default=None,
+        description="AWS access key ID (or set AWS_ACCESS_KEY_ID environment variable)"
+    )
+    aws_secret_access_key: Optional[str] = Field(
+        default=None,
+        description="AWS secret access key (or set AWS_SECRET_ACCESS_KEY environment variable)"
+    )
+    bedrock_model_id: str = Field(
+        default="anthropic.claude-3-7-sonnet-v1:0",
+        description="AWS Bedrock model ID"
+    )
+    bedrock_timeout: float = Field(
+        default=60.0,
+        ge=5.0,
+        le=600.0,
+        description="Timeout for Bedrock requests (seconds)"
+    )
+    
+    # General LLM Settings
+    default_provider: Literal['openai', 'anthropic', 'azure-openai', 'bedrock'] = Field(
+        default='openai',
+        description="Default LLM provider to use"
+    )
+    max_retries: int = Field(
+        default=3,
+        ge=0,
+        le=10,
+        description="Maximum number of retries for LLM requests"
+    )
+    enable_streaming: bool = Field(
+        default=False,
+        description="Enable streaming responses where supported"
+    )
+    temperature: float = Field(
+        default=0.1,
+        ge=0.0,
+        le=2.0,
+        description="Temperature for LLM responses (lower = more deterministic)"
+    )
+    
+    @field_validator('openai_api_key', 'anthropic_api_key', 'azure_openai_api_key', 'aws_secret_access_key')
+    @classmethod
+    def validate_api_keys_not_empty(cls, v):
+        """Ensure API keys are not empty strings."""
+        if v is not None and v.strip() == "":
+            return None
+        return v
+    
+    @field_validator('azure_openai_endpoint')
+    @classmethod
+    def validate_azure_endpoint(cls, v):
+        """Validate Azure endpoint URL format."""
+        if v is not None and v.strip() and not v.startswith(('http://', 'https://')):
+            raise ValueError("Azure OpenAI endpoint must be a valid URL starting with http:// or https://")
+        return v
+
+
+class EvaluationConfig(BaseModel):
+    """Configuration for test evaluation harness."""
+    
+    enabled: bool = Field(
+        default=False,
+        description="Enable evaluation harness functionality"
+    )
+    
+    golden_repos_path: Optional[str] = Field(
+        default=None,
+        description="Path to golden repositories for regression testing"
+    )
+    
+    # Acceptance checks configuration
+    acceptance_checks: bool = Field(
+        default=True,
+        description="Enable automated acceptance checks (syntax, imports, pytest)"
+    )
+    
+    # LLM-as-judge configuration
+    llm_judge_enabled: bool = Field(
+        default=True,
+        description="Enable LLM-as-judge evaluation"
+    )
+    
+    rubric_dimensions: List[str] = Field(
+        default=["correctness", "coverage", "clarity", "safety"],
+        description="Evaluation dimensions for LLM-as-judge"
+    )
+    
+    # A/B testing and statistical analysis
+    statistical_testing: bool = Field(
+        default=True,
+        description="Enable statistical significance testing for A/B comparisons"
+    )
+    
+    confidence_level: float = Field(
+        default=0.95,
+        ge=0.5,
+        le=0.99,
+        description="Statistical confidence level for A/B testing"
+    )
+    
+    # Human review configuration
+    human_review_enabled: bool = Field(
+        default=False,
+        description="Enable human-in-the-loop review"
+    )
+    
+    # Artifact and state management
+    artifacts_path: str = Field(
+        default=".testcraft/evaluation_artifacts",
+        description="Path for storing evaluation artifacts"
+    )
+    
+    state_file: str = Field(
+        default=".testcraft_evaluation_state.json",
+        description="File for storing evaluation state"
+    )
+    
+    # Evaluation timeouts and limits
+    evaluation_timeout_seconds: int = Field(
+        default=300,
+        ge=10,
+        le=3600,
+        description="Timeout for individual evaluations"
+    )
+    
+    batch_size: int = Field(
+        default=10,
+        ge=1,
+        le=100,
+        description="Batch size for A/B testing"
+    )
+    
+    # Prompt registry configuration for evaluation
+    prompt_version: Optional[str] = Field(
+        default=None,
+        description="Specific prompt version for LLM-as-judge (None = latest)"
+    )
+
+
+class TelemetryConfig(BaseModel):
+    """Configuration for telemetry and observability."""
+    
+    enabled: bool = Field(
+        default=False,
+        description="Enable telemetry collection"
+    )
+    
+    backend: Literal['opentelemetry', 'datadog', 'jaeger', 'noop'] = Field(
+        default='opentelemetry',
+        description="Telemetry backend to use"
+    )
+    
+    service_name: str = Field(
+        default='testcraft',
+        description="Service name for telemetry"
+    )
+    
+    service_version: Optional[str] = Field(
+        default=None,
+        description="Service version (auto-detected if None)"
+    )
+    
+    environment: str = Field(
+        default='development',
+        description="Environment name (development, staging, production)"
+    )
+    
+    # Tracing configuration
+    trace_sampling_rate: float = Field(
+        default=1.0,
+        ge=0.0,
+        le=1.0,
+        description="Trace sampling rate (0.0 to 1.0)"
+    )
+    
+    capture_llm_calls: bool = Field(
+        default=True,
+        description="Trace LLM API calls"
+    )
+    
+    capture_coverage_runs: bool = Field(
+        default=True,
+        description="Trace coverage analysis operations"
+    )
+    
+    capture_file_operations: bool = Field(
+        default=True,
+        description="Trace file read/write operations"
+    )
+    
+    capture_test_generation: bool = Field(
+        default=True,
+        description="Trace test generation processes"
+    )
+    
+    # Metrics configuration
+    collect_metrics: bool = Field(
+        default=True,
+        description="Enable metrics collection"
+    )
+    
+    metrics_interval_seconds: int = Field(
+        default=30,
+        ge=1,
+        description="Metrics collection interval"
+    )
+    
+    track_token_usage: bool = Field(
+        default=True,
+        description="Track LLM token usage metrics"
+    )
+    
+    track_coverage_delta: bool = Field(
+        default=True,
+        description="Track coverage improvement metrics"
+    )
+    
+    track_test_pass_rate: bool = Field(
+        default=True,
+        description="Track test success/failure rates"
+    )
+    
+    # Privacy and anonymization
+    anonymize_file_paths: bool = Field(
+        default=True,
+        description="Hash file paths in telemetry data"
+    )
+    
+    anonymize_code_content: bool = Field(
+        default=True,
+        description="Exclude actual code content from telemetry"
+    )
+    
+    opt_out_data_collection: bool = Field(
+        default=False,
+        description="Completely disable data collection (overrides enabled)"
+    )
+    
+    # Resource attributes
+    global_attributes: Dict[str, Any] = Field(
+        default_factory=dict,
+        description="Global attributes to attach to all telemetry"
+    )
+    
+    # Backend-specific configurations
+    backends: TelemetryBackendConfig = Field(
+        default_factory=TelemetryBackendConfig,
+        description="Backend-specific configuration"
+    )
+    
+    @field_validator('trace_sampling_rate')
+    @classmethod
+    def validate_sampling_rate(cls, v):
+        """Ensure sampling rate is between 0.0 and 1.0."""
+        if not (0.0 <= v <= 1.0):
+            raise ValueError("trace_sampling_rate must be between 0.0 and 1.0")
+        return v
+
+
 class TestCraftConfig(BaseModel):
     """Main configuration model for TestCraft."""
     
@@ -730,6 +1104,24 @@ class TestCraftConfig(BaseModel):
     context: ContextConfig = Field(
         default_factory=ContextConfig,
         description="Context retrieval and processing configuration"
+    )
+    
+    # Telemetry and observability
+    telemetry: TelemetryConfig = Field(
+        default_factory=TelemetryConfig,
+        description="Telemetry and observability configuration"
+    )
+    
+    # Evaluation harness configuration
+    evaluation: EvaluationConfig = Field(
+        default_factory=EvaluationConfig,
+        description="Test evaluation harness configuration"
+    )
+    
+    # LLM providers and AI configuration
+    llm: LLMProviderConfig = Field(
+        default_factory=LLMProviderConfig,
+        description="Large Language Model provider configuration"
     )
     
     @field_validator('coverage')

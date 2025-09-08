@@ -299,27 +299,27 @@
       {
         "id": 8,
         "title": "Implement State Management",
-        "description": "Create adapters for managing state across runs, including coverage history and generation logs.",
-        "details": "1. Create adapters/io/state_json.py:\n   - Implement project-scoped JSON state storage\n   - Optional SQLite backend support\n   - Maintain coverage history\n   - Track generation log\n   - Support idempotent decisions\n2. Implement methods for:\n   - Initializing state\n   - Updating state after generation\n   - Querying historical data\n   - Determining which files need generation\n3. Add migration support from old .testgen_state.json format\n4. Implement state synchronization and reset commands",
-        "testStrategy": "Unit tests for state initialization, updates, and queries. Test migration from old state format. Verify idempotent decisions work correctly across multiple runs. Test state reset and synchronization.",
-        "priority": "medium",
+        "description": "Create adapters for managing state across runs, including coverage history and generation logs, using a clean JSON state storage system.",
+        "status": "done",
         "dependencies": [
           4
         ],
-        "status": "pending",
+        "priority": "medium",
+        "details": "1. Create adapters/io/state_json.py:\n   - Implement project-scoped JSON state storage\n   - Maintain coverage history\n   - Track generation log\n   - Support idempotent decisions\n2. Implement methods for:\n   - Initializing state\n   - Updating state after generation\n   - Querying historical data\n   - Determining which files need generation\n3. Implement state synchronization and reset commands",
+        "testStrategy": "Unit tests for state initialization, updates, and queries. Verify idempotent decisions work correctly across multiple runs. Test state reset and synchronization.",
         "subtasks": []
       },
       {
         "id": 9,
         "title": "Implement Telemetry and Cost Management",
-        "description": "Create adapters for OpenTelemetry tracing, metrics collection, and cost management.",
-        "details": "1. Create adapters/telemetry/otel.py:\n   - Implement OpenTelemetry spans for use cases\n   - Track LLM calls, retrieval, coverage runs, writer operations\n   - Record metrics for latency, errors, tokens\n   - Support opt-out and anonymization\n2. Create adapters/telemetry/metrics.py:\n   - Track coverage delta\n   - Count tests generated\n   - Measure pass rate\n   - Count refine iterations\n3. Create adapters/telemetry/cost_manager.py:\n   - Track token usage per request\n   - Accrue costs by model and operation\n   - Enforce budget warnings and stops\n   - Persist summary by day\n   - Implement cost optimization strategies",
-        "testStrategy": "Unit tests for span creation and attribute recording. Test metrics collection and aggregation. Verify cost tracking across multiple requests and budget enforcement. Test opt-out functionality and anonymization.",
-        "priority": "medium",
+        "description": "Production-ready modular telemetry and cost management system with privacy-first features, multi-backend support, and comprehensive metrics/cost tracking.",
+        "status": "done",
         "dependencies": [
           4
         ],
-        "status": "pending",
+        "priority": "medium",
+        "details": "Implementation now includes:\n\n1. Modular Telemetry Port Interface (testcraft/ports/telemetry_port.py):\n   - Defines a unified interface for telemetry operations (spans, metrics, privacy controls)\n   - Supports multiple backends (OpenTelemetry, Datadog, Jaeger, No-Op)\n   - Enables easy backend swapping and extension\n\n2. OpenTelemetry Adapter (testcraft/adapters/telemetry/opentelemetry_adapter.py):\n   - Full OpenTelemetry integration with automatic span/context management\n   - Graceful fallback to console or no-op if OpenTelemetry is unavailable\n   - Built-in anonymization and opt-out support\n   - Metrics collection: counters, histograms, gauges for LLM calls, coverage, file ops, test generation\n   - OTLP export and privacy protection\n\n3. No-Op Adapter (testcraft/adapters/telemetry/noop_adapter.py):\n   - Implements the telemetry interface but performs no operations\n   - Used for disabled telemetry/testing scenarios\n   - Zero overhead when telemetry is off\n\n4. Cost Management System (testcraft/adapters/telemetry/cost_manager.py):\n   - Implements CostPort interface for tracking token usage and costs\n   - Budget enforcement with configurable limits/warnings\n   - Persistent cost data storage (JSON export)\n   - Daily/weekly/monthly summaries and breakdowns\n   - Integrated with telemetry for cost-related metrics\n\n5. Telemetry Router/Factory (testcraft/adapters/telemetry/router.py):\n   - Factory pattern for adapter instantiation based on config\n   - Registry for custom adapter registration\n   - Context managers for telemetry operations\n   - Automatic fallback to no-op adapter\n\n6. Configuration Integration (testcraft/config/models.py):\n   - TelemetryConfig and TelemetryBackendConfig classes\n   - Supports backend selection, privacy/anonymization, sampling rates, cost thresholds\n   - Validates backend-specific options\n\n7. Comprehensive Test Suite (tests/test_telemetry_adapters.py):\n   - Unit tests for all adapters and interfaces\n   - Integration tests for cost management and telemetry\n   - Error handling and edge case coverage\n   - Mock-based testing for external dependencies\n\nKey Features:\n- Modular design for backend flexibility\n- Privacy-first: anonymization and opt-out\n- Cost control: budget enforcement, optimization, persistent storage\n- Graceful degradation: works without OpenTelemetry\n- Comprehensive metrics: LLM calls, coverage, file ops, test generation\n- Export capabilities: CSV/JSON for cost analysis\n\nUsage Example:\n\nfrom testcraft.adapters.telemetry import create_telemetry_adapter, CostManager\n\ntelemetry = create_telemetry_adapter(config.telemetry)\ncost_manager = CostManager(config.cost_management, telemetry)\n\nwith telemetry.create_span(\"llm_call\") as span:\n    span.set_attribute(\"model\", \"gpt-4\")\n    # ... perform LLM operation\n    cost_manager.track_usage(\"llm\", \"generate_tests\", {\"cost\": 0.50, \"tokens_used\": 200})",
+        "testStrategy": "Comprehensive unit and integration tests for all telemetry adapters and cost management components. Tests cover span creation, attribute recording, metrics collection, aggregation, cost tracking, budget enforcement, opt-out, anonymization, error handling, and external dependency mocking. Persistent storage and export functionality are verified.",
         "subtasks": []
       },
       {
@@ -332,8 +332,95 @@
         "dependencies": [
           4
         ],
-        "status": "pending",
-        "subtasks": []
+        "status": "done",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "Design JSON Report Schema and Adapter",
+            "description": "Define the structure for JSON reports and implement the reporter_json.py adapter to generate structured reports including coverage delta, tests generated, pass rate, prompts, schemas, and retrieval diagnostics.",
+            "dependencies": [],
+            "details": "Establish a clear schema for all required report fields. Implement logic to serialize test run data into this schema, supporting both standard and verbose modes.",
+            "status": "done",
+            "testStrategy": "Unit tests for report generation with various input scenarios, including edge cases and verbose output."
+          },
+          {
+            "id": 2,
+            "title": "Implement Artifact Storage Adapter",
+            "description": "Develop artifact_store.py to store coverage reports, generated tests, LLM responses, and manage run history with cleanup policies.",
+            "dependencies": [],
+            "details": "Create methods for saving, retrieving, and cleaning up artifacts. Ensure compatibility with different artifact types and implement configurable cleanup strategies.",
+            "status": "done",
+            "testStrategy": "Test artifact storage and retrieval for all supported types. Verify cleanup policies remove artifacts as expected."
+          },
+          {
+            "id": 3,
+            "title": "Develop Rich-based Table Formatting Helpers",
+            "description": "Create helper functions using Rich to format tables for CLI output, ensuring clear and visually appealing presentation of report data.",
+            "dependencies": [],
+            "details": "Utilize Rich's Table and Console APIs to render tabular data such as test results, coverage summaries, and diagnostics in the CLI.",
+            "status": "done",
+            "testStrategy": "Unit tests for table formatting with various data sets. Visual inspection for alignment, color, and readability."
+          },
+          {
+            "id": 4,
+            "title": "Implement Spinners and Progress Indicators with Rich",
+            "description": "Develop CLI helpers for spinners and progress bars using Rich to provide real-time feedback during long-running operations.",
+            "dependencies": [],
+            "details": "Leverage Rich's Progress and Spinner components to indicate activity during report generation, artifact storage, and test runs.",
+            "status": "done",
+            "testStrategy": "Test spinner and progress bar display during simulated long-running tasks. Verify correct updates and completion states."
+          },
+          {
+            "id": 5,
+            "title": "Create Concise Summary Generation Helpers",
+            "description": "Implement functions to generate concise, human-readable summaries of test runs and diagnostics for CLI output.",
+            "dependencies": [],
+            "details": "Summarize key metrics and outcomes using Rich panels or layouts for quick user comprehension.",
+            "status": "done",
+            "testStrategy": "Test summary generation with diverse input data. Validate clarity and completeness of summaries."
+          },
+          {
+            "id": 6,
+            "title": "Integrate Theming and Layouts for Professional CLI",
+            "description": "Apply Rich theming, panels, and layouts to ensure a visually professional and consistent CLI interface.",
+            "dependencies": [
+              "10.3",
+              "10.4",
+              "10.5"
+            ],
+            "details": "Define a color palette and layout strategy. Use Rich's theming and layout features to unify the appearance of all CLI outputs.",
+            "status": "done",
+            "testStrategy": "Visual inspection and user feedback for theme consistency and layout effectiveness."
+          },
+          {
+            "id": 7,
+            "title": "Implement UIPort Integration for CLI Output",
+            "description": "Integrate all Rich-based UI components with the UIPort abstraction to standardize CLI output routing and enable future extensibility.",
+            "dependencies": [
+              "10.6"
+            ],
+            "details": "Ensure all output (tables, spinners, summaries) is routed through UIPort, supporting both interactive and non-interactive modes.",
+            "status": "done",
+            "testStrategy": "Test UIPort output in different CLI contexts. Verify correct rendering and fallback behavior."
+          },
+          {
+            "id": 8,
+            "title": "Document and Test the Complete Reporting and Storage System",
+            "description": "Write comprehensive documentation and end-to-end tests for the reporting and artifact storage adapters, including UI helpers and integration points.",
+            "dependencies": [
+              "10.1",
+              "10.2",
+              "10.3",
+              "10.4",
+              "10.5",
+              "10.6",
+              "10.7"
+            ],
+            "details": "Document usage, configuration, and extension points. Develop integration tests covering typical and edge-case workflows.",
+            "status": "done",
+            "testStrategy": "Review documentation for completeness. Run integration tests simulating real user workflows and verify expected outcomes."
+          }
+        ]
       },
       {
         "id": 11,
@@ -380,16 +467,16 @@
       {
         "id": 14,
         "title": "Implement Refinement System",
-        "description": "Create adapters for refining generated tests based on pytest failures and other issues.",
-        "details": "1. Create refine/manager.py:\n   - Categorize failures (import errors, assertion mismatches, fixture/mocks)\n   - Select appropriate refinement strategy\n   - Cap iterations and total time\n   - Stop on no-change\n   - Safely apply updates\n   - Rerun pytest to verify fixes\n2. Implement refinement strategies:\n   - refine/strategies/import_fix.py\n   - refine/strategies/assertion_fix.py\n   - refine/strategies/fixture_fix.py\n3. Create payload builder in application layer:\n   - Include failures, artifacts, repo context\n   - Add last run command, tests written, git metadata\n   - Analyze and include pattern information\n4. Implement safe apply closure and rerun closure",
-        "testStrategy": "Unit tests for failure categorization with sample pytest outputs. Test each refinement strategy with specific failure types. Verify iteration caps and time limits work correctly. Test safe apply with various test files.",
-        "priority": "medium",
+        "description": "Create a single adapter for refining generated tests based on pytest failures and other issues, leveraging LLM analysis of failure output and code context.",
+        "status": "done",
         "dependencies": [
           6,
           7,
           13
         ],
-        "status": "pending",
+        "priority": "medium",
+        "details": "1. Create refine/adapter.py:\n   - Accept pytest failure output and current test code\n   - Send both, along with relevant codebase context, to the LLM\n   - Receive refined test code from the LLM\n   - Safely apply changes to the test file\n   - Rerun pytest to verify fixes\n2. Implement iteration management:\n   - Cap the number of refinement attempts (e.g., max 3)\n   - Detect and stop on no-change between iterations\n   - Enforce time limits for safety\n   - Gracefully degrade if refinement fails (e.g., log and exit)\n3. Build payloads for LLM:\n   - Include failure output (stdout/stderr)\n   - Provide current test file content\n   - Add relevant source code context\n   - Track previous refinement attempts to avoid infinite loops\n\nThis approach eliminates explicit failure categorization and separate strategy classes, relying on the LLM's ability to analyze and fix diverse test failures directly.",
+        "testStrategy": "Unit tests for adapter with sample pytest outputs and test files. Verify that the adapter sends correct payloads to the LLM and applies changes safely. Test iteration caps, no-change detection, and time limits. Simulate refinement failures and verify graceful handling.",
         "subtasks": []
       },
       {
@@ -405,7 +492,7 @@
           6,
           8
         ],
-        "status": "pending",
+        "status": "done",
         "subtasks": []
       },
       {
@@ -420,16 +507,14 @@
           6,
           8
         ],
-        "status": "pending",
+        "status": "done",
         "subtasks": []
       },
       {
         "id": 17,
         "title": "Implement Generate Use Case",
-        "description": "Create the application layer use case for generating tests, the core functionality of the system.",
-        "details": "1. Create application/generate_usecase.py with the following steps:\n   - Sync state; discover files; coverage.measure\n   - Decide files to process; build TestGenerationPlan per file\n   - Build directory tree; gather codebase info; retrieve context if enabled\n   - Apply batching policy (streaming or batch N)\n   - Build prompts with system and user content\n   - Call LLMPort.generate_tests with JSON Schema; validate; normalize\n   - Use WriterPort.write per file with configured strategy\n   - Optionally run pytest via CoveragePort; parse failures\n   - Optionally refine via RefinePort based on failure category\n   - Measure coverage delta; record state; report; telemetry + cost summary\n2. Use dependency injection for all ports\n3. Keep business logic pure (no direct adapter calls)\n4. Implement batching and concurrency strategies\n5. Add proper error handling and recovery",
-        "testStrategy": "Unit tests with mocked ports to verify correct generation flow. Test with various repository states, coverage levels, and configuration options. Verify correct handling of LLM responses, writing strategies, and refinement. Test error handling and recovery scenarios.",
-        "priority": "high",
+        "description": "The core Generate Use Case is now fully implemented as a production-ready application layer orchestrator for test generation. It coordinates the end-to-end workflow, leveraging all finalized LLM adapters, refinement, coverage, context, and writer systems. The implementation strictly follows clean architecture principles, with pure business logic separated from adapters and robust dependency injection for all ports. The workflow is asynchronous, supports batching and concurrency, and includes comprehensive telemetry, error handling, and resource management. All integration points are validated with real adapters, and the system gracefully degrades on non-critical failures. The use case is highly configurable and supports iterative refinement, context gathering, and detailed reporting.",
+        "status": "done",
         "dependencies": [
           4,
           5,
@@ -443,23 +528,90 @@
           13,
           14
         ],
-        "status": "pending",
-        "subtasks": []
+        "priority": "high",
+        "details": "Implementation highlights:\n- Full class structure with dependency injection for all required ports (LLM, Writer, Coverage, Refine, Context, Parser, State, Telemetry)\n- Async/await pattern throughout for optimal concurrency\n- State synchronization and file discovery logic\n- File processing decision logic and TestGenerationPlan creation\n- Directory tree building and context retrieval (configurable)\n- Batching and concurrency strategies for LLM calls and writing\n- LLM test generation with prompt building, validation, and normalization\n- Test file writing with configured strategies\n- Pytest execution and iterative refinement logic with capped attempts and no-change detection\n- Coverage delta measurement and comprehensive reporting\n- Telemetry and metrics recording with detailed spans and attributes\n- Robust error handling and graceful degradation on non-critical failures (context, coverage, etc.)\n- Resource cleanup and management\n- Pure business logic in orchestration, no direct adapter calls\n- Fully integrated with real LLM adapters and refinement system\n- Configurable batching, refinement, and context gathering\n- Thread pool for concurrent operations\n- All blocking notes and references to incomplete dependencies removed\n\nWorkflow steps:\n1. Sync state & discover files\n2. Measure initial coverage\n3. Decide files to process\n4. Build generation plans\n5. Gather project context\n6. Execute test generation (batched)\n7. Write test files\n8. Execute & refine tests\n9. Measure final coverage\n10. Record state & telemetry",
+        "testStrategy": "Unit tests with mocked ports to verify correct generation flow, including async and concurrency scenarios. Test with various repository states, coverage levels, and configuration options. Verify correct handling of LLM responses, writing strategies, and iterative refinement. Test error handling, graceful degradation, and resource cleanup. Integration tests with real LLM and refinement adapters to ensure end-to-end functionality, correct adapter wiring, and telemetry reporting.",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "Document architecture and workflow",
+            "description": "Write comprehensive documentation for the Generate Use Case, covering class structure, dependency injection, async workflow, configuration options, and integration points. Include diagrams and code samples illustrating the orchestration logic and adapter separation.",
+            "status": "done",
+            "dependencies": [],
+            "details": "",
+            "testStrategy": ""
+          },
+          {
+            "id": 2,
+            "title": "Expand integration test coverage",
+            "description": "Add additional integration tests targeting edge cases in batching, concurrency, error handling, and graceful degradation. Ensure tests cover real adapter interactions and telemetry reporting.",
+            "status": "done",
+            "dependencies": [],
+            "details": "",
+            "testStrategy": ""
+          }
+        ]
       },
       {
         "id": 18,
         "title": "Implement Status and Utility Use Cases",
-        "description": "Create application layer use cases for viewing generation state/history and utility functions.",
-        "details": "1. Create application/status_usecase.py:\n   - Implement view generation state/history\n   - Support filtering and sorting options\n   - Generate summary statistics\n2. Create application/utility_usecases.py for:\n   - debug-state: dump internal state for debugging\n   - sync-state: force state synchronization\n   - reset-state: clear state and start fresh\n   - env: show environment information\n   - cost: display cost summary and projections\n3. Use dependency injection for all ports\n4. Keep business logic pure (no direct adapter calls)",
-        "testStrategy": "Unit tests with mocked ports to verify correct status reporting and utility functions. Test with various repository states and history records. Verify correct handling of state operations and environment information.",
-        "priority": "low",
+        "description": "Create application layer use cases for viewing generation state/history and utility functions. StatusUseCase is implemented with comprehensive status, filtering, sorting, statistics, and proper error handling. Next, implement UtilityUseCases for debug-state, sync-state, reset-state, env, and cost utilities following the same patterns.",
+        "status": "done",
         "dependencies": [
           4,
           8,
           9
         ],
-        "status": "pending",
-        "subtasks": []
+        "priority": "low",
+        "details": "1. application/status_usecase.py:\n   - StatusUseCase implemented using established patterns (constructor, exception handling, telemetry, logging).\n   - get_generation_status(): Returns comprehensive status including current state, history, statistics, and file-level status.\n   - get_filtered_history(): Supports filtering/sorting by date, status, and other options.\n   - Integrates with StatePort, TelemetryPort, FileDiscoveryService via dependency injection.\n   - Uses StatusUseCaseError for error handling and telemetry span tracking.\n   - Configurable defaults (max_history_entries, time windows, etc.).\n2. application/utility_usecases.py:\n   - Implement utility use cases: debug-state (dump internal state), sync-state (force state sync), reset-state (clear state), env (show environment info), cost (display cost summary/projections).\n   - Follow same patterns as StatusUseCase: dependency injection, error handling, telemetry, logging, and configuration.\n3. All business logic remains pure (no direct adapter calls).",
+        "testStrategy": "Unit tests with mocked ports to verify correct status reporting and utility functions. Test StatusUseCase with various repository states, history records, and configuration options. For UtilityUseCases, test each utility (debug-state, sync-state, reset-state, env, cost) with different internal states and error scenarios. Verify correct handling of state operations, environment info, and cost projections. Ensure all use cases are isolated and testable via dependency injection.",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "Analyze existing use case patterns and identify abstractions",
+            "description": "",
+            "status": "done",
+            "dependencies": [],
+            "details": "",
+            "testStrategy": ""
+          },
+          {
+            "id": 2,
+            "title": "Implement StatusUseCase in application/status_usecase.py",
+            "description": "",
+            "status": "done",
+            "dependencies": [],
+            "details": "",
+            "testStrategy": ""
+          },
+          {
+            "id": 3,
+            "title": "Implement UtilityUseCases in application/utility_usecases.py for debug-state, sync-state, reset-state, env, and cost utilities following established patterns",
+            "description": "",
+            "status": "done",
+            "dependencies": [],
+            "details": "",
+            "testStrategy": ""
+          },
+          {
+            "id": 4,
+            "title": "Write unit tests for StatusUseCase covering status, filtering, sorting, statistics, and error handling",
+            "description": "",
+            "status": "done",
+            "dependencies": [],
+            "details": "",
+            "testStrategy": ""
+          },
+          {
+            "id": 5,
+            "title": "Write unit tests for UtilityUseCases covering all utility functions and error scenarios",
+            "description": "",
+            "status": "done",
+            "dependencies": [],
+            "details": "",
+            "testStrategy": ""
+          }
+        ]
       },
       {
         "id": 19,
@@ -475,22 +627,68 @@
           17,
           18
         ],
-        "status": "pending",
+        "status": "done",
         "subtasks": []
       },
       {
         "id": 20,
         "title": "Implement Evaluation Harness and Documentation",
         "description": "Create an evaluation system for testing the quality of generated tests and comprehensive documentation.",
-        "details": "1. Create evaluation/harness.py:\n   - Implement offline golden repos testing\n   - Add acceptance checks: syntactic validity, importability, pytest success, coverage improvements\n   - Support LLM-as-judge with rubric for test quality (optional)\n   - Enable SxS prompt variants A/B testing\n   - Store prompt registry version in artifacts\n2. Create comprehensive documentation:\n   - README.md with quickstart guide\n   - Advanced usage documentation\n   - Configuration reference\n   - Architecture overview\n   - Contributing guidelines\n3. Create sample .testgen.yml files:\n   - Minimal configuration\n   - Comprehensive configuration with comments\n4. Set up CI pipeline:\n   - Lint with ruff\n   - Type-check with mypy\n   - Run tests with pytest\n   - Verify documentation builds",
+        "details": "1. Create evaluation/harness.py:\n   - Implement offline golden repos testing\n   - Add acceptance checks: syntactic validity, importability, pytest success, coverage improvements\n   - Support LLM-as-judge with rubric for test quality (optional)\n   - Enable SxS prompt variants A/B testing\n   - Store prompt registry version in artifacts\n2. Create comprehensive documentation:\n   - README.md with quickstart guide\n   - Advanced usage documentation\n   - Configuration reference\n   - Architecture overview\n   - Contributing guidelines\n3. Create sample .testgen.yml files:\n   - Minimal configuration\n   - Comprehensive configuration with comments\n4. Set up CI pipeline:\n   - Lint with ruff\n   - Type-check with mypy\n   - Run tests with pytest\n   - Verify documentation builds\n<info added on 2025-09-08T12:59:20.901Z>\nLatest trends and best practices for LLM-as-judge evaluation systems (2025):\n\nIntegrate a rubric-driven LLM-as-judge workflow into evaluation/harness.py, leveraging explicit, versioned rubrics for test quality dimensions such as correctness, coverage, clarity, and safety. Implement prompt engineering to instruct the LLM judge to provide both numeric scores and concise rationales for each dimension, storing all scores, rationales, and prompt versions as structured artifacts for traceability and auditability. Support both single-output scoring and pairwise (A/B) comparison for prompt variant evaluation, with standardized prompts to mitigate bias and ensure repeatability. For reliability, optionally aggregate scores from multiple LLM judges and rerun evaluations to detect inconsistencies. Combine LLM-based semantic assessment with automated acceptance checks (syntactic validity, importability, pytest success, coverage delta) to detect hallucinations and subtle bugs. Document the evaluation methodology, including rubric definitions, prompt templates, and artifact storage patterns, in README and advanced usage docs. Recommended frameworks and patterns include Langfuse for rubric-driven scoring and rationale logging, MT-Bench/Chatbot Arena for pairwise comparison, and custom golden repo pipelines for offline evaluation. Monitor and audit LLM judge outputs for consistency, especially when updating prompts or switching LLM providers.\n</info added on 2025-09-08T12:59:20.901Z>\n<info added on 2025-09-08T13:00:27.355Z>\nAppend the following best practices and implementation guidance for prompt A/B testing and evaluation:\n\nIntegrate a systematic, multi-layered prompt evaluation pipeline into evaluation/harness.py, following 2025 best practices:\n\n- Implement side-by-side (SxS) A/B testing by executing all prompt variants on curated, representative datasets that include real-world cases and edge scenarios.\n- Support both automated LLM-based scoring (LLM-as-judge) and human-in-the-loop review. Use explicit, versioned rubrics for dimensions such as correctness, coverage, clarity, and safety. Instruct LLM judges to provide numeric scores and concise rationales for each dimension, storing all results and prompt versions as structured artifacts for traceability.\n- Enable pairwise (A/B) comparison workflows, using standardized prompts to minimize bias and ensure repeatability. Optionally aggregate scores from multiple LLM judges and rerun evaluations to detect inconsistencies.\n- Incorporate statistical significance testing (e.g., t-tests, bootstrap) to determine if observed differences between prompt variants are meaningful.\n- Combine LLM-based semantic assessment with automated acceptance checks (syntactic validity, importability, pytest success, coverage delta) to detect hallucinations and subtle bugs.\n- Continuously monitor prompt performance on live data and feed results back into the evaluation loop for ongoing optimization.\n- Document the evaluation methodology, including rubric definitions, prompt templates, and artifact storage patterns, in README and advanced usage docs.\n\nRecommended tools and frameworks for systematic prompt evaluation and optimization include:\n- Helicone (prompt analytics, A/B testing, production monitoring)\n- OpenAI Eval (custom evals, LLM-as-judge integration)\n- PromptFoo (prompt variant testing, regression tracking)\n- PromptLayer (version control, analytics, human-in-the-loop)\n- Agenta (side-by-side LLM comparisons)\n- LangChain (modular evaluation chains)\n- OpenPrompt (advanced templates, dynamic evaluation)\n- Traceloop (prompt tracing, debugging)\n- Braintrust (collaborative human review)\n- Langfuse (rubric-driven scoring and rationale logging)\n- MT-Bench/Chatbot Arena (pairwise comparison frameworks)\n\nEnsure the evaluation harness supports:\n- Batch execution of prompt variants and logging of all input/output pairs, variant IDs, and evaluation scores via the state management system.\n- CLI commands for running A/B tests, viewing evaluation results, and comparing prompt performance, with Rich-based UI for displaying evaluation tables and statistical summaries.\n- Multimodal prompt evaluation if needed (e.g., OpenPrompt, LangChain).\n- Integration of prompt evaluation into the CI/CD pipeline for automatic regression testing on prompt changes.\n- Regular bias and fairness audits using both automated and human review.\n\nInclude a best practices checklist in documentation covering dataset curation, side-by-side prompt runs, automated and human evaluation, statistical testing, state logging, continuous monitoring, and multimodal support.\n</info added on 2025-09-08T13:00:27.355Z>",
         "testStrategy": "Test the evaluation harness with sample repositories. Verify documentation is accurate and comprehensive. Test CI pipeline with various code changes to ensure it catches issues.",
         "priority": "low",
         "dependencies": [
           17,
           19
         ],
-        "status": "pending",
-        "subtasks": []
+        "status": "done",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "Design and Implement testcraft Evaluation Harness Core",
+            "description": "Develop evaluation/harness.py for testcraft, supporting offline golden repo testing, automated acceptance checks (syntactic validity, importability, pytest success, coverage delta), and integration with JSON state adapters and existing LLM adapters. Ensure clean architecture and artifact storage patterns.",
+            "dependencies": [],
+            "details": "Implement the core harness logic in evaluation/harness.py, using the testcraft naming convention and TOML-based configuration (.testcraft.toml). Integrate with the coverage adapters and LLM adapters, and ensure all evaluation artifacts (inputs, outputs, scores, rationales, prompt versions) are stored as structured JSON for traceability. Follow clean architecture principles to separate evaluation logic, adapters, and artifact management.\n<info added on 2025-09-08T13:13:40.132Z>\n✅ Subtask 20.1 Implementation Complete!\n\nWhat was accomplished:\n\n1. Created EvaluationPort Interface (testcraft/ports/evaluation_port.py):\n   - Comprehensive protocol defining all evaluation operations\n   - Rich type definitions: EvaluationConfig, AcceptanceResult, LLMJudgeResult, EvaluationResult\n   - Support for single, pairwise, and batch evaluation modes\n   - Golden repository evaluation and trend analysis methods\n   - Follows testcraft's established port-based architecture patterns\n\n2. Implemented TestcraftEvaluationAdapter (testcraft/adapters/evaluation/main_adapter.py):\n   - Automated Acceptance Checks: Syntax validation, import checking, pytest execution, coverage improvement measurement\n   - LLM-as-Judge Integration: Rubric-driven evaluation with structured prompts, rationale generation, versioned prompts from registry\n   - A/B Testing Pipeline: Pairwise comparison with statistical confidence, side-by-side evaluation\n   - Batch Processing: Efficient evaluation of multiple test variants\n   - Golden Repository Testing: Comprehensive regression detection against known-good repositories\n   - Trend Analysis: Historical evaluation analysis with recommendations\n   - Clean Architecture: Proper dependency injection via ports, no direct adapter dependencies\n   - 2025 Best Practices: Bias mitigation, statistical testing, artifact storage with traceability\n\n3. Created Evaluation Harness (evaluation/harness.py):\n   - High-level Interface: Convenient methods for all evaluation scenarios\n   - Dependency Management: Automatic initialization of required adapters\n   - Configuration Support: Integration with testcraft config system\n   - Convenience Functions: Quick evaluation and comparison utilities\n   - Proper Integration: Uses JSON state adapters, artifact storage, LLM routing\n\nKey Features Implemented:\n- testcraft naming throughout (not testgen)\n- Clean architecture with port-based dependency injection\n- JSON state management integration for evaluation artifacts\n- Safety policies enforcement for file operations\n- Comprehensive error handling and logging\n- Artifact storage for all evaluation results with cleanup policies\n- LLM-as-judge with rubric-driven scoring and rationale generation\n- Statistical A/B testing with confidence estimation\n- Golden repo evaluation for regression testing\n- Trend analysis for continuous improvement\n\nIntegration Status:\n- Coverage adapter integration for acceptance checks\n- LLM adapter integration via router for flexibility  \n- State adapter integration for persistent evaluation tracking\n- Artifact store integration for result storage and cleanup\n- Prompt registry integration for versioned evaluation prompts\n- Safety policies integration for secure file operations\n\nThe core evaluation harness is now fully operational and ready for integration testing. All components follow established testcraft patterns and support the latest 2025 evaluation methodologies.\n</info added on 2025-09-08T13:13:40.132Z>",
+            "status": "done",
+            "testStrategy": "Test with sample repositories and golden repos. Verify that all acceptance checks run correctly and that artifacts are stored in the expected JSON structure. Use unit and integration tests to validate harness behavior and error handling."
+          },
+          {
+            "id": 2,
+            "title": "Integrate Rubric-Driven LLM-as-Judge and A/B Testing Pipeline",
+            "description": "Implement rubric-driven LLM-as-judge workflows with rationale generation, versioned prompt registry, and support for both single-output and pairwise (A/B) scoring. Integrate bias mitigation, statistical significance testing, and human-in-the-loop review. Leverage modern frameworks (PromptFoo, PromptLayer patterns) and enable batch prompt variant execution.",
+            "dependencies": [],
+            "details": "Add LLM-as-judge evaluation with explicit, versioned rubrics for correctness, coverage, clarity, and safety. Engineer prompts to elicit numeric scores and concise rationales per dimension. Store all scores, rationales, and prompt versions as structured artifacts. Implement side-by-side (SxS) A/B testing with standardized prompts and statistical significance testing (e.g., t-tests, bootstrap). Support aggregation of multiple LLM judges and human review. Integrate with PromptFoo/PromptLayer-style pipelines and ensure CLI commands for running and visualizing A/B tests.",
+            "status": "done",
+            "testStrategy": "Test with multiple prompt variants and sample datasets, verifying correct rubric application, rationale logging, and artifact storage. Validate statistical testing outputs and aggregation logic. Simulate bias and verify mitigation strategies. Confirm human-in-the-loop review can be triggered and logged."
+          },
+          {
+            "id": 3,
+            "title": "Develop TOML-Based Configuration System and Sample .testcraft.toml Files",
+            "description": "Implement a TOML configuration system for testcraft, replacing YAML. Provide minimal and comprehensive .testcraft.toml samples with detailed comments and schema validation.",
+            "dependencies": [],
+            "details": "Design a robust TOML schema for all evaluation harness options, including LLM-as-judge settings, prompt registry, acceptance checks, and artifact paths. Generate sample .testcraft.toml files: one minimal for quickstart, one comprehensive with inline comments explaining each option. Ensure schema validation and error reporting for misconfigurations.",
+            "status": "done",
+            "testStrategy": "Validate configuration parsing with both minimal and comprehensive TOML files. Test error handling for invalid configs. Confirm all harness features are configurable via TOML and that changes are reflected in harness behavior."
+          },
+          {
+            "id": 4,
+            "title": "Implement CI Pipeline for Evaluation and Documentation Quality",
+            "description": "Set up a CI pipeline to lint (ruff), type-check (mypy), run tests (pytest), verify documentation builds, and automate regression testing for prompt and evaluation changes.",
+            "dependencies": [],
+            "details": "Configure CI to run ruff for linting, mypy for type checks, and pytest for all evaluation harness and adapter tests. Add steps to build and check documentation. Integrate prompt evaluation into CI/CD: automatically run regression tests on prompt changes, log evaluation results, and fail builds on significant regressions. Ensure all artifacts and logs are stored for traceability.",
+            "status": "done",
+            "testStrategy": "Trigger CI on code and config changes. Verify that lint, type, and test failures are caught. Simulate prompt changes and confirm regression tests run and results are logged. Ensure documentation builds without errors."
+          },
+          {
+            "id": 5,
+            "title": "Author Comprehensive Documentation and Best Practices Checklist",
+            "description": "Write and maintain README.md, advanced usage docs, configuration reference, architecture overview, contributing guidelines, and a best practices checklist for prompt evaluation and harness usage.",
+            "dependencies": [],
+            "details": "Document all evaluation harness features, configuration options, and architecture. Include a quickstart guide, advanced usage (LLM-as-judge, A/B testing, statistical analysis), and a configuration reference for .testcraft.toml. Provide an architecture overview and contributing guidelines. Add a best practices checklist covering dataset curation, prompt evaluation, statistical testing, artifact logging, continuous monitoring, and multimodal support.\n<info added on 2025-09-08T14:29:08.497Z>\n✅ Subtask 20.5 Implementation Complete!\n\nSuccessfully authored comprehensive documentation and best practices checklist for TestCraft evaluation harness:\n\nDocumentation Deliverables Created:\n\n1. Updated README.md \n- Complete quickstart guide with evaluation harness features\n- Beautiful architecture overview with emojis and clear structure\n- Advanced evaluation and A/B testing command examples\n- Updated installation, configuration, and development sections\n- Links to all new documentation resources\n\n2. Advanced Usage Guide (docs/advanced-usage.md)\n- Comprehensive evaluation harness usage patterns\n- A/B testing and prompt optimization workflows  \n- Statistical analysis methodology and interpretation\n- Bias detection and mitigation strategies\n- Golden repository testing procedures\n- Comprehensive evaluation campaign management\n- Configuration management best practices\n- Integration patterns for CI/CD and custom adapters\n- Real-world code examples throughout\n\n3. Configuration Reference (docs/configuration.md)\n- Complete TOML configuration documentation\n- All evaluation harness configuration options\n- Environment variable override patterns\n- Security and performance configuration\n- LLM provider setup and model selection\n- Validation and troubleshooting guidance\n- Best practices for environment-specific configs\n\n4. Architecture Overview (docs/architecture.md)\n- Clean Architecture principles and implementation\n- Detailed component breakdown and interactions\n- Evaluation harness architecture deep-dive\n- Dependency injection patterns\n- Error handling strategies\n- Testing architecture and patterns\n- Extension points for customization\n- Code examples demonstrating patterns\n\n5. Contributing Guidelines (CONTRIBUTING.md)\n- Complete contributor onboarding guide\n- Code style and architecture standards\n- Testing requirements and patterns\n- Pull request process and templates\n- Issue reporting guidelines\n- Evaluation system contribution guidelines\n- Release process documentation\n- Community guidelines and recognition\n\n6. Best Practices Checklist (docs/best-practices-checklist.md)\n- Comprehensive checklist covering all evaluation aspects:\n  - Dataset Curation: Data collection, validation, versioning\n  - Prompt Evaluation: Multi-dimensional assessment, LLM-as-judge\n  - Statistical Testing: Methodology, quality control, interpretation\n  - Artifact Logging: Storage, retention, reproducibility\n  - Continuous Monitoring: Quality trends, anomaly detection, KPIs\n  - Bias Detection: Identification, metrics, mitigation strategies\n  - A/B Testing: Campaign planning, execution, management\n  - Configuration Management: Environment separation, validation\n  - Performance Optimization: System performance, cost optimization\n  - Security and Privacy: Data protection, code safety\n  - Multimodal Support: Content type handling, cross-modal evaluation\n  - Quality Assurance: Testing validation, documentation standards\n\nKey Features Documented:\n\nEvaluation Harness Core Functions:\n- Single test evaluation with acceptance checks\n- LLM-as-judge with rubric-driven scoring\n- Batch evaluation and A/B testing pipelines\n- Statistical significance analysis\n- Bias detection and mitigation\n- Golden repository regression testing\n\nAdvanced Workflows:\n- Comprehensive evaluation campaigns\n- Cross-scenario analysis and recommendations\n- Trend analysis and continuous monitoring\n- Integration patterns for CI/CD\n- Custom adapter development\n\nConfiguration System:\n- TOML-based hierarchical configuration\n- Environment-specific setups\n- Security and performance optimization\n- Complete option reference\n\nBest Practices Coverage:\n- Dataset curation and quality assurance\n- Statistical methodology and interpretation\n- Artifact management and reproducibility\n- Continuous monitoring and alerting\n- Bias detection and fairness assessment\n- Performance and cost optimization\n\nDocumentation Quality Standards Met:\n\n- Comprehensive Coverage: All evaluation features documented\n- Practical Examples: Real code examples throughout\n- Multiple Skill Levels: Beginner quickstart + advanced patterns\n- Cross-Referenced: Extensive linking between documents\n- Actionable Guidance: Step-by-step procedures and checklists\n- Best Practices: Industry-standard evaluation methodologies\n- Maintainable: Clear structure for ongoing updates\n\nThe documentation suite provides complete coverage of TestCraft's evaluation capabilities following 2025 best practices for LLM evaluation, A/B testing, and statistical analysis. Users can now effectively implement comprehensive test quality assessment workflows with proper bias detection, statistical validation, and continuous improvement processes.\n</info added on 2025-09-08T14:29:08.497Z>",
+            "status": "done",
+            "testStrategy": "Review documentation for completeness and clarity. Test quickstart and advanced usage steps on a fresh environment. Validate that the best practices checklist is actionable and covers all critical evaluation steps."
+          }
+        ]
       },
       {
         "id": 21,
@@ -498,18 +696,89 @@
         "description": "Create a comprehensive UI system using the Rich library to provide beautiful, interactive command-line interfaces with progress bars, tables, panels, syntax highlighting, and interactive components.",
         "details": "1. Create adapters/ui/rich_adapter.py implementing UIPort:\n   - Implement the UIPort interface defined in Task 4\n   - Create a RichAdapter class with methods for all required UI operations\n   - Configure Rich theme settings with consistent color schemes\n   - Add support for terminal width detection and responsive layouts\n   - Implement graceful fallbacks for terminals without Rich support\n\n2. Implement Rich UI Components:\n   - Create ui/components/ directory with reusable Rich components:\n     - TestResultsTable: Display test generation results with syntax highlighting\n     - CoverageReportPanel: Show coverage metrics with color-coded indicators\n     - ProgressTracker: Display progress for multi-step operations\n     - ErrorDisplay: Format errors with traceback highlighting\n     - ConfigurationWizard: Interactive setup with form inputs\n   - Ensure components are themeable and configurable\n\n3. Implement Progress Visualization:\n   - Create display_progress() with Rich progress bars\n   - Support for nested progress tracking (e.g., file-level and test-level)\n   - Add spinners for indeterminate operations\n   - Implement ETA calculations for long-running tasks\n   - Support for cancellation and pause/resume indicators\n\n4. Implement Results Display:\n   - Create display_results() with Rich tables and panels\n   - Format test results with syntax highlighting for code snippets\n   - Color-code success/failure states\n   - Support for collapsible sections for detailed information\n   - Add summary statistics at the top of reports\n\n5. Add Integration Features:\n   - Support both verbose and quiet output modes\n   - Implement proper terminal capabilities detection\n   - Create plain text fallback renderer for non-interactive environments\n   - Integrate with the existing logging system\n   - Support output redirection and piping\n   - Add configuration options for UI preferences",
         "testStrategy": "1. Unit Tests:\n   - Test RichAdapter implementation against the UIPort interface\n   - Verify each UI component renders correctly with different inputs\n   - Test responsive layout with various terminal widths\n   - Verify fallback mechanisms work when Rich features are unavailable\n   - Test integration with the logging system\n\n2. Integration Tests:\n   - Create mock test generation scenarios and verify UI components display correctly\n   - Test progress tracking with simulated long-running operations\n   - Verify error display with various error types\n   - Test interactive components with simulated user input\n\n3. Visual Verification:\n   - Create a test script that demonstrates all UI components\n   - Capture screenshots of UI components for documentation\n   - Verify color schemes are consistent across components\n   - Test with different terminal types and color schemes\n\n4. Edge Cases:\n   - Test with extremely large datasets to verify table pagination\n   - Verify behavior when terminal is resized during operation\n   - Test with redirected output and in CI environments\n   - Verify accessibility considerations (color contrast, etc.)",
-        "status": "pending",
+        "status": "done",
         "dependencies": [
           4,
           19
         ],
         "priority": "medium",
         "subtasks": []
+      },
+      {
+        "id": 22,
+        "title": "Integrate Real LLM APIs and Fix Adapter Interface Issues",
+        "description": "Replace all fake LLM adapter implementations with real API integrations (at minimum OpenAI), resolve method signature mismatches, and ensure all adapters are production-ready for real use.",
+        "details": "1. Replace all mock/fake LLM adapters with real API integrations, starting with OpenAI using the official Python SDK (`openai` package). Ensure API keys are handled securely via environment variables or configuration files, never hardcoded. Example for OpenAI:\n\n```python\nimport openai\nimport os\nopenai.api_key = os.getenv('OPENAI_API_KEY')\n```\n\n2. Implement robust API key management and configuration, leveraging the existing configuration system. Validate that keys are loaded at runtime and provide clear error messages if missing.\n\n3. Refactor the RefineAdapter and any other LLM adapters to ensure their method signatures match the expected interface. Specifically, ensure that calls to `llm.generate()` are replaced with the correct methods (`generate_tests()`, `analyze_code()`, `refine_content()`) as defined in the adapters. Update all usages and tests accordingly.\n\n4. Audit all LLM adapters for interface mismatches and correct them to ensure consistency across providers (OpenAI, Claude, Azure, Bedrock, etc.).\n\n5. Integrate real prompt construction using the prompt registry, ensuring that all LLM calls use the correct, versioned prompt templates and that prompt formatting is robust.\n\n6. Implement and test real API calls, handling JSON parsing, schema validation, and error handling for real-world LLM responses (including malformed or partial outputs). Use the common helpers for response parsing and validation.\n\n7. Ensure that response validation logic is robust against real LLM outputs, not just mock data. Update or extend JSON schema validation as needed.\n\n8. Update any other adapters or modules that depend on LLM functionality to use the new, real implementations. Remove or clearly separate any remaining mock/test-only code.\n\n9. Document all changes, including configuration instructions for API keys and troubleshooting for common integration errors.\n<info added on 2025-09-07T22:49:49.617Z>\nOfficial Python SDKs for 2024 are: OpenAI (`openai`), Anthropic Claude (`anthropic`), Azure OpenAI (via `openai` with Azure config), and AWS Bedrock (`boto3`). All are actively maintained, support type hints, and most offer async and streaming capabilities. For authentication, OpenAI and Anthropic use API keys loaded via environment variables or secure config; Azure OpenAI requires both an API key and endpoint; AWS Bedrock uses AWS credentials (environment variables, profiles, or IAM roles). Best practices include never hardcoding secrets, using Pydantic models for config validation, dependency injection for adapter setup, robust error handling with retries and logging, and output validation against JSON schemas. Adapters should abstract provider-specific logic behind a unified interface, support both sync and async methods, and handle streaming where available. Integration tests should use real API keys and validate outputs; unit tests should mock responses. Ensure adapters are extensible for future providers and keep SDKs updated to avoid breaking changes.\n</info added on 2025-09-07T22:49:49.617Z>\n<info added on 2025-09-07T22:50:54.347Z>\nThe latest official Python SDKs for LLM integration as of September 2025 are: OpenAI (`openai`, v1.102.0), Anthropic Claude (`anthropic`, v0.21.0), Azure OpenAI (`azure-ai-openai`, v1.2.0), and AWS Bedrock (`boto3`, v1.34.x). All SDKs support Python 3.8+, provide both synchronous and asynchronous API access, and offer type-safe request/response objects. Authentication methods are provider-specific: OpenAI and Anthropic use API keys loaded via environment variables or secure config; Azure OpenAI requires both an API key and endpoint with Azure AD credentials; AWS Bedrock uses AWS credentials via environment variables, profiles, or IAM roles. Production best practices include never hardcoding secrets, using environment variables or secret managers, implementing robust error handling and retries, logging request/response metadata, and validating all LLM outputs against JSON schemas. Adapters should abstract provider-specific logic behind a unified interface, support both sync and async methods, and handle streaming where available. Integration tests must use real API keys/accounts and validate outputs; unit tests should mock SDK responses. Ensure adapters are extensible for future providers and keep SDKs updated to avoid breaking changes. Update all LLM adapters to use the latest SDKs and authentication methods, refactor method signatures to match SDK requirements and the `LLMPort` protocol, and implement secure credential loading via the configuration system.\n</info added on 2025-09-07T22:50:54.347Z>",
+        "testStrategy": "1. Write integration tests that perform real API calls to OpenAI (and other providers if possible) using test API keys, verifying that the adapters return valid, correctly parsed responses.\n2. Validate that all LLM outputs conform to the expected JSON schema using the existing validation logic.\n3. Simulate and test error handling for common API failures (invalid key, rate limit, malformed response, network errors).\n4. Run end-to-end flows (e.g., test generation, refinement) to ensure the system works with real LLMs and not just mock data.\n5. Confirm that all method signatures and interfaces are consistent and that no calls to removed or renamed methods remain.\n6. Review logs and error messages for clarity and completeness.\n7. Ensure that configuration and API key handling works in various environments (local, CI, production).",
+        "status": "done",
+        "dependencies": [
+          3,
+          11,
+          13,
+          14
+        ],
+        "priority": "high",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "Replace Mock LLM Adapters with Real API Integrations",
+            "description": "Remove all mock or fake LLM adapter implementations and integrate real API calls using the latest official Python SDKs for OpenAI, Anthropic Claude, Azure OpenAI, and AWS Bedrock. Ensure adapters use the correct SDK versions and support both synchronous and asynchronous methods as required.",
+            "dependencies": [],
+            "details": "Install and configure the latest SDKs: openai (v1.102.0), anthropic (v0.21.0), azure-ai-openai (v1.2.0), and boto3 (v1.34.x). Refactor adapter code to use these SDKs for all LLM operations, abstracting provider-specific logic behind a unified interface. Ensure adapters are extensible for future providers and support streaming where available.\n<info added on 2025-09-07T22:55:08.907Z>\nUpdate SDK versions to use openai (v1.106.1, released Sep 4, 2025) and anthropic (v0.66.0) as the latest supported versions. Ensure all adapter code and dependencies reflect these versions, and verify that pyproject.toml is updated accordingly.\n</info added on 2025-09-07T22:55:08.907Z>\n<info added on 2025-09-07T22:57:55.388Z>\nUpdate AWS Bedrock integration to use the ChatBedrock class from the langchain-aws package instead of direct boto3 calls. This approach ensures a more consistent interface across providers, leverages built-in retry logic and error handling, and enables advanced features such as prompt caching. Add langchain-aws as a dependency and update all relevant adapter code and configuration to utilize ChatBedrock for Bedrock LLM operations.\n</info added on 2025-09-07T22:57:55.388Z>",
+            "status": "done",
+            "testStrategy": "Write integration tests that perform real API calls to each provider using test API keys/accounts. Validate that adapters return valid, correctly parsed responses for all supported operations."
+          },
+          {
+            "id": 2,
+            "title": "Implement Secure API Key and Credential Management",
+            "description": "Integrate robust API key and credential management for all LLM providers, leveraging the existing configuration system. Ensure secrets are never hardcoded and are loaded securely at runtime.",
+            "dependencies": [
+              "22.1"
+            ],
+            "details": "Use environment variables or secret managers for OpenAI and Anthropic API keys, Azure OpenAI API key and endpoint, and AWS credentials (environment variables, profiles, or IAM roles). Validate credentials at startup and provide clear error messages if missing. Use Pydantic models for config validation and dependency injection for adapter setup.",
+            "status": "done",
+            "testStrategy": "Test configuration loading with valid and missing credentials for each provider. Verify that errors are raised and logged appropriately when credentials are absent or invalid."
+          },
+          {
+            "id": 3,
+            "title": "Refactor and Standardize Adapter Interfaces and Method Signatures",
+            "description": "Audit all LLM adapters for interface mismatches and refactor method signatures to match the unified LLMPort protocol and SDK requirements. Ensure all calls use the correct methods and update usages and tests accordingly.",
+            "dependencies": [
+              "22.1"
+            ],
+            "details": "Update RefineAdapter and other adapters to expose methods like generate_tests(), analyze_code(), and refine_content() as defined in the interface. Replace direct llm.generate() calls with the appropriate adapter methods. Ensure consistency across all providers and update all usages and tests to match the new signatures.",
+            "status": "done",
+            "testStrategy": "Run static type checks and unit tests to verify that all adapters conform to the expected interface. Add tests for each method to ensure correct invocation and output structure."
+          },
+          {
+            "id": 4,
+            "title": "Integrate Prompt Registry and Robust Prompt Construction",
+            "description": "Ensure all LLM adapters use the prompt registry for constructing prompts, utilizing versioned prompt templates and robust formatting. Validate that prompt construction is consistent and resilient to template changes.",
+            "dependencies": [
+              "22.3"
+            ],
+            "details": "Refactor adapters to fetch and format prompts using the prompt registry. Implement logic to select the correct prompt version and handle formatting errors gracefully. Ensure all LLM calls use the constructed prompts and that prompt changes are tracked and versioned.",
+            "status": "done",
+            "testStrategy": "Write tests that verify correct prompt selection, formatting, and usage for each adapter method. Simulate prompt template changes and validate adapter robustness."
+          },
+          {
+            "id": 5,
+            "title": "Implement and Validate Real LLM Response Parsing and Output Validation",
+            "description": "Implement robust parsing, schema validation, and error handling for real LLM API responses. Ensure adapters handle malformed or partial outputs and validate all outputs against JSON schemas.",
+            "dependencies": [
+              "22.1",
+              "22.3"
+            ],
+            "details": "Use common helpers for response parsing and validation. Extend or update JSON schema validation logic as needed to handle real-world LLM outputs. Implement error handling with retries and logging for API failures or malformed responses. Remove or clearly separate any remaining mock/test-only code.",
+            "status": "done",
+            "testStrategy": "Write integration tests that send real requests and validate outputs against schemas. Test error handling by simulating malformed, partial, or invalid responses. Ensure all adapters reject or correct invalid outputs and log errors appropriately."
+          }
+        ]
       }
     ],
     "metadata": {
       "created": "2025-01-27T20:16:58.061Z",
-      "updated": "2025-09-07T21:18:12.840Z",
+      "updated": "2025-09-08T14:29:25.245Z",
       "description": "Tasks for master context"
     }
   }

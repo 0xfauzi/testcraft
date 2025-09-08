@@ -1,0 +1,362 @@
+# TestCraft Comprehensive Configuration (TOML)
+# This file contains all available configuration options with detailed explanations.
+# Uncomment and modify the sections you want to customize.
+
+# =============================================================================
+# TEST DISCOVERY PATTERNS
+# =============================================================================
+
+[test_patterns]
+# Patterns for finding test files (supports glob patterns)
+test_patterns = ["test_*.py", "*_test.py", "tests/**/test_*.py"]
+
+# Files and patterns to exclude from test generation
+exclude = ["migrations/*", "*/deprecated/*", "__pycache__/*", "*.pyc"]
+
+# Additional directories to exclude (common ones are included by default)
+exclude_dirs = [
+    # Virtual environments
+    "venv", "env", ".env", ".venv", "virtualenv",
+    # Build directories  
+    "build", "dist", "*.egg-info",
+    # Cache directories
+    "__pycache__", ".pytest_cache", ".coverage",
+    # IDE directories
+    ".vscode", ".idea",
+    # Version control
+    ".git",
+    # Test generation artifacts
+    ".artifacts"
+]
+
+# =============================================================================
+# TEST GENERATION STYLE
+# =============================================================================
+
+[style]
+framework = "pytest"              # Options: "pytest", "unittest"
+assertion_style = "pytest"       # Options: "pytest", "unittest", "auto"
+mock_library = "unittest.mock"   # Options: "unittest.mock", "pytest-mock", "auto"
+
+# =============================================================================
+# COVERAGE ANALYSIS & THRESHOLDS
+# =============================================================================
+
+[coverage]
+# Coverage thresholds
+minimum_line_coverage = 80.0      # Minimum line coverage percentage
+minimum_branch_coverage = 70.0    # Minimum branch coverage percentage
+regenerate_if_below = 60.0         # Regenerate tests if coverage drops below this
+
+# Additional pytest arguments for coverage runs
+pytest_args = []                   # e.g., ["-v", "--tb=short"]
+junit_xml = true                   # Enable JUnit XML for all coverage runs
+
+# Test runner configuration
+[coverage.runner]
+mode = "python-module"             # Options: "python-module", "pytest-path", "custom"
+python = ""                        # Python executable (empty = current sys.executable)
+pytest_path = "pytest"            # Path to pytest when mode is "pytest-path"
+custom_cmd = []                    # Custom command when mode is "custom"
+cwd = ""                          # Working directory (empty = project root)
+args = []                         # Runner-specific args before pytest_args
+
+# Environment configuration for test runs
+[coverage.env]
+propagate = true                   # Inherit current environment variables
+extra = {}                         # Additional environment variables
+append_pythonpath = []             # Paths to append to PYTHONPATH
+
+# =============================================================================
+# TEST GENERATION BEHAVIOR
+# =============================================================================
+
+[generation]
+# Test content and structure options
+include_docstrings = true          # Include docstrings in test methods
+generate_fixtures = true           # Generate pytest fixtures for common setup
+parametrize_similar_tests = true   # Use @pytest.mark.parametrize for similar tests
+max_test_methods_per_class = 20    # Maximum test methods per class (0 for unlimited)
+always_analyze_new_files = false   # Always analyze new files even if they have tests
+
+# Post-generation test runner (runs pytest after generating tests)
+[generation.test_runner]
+enable = false                     # Enable post-generation test execution
+args = []                          # Extra pytest args, e.g., ["-q", "-x"]
+cwd = ""                          # Working directory (empty = project root)
+junit_xml = true                   # Generate JUnit XML for failure parsing
+
+# Test merging strategy
+[generation.merge]
+strategy = "append"                # Options: "append", "ast-merge"
+dry_run = false                    # Preview changes without applying
+formatter = "none"                 # Code formatter to apply after merge
+
+# Test refinement loop (AI-powered test fixing)
+[generation.refine]
+enable = false                     # Enable AI-powered test refinement
+max_retries = 2                    # Maximum refinement attempts
+backoff_base_sec = 1.0             # Base delay between refinement attempts
+backoff_max_sec = 8.0              # Maximum delay between attempts
+stop_on_no_change = true           # Stop if LLM returns no changes
+max_total_minutes = 5.0            # Maximum total time for refinement
+strategy = "auto"                  # Options: "auto", "comprehensive", "balanced",
+                                   # "dependency_focused", "logic_focused", "setup_focused"
+
+# =============================================================================
+# EVALUATION HARNESS (NEW!)
+# =============================================================================
+
+[evaluation]
+enabled = true                     # Enable evaluation harness functionality
+golden_repos_path = ""             # Path to golden repositories for regression testing
+
+# Acceptance checks configuration
+acceptance_checks = true           # Enable automated acceptance checks (syntax, imports, pytest)
+
+# LLM-as-judge configuration
+llm_judge_enabled = true           # Enable LLM-as-judge evaluation
+rubric_dimensions = ["correctness", "coverage", "clarity", "safety"]  # Evaluation dimensions
+
+# A/B testing and statistical analysis
+statistical_testing = true        # Enable statistical significance testing
+confidence_level = 0.95           # Statistical confidence level (0.5-0.99)
+
+# Human review configuration
+human_review_enabled = false      # Enable human-in-the-loop review
+
+# Artifact and state management
+artifacts_path = ".testcraft/evaluation_artifacts"  # Path for storing evaluation artifacts
+state_file = ".testcraft_evaluation_state.json"     # File for storing evaluation state
+
+# Evaluation timeouts and limits
+evaluation_timeout_seconds = 300  # Timeout for individual evaluations (10-3600)
+batch_size = 10                   # Batch size for A/B testing (1-100)
+
+# Prompt registry configuration for evaluation
+prompt_version = ""               # Specific prompt version for LLM-as-judge (empty = latest)
+
+# =============================================================================
+# ENVIRONMENT DETECTION & MANAGEMENT
+# =============================================================================
+
+[environment]
+# Environment detection settings
+auto_detect = true                 # Auto-detect current environment manager
+preferred_manager = "auto"         # Options: "poetry", "pipenv", "conda", "uv", "venv", "auto"
+respect_virtual_env = true         # Always use current virtual env
+dependency_validation = true       # Validate deps before running tests
+
+# Environment-specific overrides
+[environment.overrides.poetry]
+use_poetry_run = true              # Use `poetry run pytest` instead of direct python
+respect_poetry_venv = true
+
+[environment.overrides.pipenv]
+use_pipenv_run = true              # Use `pipenv run pytest`
+
+[environment.overrides.conda]
+activate_environment = true       # Ensure conda environment is active
+
+[environment.overrides.uv]
+use_uv_run = false                # Use direct python instead of `uv run`
+
+# =============================================================================
+# COST MANAGEMENT & OPTIMIZATION
+# =============================================================================
+
+[cost_management]
+# File size limits for cost control
+max_file_size_kb = 50              # Skip files larger than this (KB)
+max_context_size_chars = 100000    # Limit total context size
+max_files_per_request = 15         # Override batch size for large files
+use_cheaper_model_threshold_kb = 10 # Use cheaper model for files < this size
+enable_content_compression = true   # Remove comments/whitespace in prompts
+
+# Additional optimizations
+skip_trivial_files = true          # Skip files with < 5 functions/classes
+token_usage_logging = true         # Log token usage for cost tracking
+
+# Cost thresholds and limits
+[cost_management.cost_thresholds]
+daily_limit = 50.0                 # Maximum daily cost in USD
+per_request_limit = 2.0            # Maximum cost per request in USD
+warning_threshold = 1.0            # Warn when request exceeds this cost
+
+# =============================================================================
+# SECURITY SETTINGS
+# =============================================================================
+
+[security]
+enable_ast_validation = false      # Use AST validation (slower but more secure)
+max_generated_file_size = 50000    # Maximum size for generated test files (bytes)
+block_dangerous_patterns = true    # Block potentially dangerous code patterns
+
+# Patterns to block in generated code
+block_patterns = [
+    "eval\\s*\\(",
+    "exec\\s*\\(",
+    "__import__\\s*\\(",
+    "subprocess\\.",
+    "os\\.system"
+]
+
+# =============================================================================
+# TEST QUALITY ANALYSIS
+# =============================================================================
+
+[quality]
+# Quality analysis settings
+enable_quality_analysis = true     # Enable quality analysis by default
+enable_mutation_testing = true     # Enable mutation testing by default
+minimum_quality_score = 75.0       # Minimum acceptable quality score (%)
+minimum_mutation_score = 80.0      # Minimum acceptable mutation score (%)
+max_mutants_per_file = 50          # Maximum mutants per file for performance
+mutation_timeout = 30              # Timeout in seconds for mutation testing
+display_detailed_results = true    # Show detailed quality analysis results
+enable_pattern_analysis = true     # Enable failure pattern analysis for smart refinement
+
+# Modern Python Mutators
+[quality.modern_mutators]
+enable_type_hints = true           # Enable type hint mutations
+enable_async_await = true          # Enable async/await mutations
+enable_dataclass = true            # Enable dataclass mutations
+type_hints_severity = "medium"     # Severity: "low", "medium", "high"
+async_severity = "high"            # Async mutations often critical
+dataclass_severity = "medium"      # Dataclass mutations typically medium severity
+
+# =============================================================================
+# PROMPT ENGINEERING (Advanced AI Settings)
+# =============================================================================
+
+[prompt_engineering]
+use_2025_guidelines = true         # Use latest prompt best practices
+encourage_step_by_step = true      # Include step-by-step reasoning prompts
+use_positive_negative_examples = true # Include positive/negative examples
+minimize_xml_structure = true      # Reduce excessive XML tags in prompts
+decisive_recommendations = true    # Encourage single, strong recommendations
+preserve_uncertainty = false       # Include hedging language (usually false)
+
+# Enhanced 2024-2025 Features
+use_enhanced_reasoning = true      # Use advanced Chain-of-Thought reasoning
+enable_self_debugging = true       # Enable self-debugging and review checkpoints
+use_enhanced_examples = true       # Use detailed examples with reasoning
+enable_failure_strategies = true   # Use failure-specific debugging strategies
+confidence_based_adaptation = true # Adapt prompts based on confidence levels
+track_reasoning_quality = true     # Monitor and track reasoning quality
+
+# =============================================================================
+# CONTEXT RETRIEVAL & PROCESSING
+# =============================================================================
+
+[context]
+retrieval_settings = {}            # Context retrieval settings
+hybrid_weights = {}                # Weights for hybrid search
+rerank_model = ""                  # Model to use for reranking (empty = none)
+hyde = false                       # Enable HyDE (Hypothetical Document Embeddings)
+
+# =============================================================================
+# TELEMETRY & OBSERVABILITY
+# =============================================================================
+
+[telemetry]
+enabled = false                    # Enable telemetry collection
+backend = "opentelemetry"          # Options: "opentelemetry", "datadog", "jaeger", "noop"
+service_name = "testcraft"         # Service name for telemetry
+service_version = ""               # Service version (empty = auto-detected)
+environment = "development"        # Environment name
+
+# Tracing configuration
+trace_sampling_rate = 1.0          # Trace sampling rate (0.0 to 1.0)
+capture_llm_calls = true           # Trace LLM API calls
+capture_coverage_runs = true       # Trace coverage analysis operations
+capture_file_operations = true     # Trace file read/write operations
+capture_test_generation = true     # Trace test generation processes
+
+# Metrics configuration
+collect_metrics = true             # Enable metrics collection
+metrics_interval_seconds = 30      # Metrics collection interval
+track_token_usage = true           # Track LLM token usage metrics
+track_coverage_delta = true        # Track coverage improvement metrics
+track_test_pass_rate = true        # Track test success/failure rates
+
+# Privacy and anonymization
+anonymize_file_paths = true        # Hash file paths in telemetry data
+anonymize_code_content = true      # Exclude actual code content from telemetry
+opt_out_data_collection = false    # Completely disable data collection
+
+# Global attributes to attach to all telemetry
+global_attributes = {}
+
+# Backend-specific configurations
+[telemetry.backends.opentelemetry]
+endpoint = ""                      # Auto-detect or use OTEL_EXPORTER_OTLP_ENDPOINT
+headers = {}                       # Additional headers for OTLP exporter
+insecure = false                   # Use insecure gRPC connection
+timeout = 10                       # Timeout for exports in seconds
+
+[telemetry.backends.datadog]
+api_key = ""                       # DD_API_KEY env var if empty
+site = "datadoghq.com"            # Datadog site
+service = "testcraft"             # Service name
+env = "development"               # Environment
+version = ""                      # Service version
+
+[telemetry.backends.jaeger]
+endpoint = "http://localhost:14268/api/traces"
+agent_host_name = "localhost"
+agent_port = 6831
+
+# =============================================================================
+# LLM PROVIDERS & AI CONFIGURATION
+# =============================================================================
+
+[llm]
+# General LLM Settings
+default_provider = "openai"       # Options: "openai", "anthropic", "azure-openai", "bedrock"
+max_retries = 3                   # Maximum number of retries for LLM requests
+enable_streaming = false          # Enable streaming responses where supported
+temperature = 0.1                 # Temperature for LLM responses (lower = more deterministic)
+
+# OpenAI Configuration
+openai_api_key = ""               # OpenAI API key (or set OPENAI_API_KEY environment variable)
+openai_model = "gpt-4"            # OpenAI model to use for test generation
+openai_base_url = ""              # Custom OpenAI API base URL (optional)
+openai_max_tokens = 12000         # Maximum tokens for OpenAI requests
+openai_timeout = 60.0             # Timeout for OpenAI requests (seconds)
+
+# Anthropic Claude Configuration
+anthropic_api_key = ""            # Anthropic API key (or set ANTHROPIC_API_KEY environment variable)
+anthropic_model = "claude-3-sonnet-20240229" # Anthropic model to use for test generation
+anthropic_max_tokens = 100000     # Maximum tokens for Anthropic requests
+anthropic_timeout = 60.0          # Timeout for Anthropic requests (seconds)
+
+# Azure OpenAI Configuration
+azure_openai_api_key = ""         # Azure OpenAI API key (or set AZURE_OPENAI_API_KEY environment variable)
+azure_openai_endpoint = ""        # Azure OpenAI endpoint URL (or set AZURE_OPENAI_ENDPOINT environment variable)
+azure_openai_deployment = "gpt-4" # Azure OpenAI deployment name
+azure_openai_api_version = "2024-02-15-preview" # Azure OpenAI API version
+azure_openai_timeout = 60.0       # Timeout for Azure OpenAI requests (seconds)
+
+# AWS Bedrock Configuration
+aws_region = ""                   # AWS region for Bedrock (or set AWS_REGION environment variable)
+aws_access_key_id = ""            # AWS access key ID (or set AWS_ACCESS_KEY_ID environment variable)
+aws_secret_access_key = ""        # AWS secret access key (or set AWS_SECRET_ACCESS_KEY environment variable)
+bedrock_model_id = "anthropic.claude-3-haiku-20240307-v1:0" # AWS Bedrock model ID
+bedrock_timeout = 60.0            # Timeout for Bedrock requests (seconds)
+
+# =============================================================================
+# ENVIRONMENT VARIABLE OVERRIDES
+# =============================================================================
+# 
+# You can override any configuration value using environment variables with the prefix TESTCRAFT_
+# Use double underscores (__) to separate nested keys.
+#
+# Examples:
+#   TESTCRAFT_COVERAGE__MINIMUM_LINE_COVERAGE=85
+#   TESTCRAFT_GENERATION__TEST_RUNNER__ENABLE=true
+#   TESTCRAFT_COST_MANAGEMENT__DAILY_LIMIT=25.0
+#   TESTCRAFT_EVALUATION__ENABLED=true
+#   TESTCRAFT_EVALUATION__LLM_JUDGE_ENABLED=true
+#
+# =============================================================================

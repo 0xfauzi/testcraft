@@ -2,10 +2,16 @@
 
 import os
 import yaml
+import tomllib
 import logging
 from typing import Dict, Any, Optional, Union
 from pathlib import Path
 from pydantic import ValidationError
+
+try:
+    import tomli_w
+except ImportError:
+    tomli_w = None
 
 from .models import TestCraftConfig
 
@@ -21,12 +27,15 @@ class ConfigLoader:
     """Configuration loader that merges YAML files, environment variables, and CLI arguments."""
     
     DEFAULT_CONFIG_FILES = [
+        '.testcraft.toml',      # TOML files (preferred)
         '.testcraft.yml',
         '.testcraft.yaml', 
+        'testcraft.toml',
         'testcraft.yml',
         'testcraft.yaml',
-        '.testgen.yml',  # Legacy support
-        '.testgen.yaml'  # Legacy support
+        '.testgen.toml',        # Legacy support (TOML)
+        '.testgen.yml',         # Legacy support (YAML)
+        '.testgen.yaml'         # Legacy support (YAML)
     ]
     
     ENV_PREFIX = 'TESTCRAFT_'
@@ -66,10 +75,10 @@ class ConfigLoader:
             # Start with default configuration
             config_dict = {}
             
-            # 1. Load from YAML file
-            yaml_config = self._load_yaml_config()
-            if yaml_config:
-                config_dict = self._deep_merge(config_dict, yaml_config)
+            # 1. Load from configuration file (TOML or YAML)
+            file_config = self._load_config_file()
+            if file_config:
+                config_dict = self._deep_merge(config_dict, file_config)
                 logger.debug(f"Loaded configuration from {self._get_config_file_path()}")
             
             # 2. Apply environment variable overrides
@@ -98,14 +107,49 @@ class ConfigLoader:
             logger.error(error_msg)
             raise ConfigurationError(error_msg) from e
     
-    def _load_yaml_config(self) -> Optional[Dict[str, Any]]:
-        """Load configuration from YAML file."""
+    def _load_config_file(self) -> Optional[Dict[str, Any]]:
+        """Load configuration from TOML or YAML file."""
         config_file = self._get_config_file_path()
         
         if not config_file or not config_file.exists():
             logger.debug("No configuration file found, using defaults")
             return None
         
+        try:
+            # Determine file type by extension
+            if config_file.suffix.lower() == '.toml':
+                return self._load_toml_file(config_file)
+            elif config_file.suffix.lower() in ('.yml', '.yaml'):
+                return self._load_yaml_file(config_file)
+            else:
+                logger.warning(f"Unknown configuration file type: {config_file}")
+                return None
+                
+        except IOError as e:
+            error_msg = f"Failed to read {config_file}: {e}"
+            logger.error(error_msg)
+            raise ConfigurationError(error_msg) from e
+    
+    def _load_toml_file(self, config_file: Path) -> Optional[Dict[str, Any]]:
+        """Load configuration from TOML file."""
+        try:
+            with open(config_file, 'rb') as f:
+                content = tomllib.load(f)
+                
+            # Handle empty content
+            if not content:
+                logger.warning(f"Configuration file {config_file} is empty")
+                return None
+                
+            return content
+            
+        except tomllib.TOMLDecodeError as e:
+            error_msg = f"Invalid TOML in {config_file}: {e}"
+            logger.error(error_msg)
+            raise ConfigurationError(error_msg) from e
+    
+    def _load_yaml_file(self, config_file: Path) -> Optional[Dict[str, Any]]:
+        """Load configuration from YAML file."""
         try:
             with open(config_file, 'r', encoding='utf-8') as f:
                 content = yaml.safe_load(f)
@@ -119,10 +163,6 @@ class ConfigLoader:
             
         except yaml.YAMLError as e:
             error_msg = f"Invalid YAML in {config_file}: {e}"
-            logger.error(error_msg)
-            raise ConfigurationError(error_msg) from e
-        except IOError as e:
-            error_msg = f"Failed to read {config_file}: {e}"
             logger.error(error_msg)
             raise ConfigurationError(error_msg) from e
     
@@ -456,7 +496,40 @@ context:
         with open(filepath, 'w', encoding='utf-8') as f:
             f.write(config_content)
         
-        logger.info(f"Sample configuration created at {filepath}")
+        logger.info(f"Sample YAML configuration created at {filepath}")
+        return filepath
+    
+    def create_sample_toml_config(
+        self, 
+        filepath: Optional[Union[str, Path]] = None,
+        minimal: bool = False
+    ) -> Path:
+        """Create a sample TOML configuration file.
+        
+        Args:
+            filepath: Path for the config file. Defaults to .testcraft.toml
+            minimal: If True, creates a minimal config; otherwise comprehensive
+            
+        Returns:
+            Path to the created configuration file
+        """
+        if tomli_w is None:
+            raise ConfigurationError("tomli-w library is required to create TOML files")
+            
+        if filepath is None:
+            filepath = Path('.testcraft.toml')
+        else:
+            filepath = Path(filepath)
+        
+        if minimal:
+            config_content = self._get_minimal_toml_config()
+        else:
+            config_content = self._get_comprehensive_toml_config()
+        
+        with open(filepath, 'wb') as f:
+            tomli_w.dump(config_content, f)
+        
+        logger.info(f"Sample TOML configuration created at {filepath}")
         return filepath
     
     def validate_config(self, config_dict: Dict[str, Any]) -> None:
@@ -495,6 +568,52 @@ context:
             'quality_analysis': self._config_cache.quality.enable_quality_analysis,
             'mutation_testing': self._config_cache.quality.enable_mutation_testing,
         }
+    
+    def _get_minimal_toml_config(self) -> Dict[str, Any]:
+        """Get minimal TOML configuration for quickstart."""
+        return {
+            # Essential settings for getting started
+            "style": {
+                "framework": "pytest",
+                "assertion_style": "pytest"
+            },
+            "coverage": {
+                "minimum_line_coverage": 80.0,
+                "junit_xml": True
+            },
+            "generation": {
+                "include_docstrings": True,
+                "generate_fixtures": True
+            },
+            "evaluation": {
+                "enabled": False,
+                "acceptance_checks": True,
+                "llm_judge_enabled": False
+            },
+            "llm": {
+                "default_provider": "openai",
+                "openai_model": "o4-mini",
+                "temperature": 0.1
+            }
+        }
+    
+    def _get_comprehensive_toml_config(self) -> Dict[str, Any]:
+        """Get comprehensive TOML configuration with all options."""
+        # Create a default TestCraftConfig instance and convert to dict
+        default_config = TestCraftConfig()
+        config_dict = default_config.model_dump(exclude_none=True)  # Exclude None values for TOML
+        
+        # Further filter to ensure no None values remain in nested structures
+        return self._filter_none_values(config_dict)
+    
+    def _filter_none_values(self, obj: Any) -> Any:
+        """Recursively filter out None values from configuration objects."""
+        if isinstance(obj, dict):
+            return {k: self._filter_none_values(v) for k, v in obj.items() if v is not None}
+        elif isinstance(obj, list):
+            return [self._filter_none_values(item) for item in obj if item is not None]
+        else:
+            return obj
 
 
 # Convenience function for quick configuration loading
