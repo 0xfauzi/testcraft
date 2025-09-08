@@ -9,6 +9,7 @@ from langchain_aws import ChatBedrock
 from langchain_core.messages import HumanMessage, SystemMessage
 
 from ...config.credentials import CredentialError, CredentialManager
+from ...ports.cost_port import CostPort
 from ...ports.llm_port import LLMPort
 from .common import parse_json_response, with_retries
 
@@ -43,6 +44,7 @@ class BedrockAdapter(LLMPort):
         temperature: float = 0.1,
         max_retries: int = 3,
         credential_manager: CredentialManager | None = None,
+        cost_port: CostPort | None = None,
         **kwargs: Any,
     ):
         """Initialize Bedrock adapter.
@@ -55,6 +57,7 @@ class BedrockAdapter(LLMPort):
             temperature: Response randomness (0.0-1.0, lower = more deterministic)
             max_retries: Maximum retry attempts
             credential_manager: Custom credential manager (optional)
+            cost_port: Optional cost tracking port (optional)
             **kwargs: Additional ChatBedrock parameters
         """
         self.model_id = model_id
@@ -66,6 +69,9 @@ class BedrockAdapter(LLMPort):
 
         # Initialize credential manager
         self.credential_manager = credential_manager or CredentialManager()
+        
+        # Initialize cost tracking
+        self.cost_port = cost_port
 
         # Initialize ChatBedrock client
         self._client: ChatBedrock | None = None

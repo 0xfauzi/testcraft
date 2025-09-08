@@ -163,6 +163,21 @@ class GenerateUseCase:
                 # Step 4: Build test generation plans for each file
                 generation_plans = await self._build_generation_plans(files_to_process)
                 span.set_attribute("generation_plans_created", len(generation_plans))
+                
+                # Check if we have any valid plans to work with
+                if not generation_plans:
+                    logger.warning("No testable elements found in any source files")
+                    return {
+                        "generation_summary": {
+                            "total_files_processed": len(files_to_process),
+                            "total_tests_generated": 0,
+                            "total_elements_tested": 0,
+                            "files_with_issues": [],
+                        },
+                        "files_generated": [],
+                        "success": True,
+                        "message": "No testable elements found in source files",
+                    }
 
                 # Step 5: Build directory tree and gather context if enabled
                 context_data = (
@@ -437,7 +452,8 @@ class GenerateUseCase:
             try:
                 for file_path in files_to_process:
                     plan = await self._create_generation_plan_for_file(file_path)
-                    plans.append(plan)
+                    if plan is not None:  # Only add valid plans
+                        plans.append(plan)
 
                 span.set_attribute("plans_created", len(plans))
                 return plans
@@ -450,7 +466,7 @@ class GenerateUseCase:
 
     async def _create_generation_plan_for_file(
         self, file_path: Path
-    ) -> TestGenerationPlan:
+    ) -> TestGenerationPlan | None:
         """
         Create a TestGenerationPlan for a specific file.
 
@@ -458,12 +474,17 @@ class GenerateUseCase:
             file_path: Path to the file to create a plan for
 
         Returns:
-            TestGenerationPlan for the file
+            TestGenerationPlan for the file, or None if no testable elements found
         """
         try:
             # Parse the file to extract testable elements
             parse_result = self._parser.parse_file(file_path)
             elements = parse_result.get("elements", [])
+
+            # Skip files with no testable elements
+            if not elements:
+                logger.info("Skipping %s: no testable elements found", file_path)
+                return None
 
             # Find existing test files
             existing_tests = self._find_existing_test_files(file_path)
@@ -479,10 +500,8 @@ class GenerateUseCase:
 
         except Exception as e:
             logger.warning("Failed to create generation plan for %s: %s", file_path, e)
-            # Return minimal plan rather than failing
-            return TestGenerationPlan(
-                elements_to_test=[], existing_tests=[], coverage_before=None
-            )
+            # Return None instead of invalid plan when parsing fails
+            return None
 
     def _find_existing_test_files(self, source_file: Path) -> list[str]:
         """Find existing test files for a source file."""
@@ -656,7 +675,7 @@ class GenerateUseCase:
             relevant_context = await self._get_relevant_context(plan, context_data)
 
             # Call LLM to generate tests
-            llm_result = self._llm.generate_tests(
+            llm_result = await self._llm.generate_tests(
                 code_content=code_content,
                 context=relevant_context,
                 test_framework=self._config["test_framework"],
@@ -696,7 +715,9 @@ class GenerateUseCase:
 
         for element in plan.elements_to_test:
             # Simplified - would read actual code from file
-            code_parts.append(f"# {element.type.value}: {element.name}")
+            # Handle both enum and string types for element.type
+            element_type = element.type.value if hasattr(element.type, 'value') else str(element.type)
+            code_parts.append(f"# {element_type}: {element.name}")
             if element.docstring:
                 code_parts.append(f'"""{element.docstring}"""')
 

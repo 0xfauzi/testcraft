@@ -9,6 +9,7 @@ and interactive elements.
 from typing import Any
 
 from rich.console import Console
+from rich.status import Status
 
 from ...ports.ui_port import UIPort
 from .rich_cli import TESTCRAFT_THEME, RichCliComponents
@@ -36,8 +37,8 @@ class RichUIAdapter(UIPort):
         Args:
             console: Optional Rich Console instance (will create one if not provided)
         """
-        self.console = console or Console(theme=TESTCRAFT_THEME)
-        self.rich_cli = RichCliComponents(self.console)
+        self._console = console or Console(theme=TESTCRAFT_THEME)
+        self.rich_cli = RichCliComponents(self._console)
         self._active_progress = None
         self._active_status = None
 
@@ -297,6 +298,62 @@ class RichUIAdapter(UIPort):
         except Exception as e:
             raise UIError(f"Failed to get user confirmation: {str(e)}")
 
+    def get_user_confirmation(
+        self, message: str, default: bool = False, **kwargs: Any
+    ) -> bool:
+        """
+        Get user confirmation (alias for confirm_action).
+
+        Args:
+            message: Message to display for confirmation
+            default: Default value if user doesn't respond
+            **kwargs: Additional confirmation parameters
+
+        Returns:
+            True if user confirms, False otherwise
+        """
+        return self.confirm_action(message, default, **kwargs)
+
+    def display_success(
+        self, message: str, title: str = "Success", **kwargs: Any
+    ) -> None:
+        """
+        Display success message to the user.
+
+        Args:
+            message: Success message to display
+            title: Title for the success message
+            **kwargs: Additional display parameters
+
+        Raises:
+            UIError: If success display fails
+        """
+        try:
+            self.rich_cli.display_success(message, title)
+        except Exception as e:
+            raise UIError(f"Failed to display success message: {str(e)}")
+
+    def print_divider(self, title: str | None = None) -> None:
+        """
+        Print a divider line with optional title.
+
+        Args:
+            title: Optional title for the divider
+        """
+        self.rich_cli.print_divider(title)
+
+    @property
+    def console(self) -> Any:
+        """
+        Provide access to the underlying Rich console.
+
+        Returns:
+            The Rich console instance
+        """
+        return self._console
+
+
+
     def _display_coverage_progress(
         self, progress_data: dict[str, Any], **kwargs: Any
     ) -> None:
@@ -523,3 +580,15 @@ class RichUIAdapter(UIPort):
 
         except Exception as e:
             raise UIError(f"Failed to create summary display: {str(e)}")
+
+    def create_status_spinner(self, message: str) -> Status:
+        """
+        Create a status spinner for displaying ongoing operations.
+        
+        Args:
+            message: Message to display with the spinner
+            
+        Returns:
+            Rich Status instance
+        """
+        return self.rich_cli.create_status_spinner(message)

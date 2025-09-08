@@ -8,12 +8,12 @@ from typing import Any
 import click
 from rich.console import Console
 
-from ..adapters.io.rich_cli import RichCliComponents
+from ..adapters.io.ui_rich import RichUIAdapter
 from .config_init import ConfigInitializer
 
 # Initialize Rich console and UI components
 console = Console()
-ui = RichCliComponents(console)
+ui = RichUIAdapter(console)
 
 
 def add_utility_commands(app: click.Group) -> None:

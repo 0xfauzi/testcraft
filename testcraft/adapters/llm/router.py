@@ -2,15 +2,17 @@ from __future__ import annotations
 
 from typing import Any
 
+from ...ports.cost_port import CostPort
 from ...ports.llm_port import LLMPort
 
 
 class LLMRouter(LLMPort):
     """Router for multiple LLM providers using user configuration."""
 
-    def __init__(self, config: dict[str, Any] | None = None):
-        """Initialize LLM Router with configuration."""
+    def __init__(self, config: dict[str, Any] | None = None, cost_port: CostPort | None = None):
+        """Initialize LLM Router with configuration and optional cost tracking."""
         self.config = config or {}
+        self.cost_port = cost_port
         self._adapters: dict[str, LLMPort] = {}
         # Get the default provider from config, fallback to openai
         self.default_provider = self.config.get("default_provider", "openai")
@@ -74,29 +76,33 @@ class LLMRouter(LLMPort):
             if provider == "openai":
                 from .openai import OpenAIAdapter
 
-                self._adapters[provider] = OpenAIAdapter(**provider_config)
+                self._adapters[provider] = OpenAIAdapter(cost_port=self.cost_port, **provider_config)
             elif provider == "anthropic":
                 from .claude import ClaudeAdapter
 
-                self._adapters[provider] = ClaudeAdapter(**provider_config)
+                self._adapters[provider] = ClaudeAdapter(cost_port=self.cost_port, **provider_config)
             elif provider == "azure-openai":
                 from .azure import AzureAdapter
 
-                self._adapters[provider] = AzureAdapter(**provider_config)
+                self._adapters[provider] = AzureAdapter(cost_port=self.cost_port, **provider_config)
             elif provider == "bedrock":
                 from .bedrock import BedrockAdapter
 
-                self._adapters[provider] = BedrockAdapter(**provider_config)
+                self._adapters[provider] = BedrockAdapter(cost_port=self.cost_port, **provider_config)
             else:
                 raise ValueError(f"Unknown provider: {provider}")
         return self._adapters[provider]
 
     async def generate_tests(
-        self, code: str, context: dict[str, Any]
+        self,
+        code_content: str,
+        context: str | None = None,
+        test_framework: str = "pytest",
+        **kwargs: Any,
     ) -> dict[str, Any]:
         """Generate tests using configured provider."""
         adapter = self._get_adapter(self.default_provider)
-        return await adapter.generate_tests(code, context)
+        return await adapter.generate_tests(code_content, context, test_framework, **kwargs)
 
     async def analyze_code(self, code: str, focus_areas: list) -> dict[str, Any]:
         """Analyze code using configured provider."""

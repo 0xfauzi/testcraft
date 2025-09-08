@@ -5,8 +5,8 @@ import logging
 from pathlib import Path
 from typing import Any
 
-from ..adapters.io.rich_cli import RichCliComponents
 from ..config.models import TestCraftConfig
+from ..ports.ui_port import UIPort
 
 logger = logging.getLogger(__name__)
 
@@ -20,8 +20,8 @@ class ConfigInitializationError(Exception):
 class ConfigInitializer:
     """Initialize configuration files with guided setup."""
 
-    def __init__(self, ui: RichCliComponents):
-        """Initialize with Rich UI components."""
+    def __init__(self, ui: UIPort):
+        """Initialize with UI adapter."""
         self.ui = ui
 
     def create_config_file(

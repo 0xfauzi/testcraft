@@ -211,7 +211,7 @@ class RichCliComponents:
             show_header=True,
             header_style="header",
             title_style="primary",
-            border_style="border_accent",
+            border_style="bright_magenta",
             show_lines=True,
         )
 
@@ -321,7 +321,7 @@ class RichCliComponents:
         return Panel(
             metrics_text.strip(),
             title="🎯 [title]Project Summary[/title]",
-            border_style="border_accent",
+            border_style="bright_magenta",
             padding=(1, 2),
             title_align="center",
         )
@@ -630,7 +630,7 @@ class RichCliComponents:
             "[info]Welcome to TestCraft! Let's set up your configuration.[/]\n"
             "[subtle]This wizard will guide you through the setup process.[/]",
             title="[primary]✨ Welcome[/primary]",
-            border_style="border_accent",
+            border_style="bright_magenta",
             padding=(1, 2),
             title_align="center",
         )

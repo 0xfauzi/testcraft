@@ -10,6 +10,7 @@ from openai import AzureOpenAI
 from openai.types.chat import ChatCompletion
 
 from ...config.credentials import CredentialError, CredentialManager
+from ...ports.cost_port import CostPort
 from ...ports.llm_port import LLMPort
 from .common import parse_json_response, with_retries
 
@@ -44,6 +45,7 @@ class AzureOpenAIAdapter(LLMPort):
         temperature: float = 0.1,
         max_retries: int = 3,
         credential_manager: CredentialManager | None = None,
+        cost_port: CostPort | None = None,
         **kwargs: Any,
     ):
         """Initialize Azure OpenAI adapter.
@@ -56,6 +58,7 @@ class AzureOpenAIAdapter(LLMPort):
             temperature: Response randomness (0.0-2.0, lower = more deterministic)
             max_retries: Maximum retry attempts
             credential_manager: Custom credential manager (optional)
+            cost_port: Optional cost tracking port (optional)
             **kwargs: Additional Azure OpenAI client parameters
         """
         self.deployment = deployment
@@ -67,6 +70,9 @@ class AzureOpenAIAdapter(LLMPort):
 
         # Initialize credential manager
         self.credential_manager = credential_manager or CredentialManager()
+        
+        # Initialize cost tracking
+        self.cost_port = cost_port
 
         # Initialize Azure OpenAI client
         self._client: AzureOpenAI | None = None

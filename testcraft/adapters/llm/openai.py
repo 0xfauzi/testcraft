@@ -10,6 +10,7 @@ from openai import OpenAI
 from openai.types.chat import ChatCompletion
 
 from ...config.credentials import CredentialError, CredentialManager
+from ...ports.cost_port import CostPort
 from ...ports.llm_port import LLMPort
 from ...prompts.registry import PromptRegistry
 from .common import parse_json_response, with_retries
@@ -46,6 +47,7 @@ class OpenAIAdapter(LLMPort):
         base_url: str | None = None,
         credential_manager: CredentialManager | None = None,
         prompt_registry: PromptRegistry | None = None,
+        cost_port: CostPort | None = None,
         **kwargs: Any,
     ):
         """Initialize OpenAI adapter.
@@ -59,6 +61,7 @@ class OpenAIAdapter(LLMPort):
             base_url: Custom API base URL (optional)
             credential_manager: Custom credential manager (optional)
             prompt_registry: Custom prompt registry (optional)
+            cost_port: Optional cost tracking port (optional)
             **kwargs: Additional OpenAI client parameters
         """
         self.model = model
@@ -71,6 +74,9 @@ class OpenAIAdapter(LLMPort):
 
         # Initialize prompt registry
         self.prompt_registry = prompt_registry or PromptRegistry()
+        
+        # Initialize cost tracking
+        self.cost_port = cost_port
 
         # Initialize token calculator
         self.token_calculator = TokenCalculator(provider="openai", model=model)
@@ -483,6 +489,30 @@ class OpenAIAdapter(LLMPort):
                     "total_tokens": response.usage.total_tokens,
                 }
 
+            # Track costs if cost port is available
+            if self.cost_port and response.usage:
+                try:
+                    # Calculate cost based on token usage and model
+                    cost = self._calculate_api_cost(response.usage, response.model)
+                    
+                    cost_data = {
+                        "cost": cost,
+                        "tokens_used": response.usage.total_tokens,
+                        "api_calls": 1,
+                        "model": response.model,
+                        "prompt_tokens": response.usage.prompt_tokens,
+                        "completion_tokens": response.usage.completion_tokens,
+                    }
+                    
+                    self.cost_port.track_usage(
+                        service="openai",
+                        operation="chat_completion", 
+                        cost_data=cost_data
+                    )
+                except Exception as e:
+                    # Don't fail the request if cost tracking fails
+                    logger.warning(f"Cost tracking failed: {e}")
+
             return {
                 "content": content,
                 "usage": usage_info,
@@ -498,3 +528,37 @@ class OpenAIAdapter(LLMPort):
         except Exception as e:
             logger.error(f"Unexpected error in chat completion: {e}")
             raise OpenAIError(f"Chat completion failed: {e}") from e
+
+    def _calculate_api_cost(self, usage: Any, model: str) -> float:
+        """Calculate the API cost based on token usage and model pricing.
+        
+        Args:
+            usage: OpenAI usage object with token counts
+            model: Model name used for the request
+            
+        Returns:
+            Calculated cost in USD
+        """
+        # OpenAI pricing (as of 2024) - costs per 1,000 tokens
+        # Prices may change, so this should ideally be configurable
+        model_pricing = {
+            "gpt-4": {"input": 0.03, "output": 0.06},
+            "gpt-4-turbo": {"input": 0.01, "output": 0.03},
+            "gpt-4o": {"input": 0.005, "output": 0.015},
+            "gpt-4o-mini": {"input": 0.00015, "output": 0.0006},
+            "o4-mini": {"input": 0.00015, "output": 0.0006},  # Same as gpt-4o-mini
+            "gpt-3.5-turbo": {"input": 0.0015, "output": 0.002},
+            # Add more models as needed
+        }
+        
+        # Default pricing if model not found (use gpt-4o-mini rates)
+        pricing = model_pricing.get(model, {"input": 0.00015, "output": 0.0006})
+        
+        # Calculate cost based on token usage
+        prompt_cost = (usage.prompt_tokens / 1000) * pricing["input"]
+        completion_cost = (usage.completion_tokens / 1000) * pricing["output"]
+        total_cost = prompt_cost + completion_cost
+        
+        logger.debug(f"Cost calculation for {model}: prompt={prompt_cost:.6f}, completion={completion_cost:.6f}, total={total_cost:.6f}")
+        
+        return total_cost

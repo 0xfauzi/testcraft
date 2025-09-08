@@ -10,6 +10,7 @@ from anthropic import Anthropic
 from anthropic.types import Message
 
 from ...config.credentials import CredentialError, CredentialManager
+from ...ports.cost_port import CostPort
 from ...ports.llm_port import LLMPort
 from ...prompts.registry import PromptRegistry
 from .common import parse_json_response, with_retries
@@ -46,6 +47,7 @@ class ClaudeAdapter(LLMPort):
         max_retries: int = 3,
         credential_manager: CredentialManager | None = None,
         prompt_registry: PromptRegistry | None = None,
+        cost_port: CostPort | None = None,
         **kwargs: Any,
     ):
         """Initialize Claude adapter.
@@ -58,6 +60,7 @@ class ClaudeAdapter(LLMPort):
             max_retries: Maximum retry attempts
             credential_manager: Custom credential manager (optional)
             prompt_registry: Custom prompt registry (optional)
+            cost_port: Optional cost tracking port (optional)
             **kwargs: Additional Anthropic client parameters
         """
         self.model = model
@@ -70,6 +73,9 @@ class ClaudeAdapter(LLMPort):
 
         # Initialize prompt registry
         self.prompt_registry = prompt_registry or PromptRegistry()
+        
+        # Initialize cost tracking
+        self.cost_port = cost_port
 
         # Initialize token calculator
         self.token_calculator = TokenCalculator(provider="anthropic", model=model)
@@ -386,6 +392,30 @@ Please improve the content according to these instructions while maintaining fun
                     + response.usage.output_tokens,
                 }
 
+            # Track costs if cost port is available
+            if self.cost_port and response.usage:
+                try:
+                    # Calculate cost based on token usage and model
+                    cost = self._calculate_api_cost(response.usage, response.model)
+                    
+                    cost_data = {
+                        "cost": cost,
+                        "tokens_used": response.usage.input_tokens + response.usage.output_tokens,
+                        "api_calls": 1,
+                        "model": response.model,
+                        "input_tokens": response.usage.input_tokens,
+                        "output_tokens": response.usage.output_tokens,
+                    }
+                    
+                    self.cost_port.track_usage(
+                        service="anthropic",
+                        operation="message_creation", 
+                        cost_data=cost_data
+                    )
+                except Exception as e:
+                    # Don't fail the request if cost tracking fails
+                    logger.warning(f"Cost tracking failed: {e}")
+
             return {
                 "content": content,
                 "usage": usage_info,
@@ -400,3 +430,36 @@ Please improve the content according to these instructions while maintaining fun
         except Exception as e:
             logger.error(f"Unexpected error in message creation: {e}")
             raise ClaudeError(f"Message creation failed: {e}") from e
+
+    def _calculate_api_cost(self, usage: Any, model: str) -> float:
+        """Calculate the API cost based on token usage and model pricing.
+        
+        Args:
+            usage: Anthropic usage object with token counts
+            model: Model name used for the request
+            
+        Returns:
+            Calculated cost in USD
+        """
+        # Anthropic pricing (as of 2024) - costs per 1,000 tokens
+        # Prices may change, so this should ideally be configurable
+        model_pricing = {
+            "claude-3-opus": {"input": 0.015, "output": 0.075},
+            "claude-3-sonnet": {"input": 0.003, "output": 0.015},
+            "claude-3-haiku": {"input": 0.00025, "output": 0.00125},
+            "claude-3-5-sonnet": {"input": 0.003, "output": 0.015},
+            "claude-3-7-sonnet": {"input": 0.003, "output": 0.015},  # Alias for 3.5
+            # Add more models as needed
+        }
+        
+        # Default pricing if model not found (use haiku rates as conservative default)
+        pricing = model_pricing.get(model, {"input": 0.00025, "output": 0.00125})
+        
+        # Calculate cost based on token usage
+        input_cost = (usage.input_tokens / 1000) * pricing["input"]
+        output_cost = (usage.output_tokens / 1000) * pricing["output"]
+        total_cost = input_cost + output_cost
+        
+        logger.debug(f"Cost calculation for {model}: input={input_cost:.6f}, output={output_cost:.6f}, total={total_cost:.6f}")
+        
+        return total_cost

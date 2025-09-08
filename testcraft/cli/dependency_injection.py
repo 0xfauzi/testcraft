@@ -11,6 +11,7 @@ from ..adapters.io.writer_ast_merge import WriterASTMergeAdapter
 from ..adapters.llm.router import LLMRouter
 from ..adapters.parsing.codebase_parser import CodebaseParser
 from ..adapters.refine.main_adapter import RefineAdapter
+from ..adapters.telemetry.cost_manager import CostManager
 from ..adapters.telemetry.noop_adapter import NoOpTelemetryAdapter
 from ..application.analyze_usecase import AnalyzeUseCase
 from ..application.coverage_usecase import CoverageUseCase
@@ -53,9 +54,18 @@ def create_dependency_container(config: TestCraftConfig) -> dict[str, Any]:
 
             # Telemetry adapter (using noop for now)
             container["telemetry_adapter"] = NoOpTelemetryAdapter()
+            
+            # Cost adapter - now using real implementation
+            container["cost_adapter"] = CostManager(
+                config=config.model_dump().get("cost", {}),
+                telemetry=container["telemetry_adapter"]
+            )
 
-            # LLM adapter
-            container["llm_adapter"] = LLMRouter(config.llm.model_dump())
+            # LLM adapter with cost tracking
+            container["llm_adapter"] = LLMRouter(
+                config.llm.model_dump(), 
+                cost_port=container["cost_adapter"]
+            )
 
             # Writer adapter
             container["writer_adapter"] = WriterASTMergeAdapter()
@@ -71,9 +81,6 @@ def create_dependency_container(config: TestCraftConfig) -> dict[str, Any]:
 
             # Refine adapter
             container["refine_adapter"] = RefineAdapter(config.generation.refine)
-
-            # Cost adapter - optional
-            container["cost_adapter"] = None  # Could be implemented later
 
         except Exception as e:
             raise DependencyError(f"Failed to create adapters: {e}")
