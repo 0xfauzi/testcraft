@@ -358,7 +358,7 @@ class RichCliComponents:
         Returns:
             Rich Tree structure
         """
-        tree = Tree("📋 Analysis Results", style="header")
+        tree = Tree("📋 Analysis Results", style="bold bright_magenta underline")
 
         files_to_process = analysis_data.get("files_to_process", [])
         reasons = analysis_data.get("reasons", {})
