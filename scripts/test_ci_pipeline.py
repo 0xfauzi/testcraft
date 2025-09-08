@@ -38,7 +38,6 @@ class LocalCITester:
         checks = [
             ("Lint Check (ruff)", self._run_ruff_check),
             ("Format Check (ruff)", self._run_format_check),
-            ("Format Check (black)", self._run_black_check),
             ("Type Check (mypy)", self._run_mypy_check),
             ("Test Suite (pytest)", self._run_pytest),
             ("Documentation Check", self._run_doc_check),
@@ -118,10 +117,6 @@ class LocalCITester:
     def _run_format_check(self) -> tuple[bool, dict]:
         """Run ruff format check."""
         return self._run_command(["uv", "run", "ruff", "format", "--check", "."])
-
-    def _run_black_check(self) -> tuple[bool, dict]:
-        """Run black format check."""
-        return self._run_command(["uv", "run", "black", "--check", "--diff", "."])
 
     def _run_mypy_check(self) -> tuple[bool, dict]:
         """Run mypy type checking."""
@@ -227,13 +222,8 @@ class LocalCITester:
                 "🔧 Fix linting issues by running: uv run ruff check . --fix"
             )
 
-        if (
-            "Format Check (ruff)" in failed_checks
-            or "Format Check (black)" in failed_checks
-        ):
-            recommendations.append(
-                "🎨 Fix formatting by running: uv run black . && uv run ruff format ."
-            )
+        if "Format Check (ruff)" in failed_checks:
+            recommendations.append("🎨 Fix formatting by running: uv run ruff format .")
 
         if "Type Check (mypy)" in failed_checks:
             recommendations.append("🔍 Fix type issues shown in mypy output above")
@@ -269,7 +259,6 @@ class LocalCITester:
         check_map = {
             "lint": self._run_ruff_check,
             "format": self._run_format_check,
-            "black": self._run_black_check,
             "type": self._run_mypy_check,
             "test": self._run_pytest,
             "docs": self._run_doc_check,
@@ -314,7 +303,6 @@ def main():
         choices=[
             "lint",
             "format",
-            "black",
             "type",
             "test",
             "docs",
@@ -334,7 +322,6 @@ def main():
         checks = [
             "lint",
             "format",
-            "black",
             "type",
             "test",
             "docs",
