@@ -29,6 +29,9 @@ class SafetyPolicies:
 
     # Allowed directories for writing (relative to project root)
     ALLOWED_DIRECTORIES = {"tests", "test"}
+    
+    # System files that are allowed in project root
+    ALLOWED_SYSTEM_FILES = {".testcraft_state.json", ".testcraft.toml"}
 
     # Dangerous patterns that should not be written to files
     DANGEROUS_PATTERNS = {
@@ -83,15 +86,22 @@ class SafetyPolicies:
         if ".." in file_path.parts:
             raise SafetyError(f"Path traversal not allowed: {file_path}")
 
-        # Check for hidden files/directories
+        # Check for hidden files/directories (allow system files in project root)
         if any(part.startswith(".") for part in file_path.parts):
-            raise SafetyError(f"Hidden files/directories not allowed: {file_path}")
+            # Allow system files in project root
+            filename = file_path.name
+            if filename not in SafetyPolicies.ALLOWED_SYSTEM_FILES:
+                raise SafetyError(f"Hidden files/directories not allowed: {file_path}")
 
     @staticmethod
     def _validate_relative_path(relative_path: Path) -> None:
         """Validate that a relative path is within allowed directories."""
         if not relative_path.parts:
             raise SafetyError("Empty path not allowed")
+
+        # Check if it's an allowed system file in project root
+        if len(relative_path.parts) == 1 and str(relative_path) in SafetyPolicies.ALLOWED_SYSTEM_FILES:
+            return
 
         # Check if the first part of the path is in allowed directories
         first_dir = relative_path.parts[0]

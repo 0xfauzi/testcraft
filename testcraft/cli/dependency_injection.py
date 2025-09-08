@@ -2,16 +2,16 @@
 
 from typing import Any
 
-from ..adapters.context.main_adapter import ContextAdapter
+from ..adapters.context.main_adapter import TestcraftContextAdapter
 
 # Import adapters
 from ..adapters.io.file_discovery import FileDiscoveryService
-from ..adapters.io.state_json import JSONStateAdapter
-from ..adapters.io.writer_ast_merge import ASTMergeWriterAdapter
+from ..adapters.io.state_json import StateJsonAdapter
+from ..adapters.io.writer_ast_merge import WriterASTMergeAdapter
 from ..adapters.llm.router import LLMRouter
-from ..adapters.parsing.codebase_parser import CodebaseParserAdapter
+from ..adapters.parsing.codebase_parser import CodebaseParser
 from ..adapters.refine.main_adapter import RefineAdapter
-from ..adapters.telemetry.noop_adapter import NoopTelemetryAdapter
+from ..adapters.telemetry.noop_adapter import NoOpTelemetryAdapter
 from ..application.analyze_usecase import AnalyzeUseCase
 from ..application.coverage_usecase import CoverageUseCase
 from ..application.generate_usecase import GenerateUseCase
@@ -49,25 +49,25 @@ def create_dependency_container(config: TestCraftConfig) -> dict[str, Any]:
         # Adapters - using existing implementations or creating placeholders
         try:
             # State adapter
-            container["state_adapter"] = JSONStateAdapter()
+            container["state_adapter"] = StateJsonAdapter()
 
             # Telemetry adapter (using noop for now)
-            container["telemetry_adapter"] = NoopTelemetryAdapter()
+            container["telemetry_adapter"] = NoOpTelemetryAdapter()
 
             # LLM adapter
-            container["llm_adapter"] = LLMRouter(config.llm)
+            container["llm_adapter"] = LLMRouter(config.llm.model_dump())
 
             # Writer adapter
-            container["writer_adapter"] = ASTMergeWriterAdapter()
+            container["writer_adapter"] = WriterASTMergeAdapter()
 
             # Coverage adapter - placeholder for now
             container["coverage_adapter"] = _create_coverage_adapter(config)
 
             # Context adapter
-            container["context_adapter"] = ContextAdapter(config.context)
+            container["context_adapter"] = TestcraftContextAdapter()
 
             # Parser adapter
-            container["parser_adapter"] = CodebaseParserAdapter()
+            container["parser_adapter"] = CodebaseParser()
 
             # Refine adapter
             container["refine_adapter"] = RefineAdapter(config.generation.refine)

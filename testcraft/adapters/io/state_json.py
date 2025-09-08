@@ -396,7 +396,7 @@ class StateJsonAdapter:
                 "persistence_metadata": persistence_metadata,
             }
 
-        except (OSError, SafetyError, json.JSONEncodeError) as e:
+        except (OSError, SafetyError, json.JSONDecodeError) as e:
             raise StateJsonError(f"Failed to persist state: {e}") from e
 
     def load_state(self, state_key: str | None = None, **kwargs: Any) -> dict[str, Any]:
