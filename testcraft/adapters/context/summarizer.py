@@ -12,7 +12,7 @@ from __future__ import annotations
 import ast
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Optional, Tuple
+from typing import Any
 
 
 def _truncate(text: str, max_chars: int) -> str:
@@ -23,8 +23,8 @@ def _truncate(text: str, max_chars: int) -> str:
 
 @dataclass
 class SignatureSummary:
-    classes: List[str]
-    functions: List[str]
+    classes: list[str]
+    functions: list[str]
 
 
 class ContextSummarizer:
@@ -32,10 +32,10 @@ class ContextSummarizer:
         self,
         path: Path,
         *,
-        content: Optional[str] = None,
+        content: str | None = None,
         summary_type: str = "comprehensive",
         max_chars: int = 2000,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         if content is None:
             if not path.exists():
                 return {
@@ -50,7 +50,7 @@ class ContextSummarizer:
         imports = self._extract_imports(content)
         sigs = self._extract_signatures(content)
 
-        summary_lines: List[str] = []
+        summary_lines: list[str] = []
         summary_lines.append(f"File: {path.name}")
         if imports:
             summary_lines.append("Imports: " + ", ".join(sorted(set(imports))[:10]))
@@ -68,13 +68,20 @@ class ContextSummarizer:
         }
 
     def summarize_directory_tree(
-        self, root: Path, *, max_depth: int = 3, max_breadth: int = 10, max_chars: int = 4000
+        self,
+        root: Path,
+        *,
+        max_depth: int = 3,
+        max_breadth: int = 10,
+        max_chars: int = 4000,
     ) -> str:
-        def walk(dir_path: Path, depth: int) -> List[str]:
+        def walk(dir_path: Path, depth: int) -> list[str]:
             if depth > max_depth:
                 return []
-            entries = sorted([p for p in dir_path.iterdir() if not p.name.startswith(".")])[:max_breadth]
-            lines: List[str] = []
+            entries = sorted(
+                [p for p in dir_path.iterdir() if not p.name.startswith(".")]
+            )[:max_breadth]
+            lines: list[str] = []
             for entry in entries:
                 indent = "  " * (depth - 1)
                 prefix = "- "
@@ -89,14 +96,14 @@ class ContextSummarizer:
         tree.extend(walk(root, 1))
         return _truncate("\n".join(tree), max_chars)
 
-    def _extract_imports(self, content: str) -> List[str]:
+    def _extract_imports(self, content: str) -> list[str]:
         try:
-            imports: List[str] = []
+            imports: list[str] = []
             tree = ast.parse(content)
             for node in ast.walk(tree):
                 if isinstance(node, ast.Import):
                     for n in node.names:
-                        imports.append((n.name.split(".")[0]))
+                        imports.append(n.name.split(".")[0])
                 elif isinstance(node, ast.ImportFrom) and node.module:
                     imports.append(node.module.split(".")[0])
             return imports
@@ -104,8 +111,8 @@ class ContextSummarizer:
             return []
 
     def _extract_signatures(self, content: str) -> SignatureSummary:
-        classes: List[str] = []
-        functions: List[str] = []
+        classes: list[str] = []
+        functions: list[str] = []
         try:
             tree = ast.parse(content)
             for node in tree.body:
@@ -116,5 +123,3 @@ class ContextSummarizer:
         except Exception:
             pass
         return SignatureSummary(classes=classes, functions=functions)
-
-

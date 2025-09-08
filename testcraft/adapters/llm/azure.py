@@ -3,13 +3,13 @@
 from __future__ import annotations
 
 import logging
-from typing import Any, Dict, Optional
+from typing import Any
 
+import openai
 from openai import AzureOpenAI
 from openai.types.chat import ChatCompletion
-import openai
 
-from ...config.credentials import CredentialManager, CredentialError
+from ...config.credentials import CredentialError, CredentialManager
 from ...ports.llm_port import LLMPort
 from .common import parse_json_response, with_retries
 
@@ -18,6 +18,7 @@ logger = logging.getLogger(__name__)
 
 class AzureOpenAIError(Exception):
     """Azure OpenAI adapter specific errors."""
+
     pass
 
 
@@ -42,11 +43,11 @@ class AzureOpenAIAdapter(LLMPort):
         max_tokens: int = 4000,
         temperature: float = 0.1,
         max_retries: int = 3,
-        credential_manager: Optional[CredentialManager] = None,
+        credential_manager: CredentialManager | None = None,
         **kwargs: Any,
     ):
         """Initialize Azure OpenAI adapter.
-        
+
         Args:
             deployment: Azure OpenAI deployment name
             api_version: Azure OpenAI API version
@@ -63,36 +64,44 @@ class AzureOpenAIAdapter(LLMPort):
         self.max_tokens = max_tokens
         self.temperature = temperature
         self.max_retries = max_retries
-        
+
         # Initialize credential manager
         self.credential_manager = credential_manager or CredentialManager()
-        
+
         # Initialize Azure OpenAI client
-        self._client: Optional[AzureOpenAI] = None
+        self._client: AzureOpenAI | None = None
         self._initialize_client(**kwargs)
 
     def _initialize_client(self, **kwargs: Any) -> None:
         """Initialize the Azure OpenAI client with credentials."""
         try:
-            credentials = self.credential_manager.get_provider_credentials('azure-openai')
-            
+            credentials = self.credential_manager.get_provider_credentials(
+                "azure-openai"
+            )
+
             client_kwargs = {
-                'api_key': credentials['api_key'],
-                'azure_endpoint': credentials['azure_endpoint'],
-                'api_version': self.api_version,
-                'timeout': self.timeout,
-                'max_retries': self.max_retries,
-                **kwargs
+                "api_key": credentials["api_key"],
+                "azure_endpoint": credentials["azure_endpoint"],
+                "api_version": self.api_version,
+                "timeout": self.timeout,
+                "max_retries": self.max_retries,
+                **kwargs,
             }
-            
+
             self._client = AzureOpenAI(**client_kwargs)
-            
-            logger.info(f"Azure OpenAI client initialized with deployment: {self.deployment}")
-            
+
+            logger.info(
+                f"Azure OpenAI client initialized with deployment: {self.deployment}"
+            )
+
         except CredentialError as e:
-            raise AzureOpenAIError(f"Failed to initialize Azure OpenAI client: {e}") from e
+            raise AzureOpenAIError(
+                f"Failed to initialize Azure OpenAI client: {e}"
+            ) from e
         except Exception as e:
-            raise AzureOpenAIError(f"Unexpected error initializing Azure OpenAI client: {e}") from e
+            raise AzureOpenAIError(
+                f"Unexpected error initializing Azure OpenAI client: {e}"
+            ) from e
 
     @property
     def client(self) -> AzureOpenAI:
@@ -104,12 +113,12 @@ class AzureOpenAIAdapter(LLMPort):
     def generate_tests(
         self,
         code_content: str,
-        context: Optional[str] = None,
+        context: str | None = None,
         test_framework: str = "pytest",
         **kwargs: Any,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Generate test cases for the provided code content."""
-        
+
         # Construct the prompt for test generation
         system_prompt = f"""You are an expert Python test generator. Generate comprehensive {test_framework} tests for the provided code.
 
@@ -129,24 +138,22 @@ Requirements:
 Generate clean, production-ready test code."""
 
         user_prompt = f"Code to test:\n```python\n{code_content}\n```"
-        
+
         if context:
             user_prompt += f"\n\nAdditional context:\n{context}"
 
-        def call() -> Dict[str, Any]:
+        def call() -> dict[str, Any]:
             return self._chat_completion(
-                system_prompt=system_prompt,
-                user_prompt=user_prompt,
-                **kwargs
+                system_prompt=system_prompt, user_prompt=user_prompt, **kwargs
             )
 
         try:
             result = with_retries(call, retries=self.max_retries)
             content = result.get("content", "")
-            
+
             # Parse JSON response
             parsed = parse_json_response(content)
-            
+
             if parsed.success and parsed.data:
                 return {
                     "tests": parsed.data.get("tests", content),
@@ -157,8 +164,8 @@ Generate clean, production-ready test code."""
                         "api_version": self.api_version,
                         "parsed": True,
                         "reasoning": parsed.data.get("reasoning", ""),
-                        **result.get("usage", {})
-                    }
+                        **result.get("usage", {}),
+                    },
                 }
             else:
                 # Fallback if JSON parsing fails
@@ -172,19 +179,19 @@ Generate clean, production-ready test code."""
                         "api_version": self.api_version,
                         "parsed": False,
                         "parse_error": parsed.error,
-                        **result.get("usage", {})
-                    }
+                        **result.get("usage", {}),
+                    },
                 }
-                
+
         except Exception as e:
             logger.error(f"Azure OpenAI test generation failed: {e}")
             raise AzureOpenAIError(f"Test generation failed: {e}") from e
 
     def analyze_code(
         self, code_content: str, analysis_type: str = "comprehensive", **kwargs: Any
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Analyze code for testability, complexity, and potential issues."""
-        
+
         system_prompt = f"""You are an expert Python code analyst. Perform a {analysis_type} analysis of the provided code.
 
 Analyze the code for:
@@ -209,20 +216,18 @@ Return results as valid JSON with this structure:
 
         user_prompt = f"Code to analyze:\n```python\n{code_content}\n```"
 
-        def call() -> Dict[str, Any]:
+        def call() -> dict[str, Any]:
             return self._chat_completion(
-                system_prompt=system_prompt,
-                user_prompt=user_prompt,
-                **kwargs
+                system_prompt=system_prompt, user_prompt=user_prompt, **kwargs
             )
 
         try:
             result = with_retries(call, retries=self.max_retries)
             content = result.get("content", "")
-            
+
             # Parse JSON response
             parsed = parse_json_response(content)
-            
+
             if parsed.success and parsed.data:
                 return {
                     "testability_score": parsed.data.get("testability_score", 5.0),
@@ -235,8 +240,8 @@ Return results as valid JSON with this structure:
                         "analysis_type": analysis_type,
                         "parsed": True,
                         "summary": parsed.data.get("analysis_summary", ""),
-                        **result.get("usage", {})
-                    }
+                        **result.get("usage", {}),
+                    },
                 }
             else:
                 # Fallback if JSON parsing fails
@@ -252,23 +257,23 @@ Return results as valid JSON with this structure:
                         "parsed": False,
                         "raw_content": content,
                         "parse_error": parsed.error,
-                        **result.get("usage", {})
-                    }
+                        **result.get("usage", {}),
+                    },
                 }
-                
+
         except Exception as e:
             logger.error(f"Azure OpenAI code analysis failed: {e}")
             raise AzureOpenAIError(f"Code analysis failed: {e}") from e
 
     def refine_content(
         self, original_content: str, refinement_instructions: str, **kwargs: Any
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Refine existing content based on specific instructions."""
-        
+
         system_prompt = """You are an expert Python developer. Refine the provided content according to the given instructions.
 
 Focus on:
-- Improving code quality and readability  
+- Improving code quality and readability
 - Fixing bugs or issues
 - Enhancing test coverage
 - Following best practices
@@ -290,23 +295,23 @@ Return results as valid JSON:
 Refinement instructions:
 {refinement_instructions}"""
 
-        def call() -> Dict[str, Any]:
+        def call() -> dict[str, Any]:
             return self._chat_completion(
-                system_prompt=system_prompt,
-                user_prompt=user_prompt,
-                **kwargs
+                system_prompt=system_prompt, user_prompt=user_prompt, **kwargs
             )
 
         try:
             result = with_retries(call, retries=self.max_retries)
             content = result.get("content", "")
-            
+
             # Parse JSON response
             parsed = parse_json_response(content)
-            
+
             if parsed.success and parsed.data:
                 return {
-                    "refined_content": parsed.data.get("refined_content", original_content),
+                    "refined_content": parsed.data.get(
+                        "refined_content", original_content
+                    ),
                     "changes_made": parsed.data.get("changes_made", "No changes made"),
                     "confidence": parsed.data.get("confidence", 0.5),
                     "metadata": {
@@ -314,8 +319,8 @@ Refinement instructions:
                         "api_version": self.api_version,
                         "parsed": True,
                         "improvement_areas": parsed.data.get("improvement_areas", []),
-                        **result.get("usage", {})
-                    }
+                        **result.get("usage", {}),
+                    },
                 }
             else:
                 # Fallback if JSON parsing fails
@@ -329,60 +334,61 @@ Refinement instructions:
                         "parsed": False,
                         "raw_content": content,
                         "parse_error": parsed.error,
-                        **result.get("usage", {})
-                    }
+                        **result.get("usage", {}),
+                    },
                 }
-                
+
         except Exception as e:
             logger.error(f"Azure OpenAI content refinement failed: {e}")
             raise AzureOpenAIError(f"Content refinement failed: {e}") from e
 
     def _chat_completion(
-        self, 
-        system_prompt: str, 
-        user_prompt: str, 
-        **kwargs: Any
-    ) -> Dict[str, Any]:
+        self, system_prompt: str, user_prompt: str, **kwargs: Any
+    ) -> dict[str, Any]:
         """Make a chat completion request to Azure OpenAI."""
-        
+
         messages = [
             {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_prompt}
+            {"role": "user", "content": user_prompt},
         ]
-        
+
         request_kwargs = {
             "model": self.deployment,  # Use deployment name as model for Azure
             "messages": messages,
             "max_tokens": self.max_tokens,
             "temperature": self.temperature,
-            **kwargs
+            **kwargs,
         }
-        
+
         try:
-            response: ChatCompletion = self.client.chat.completions.create(**request_kwargs)
-            
+            response: ChatCompletion = self.client.chat.completions.create(
+                **request_kwargs
+            )
+
             # Extract content and usage information
             content = ""
             if response.choices and len(response.choices) > 0:
                 message = response.choices[0].message
                 if message.content:
                     content = message.content
-            
+
             usage_info = {}
             if response.usage:
                 usage_info = {
                     "prompt_tokens": response.usage.prompt_tokens,
                     "completion_tokens": response.usage.completion_tokens,
-                    "total_tokens": response.usage.total_tokens
+                    "total_tokens": response.usage.total_tokens,
                 }
-            
+
             return {
                 "content": content,
                 "usage": usage_info,
                 "deployment": response.model,  # Azure returns deployment name
-                "finish_reason": response.choices[0].finish_reason if response.choices else None
+                "finish_reason": (
+                    response.choices[0].finish_reason if response.choices else None
+                ),
             }
-            
+
         except openai.APIError as e:
             logger.error(f"Azure OpenAI API error: {e}")
             raise AzureOpenAIError(f"Azure OpenAI API error: {e}") from e

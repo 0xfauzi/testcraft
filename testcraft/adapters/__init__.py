@@ -5,17 +5,11 @@ This module contains all adapter implementations that provide concrete
 implementations of the port interfaces defined in the ports module.
 """
 
-from . import coverage
-from . import context
-from . import io
-from . import llm
-from . import parsing
-from . import refine
-from . import telemetry
+from . import context, coverage, io, llm, parsing, refine, telemetry
 
 __all__ = [
     "coverage",
-    "context", 
+    "context",
     "io",
     "llm",
     "parsing",

@@ -41,7 +41,7 @@ if returncode == 0:
 
 ## Safety Guarantees
 
-This module guarantees that subprocess execution will not leave orphaned 
+This module guarantees that subprocess execution will not leave orphaned
 processes even in case of:
 - Timeouts
 - Exceptions during execution
@@ -56,7 +56,6 @@ import contextlib
 import logging
 import subprocess
 from pathlib import Path
-from typing import List, Optional, Tuple, Union
 
 # Module-level logger
 logger = logging.getLogger(__name__)
@@ -64,49 +63,52 @@ logger = logging.getLogger(__name__)
 
 class SubprocessError(Exception):
     """Base exception for subprocess-related errors."""
+
     pass
 
 
 class SubprocessTimeoutError(SubprocessError):
     """Raised when a subprocess operation times out."""
+
     pass
 
 
 class SubprocessExecutionError(SubprocessError):
     """Raised when a subprocess returns a non-zero exit code."""
+
     pass
 
 
 @contextlib.contextmanager
 def run_subprocess_safe(
-    cmd: List[str], 
+    cmd: list[str],
     timeout: int = 30,
-    cwd: Optional[Union[str, Path]] = None,
-    env: Optional[dict] = None,
-    input_text: Optional[str] = None
+    cwd: str | Path | None = None,
+    env: dict | None = None,
+    input_text: str | None = None,
 ):
     """
     Run a subprocess command with robust cleanup on timeout or interruption.
-    
+
     This context manager ensures proper process cleanup even if the command
     times out or the parent process is interrupted. It creates new process
     groups for better isolation and handles zombie processes properly.
-    
+
     Args:
         cmd: Command and arguments to execute
         timeout: Maximum time to wait for command completion (seconds)
         cwd: Working directory for the subprocess
         env: Environment variables for the subprocess
         input_text: Text to send to subprocess stdin
-        
+
     Yields:
         tuple: (stdout, stderr) from the command
-        
+
     Raises:
         SubprocessTimeoutError: If command exceeds timeout
         SubprocessExecutionError: If command returns non-zero exit code
         OSError: If command cannot be executed
-        
+
     Example:
         ```python
         try:
@@ -126,9 +128,9 @@ def run_subprocess_safe(
         text=True,
         cwd=cwd,
         env=env,
-        start_new_session=True  # Create new process group for better isolation
+        start_new_session=True,  # Create new process group for better isolation
     )
-    
+
     try:
         stdout, stderr = proc.communicate(input=input_text, timeout=timeout)
         if proc.returncode != 0:
@@ -137,14 +139,14 @@ def run_subprocess_safe(
                 f"Stdout: {stdout}. Stderr: {stderr}"
             )
         yield stdout, stderr
-        
+
     except subprocess.TimeoutExpired:
         # Kill the process and clean up zombie
         logger.warning(f"Command {cmd} timed out after {timeout} seconds")
         proc.kill()
         proc.communicate()  # Clean up zombie process
         raise SubprocessTimeoutError(f"Command {cmd} timed out after {timeout} seconds")
-        
+
     except Exception:
         # Ensure cleanup on any other exception
         if proc.poll() is None:  # Process still running
@@ -155,7 +157,7 @@ def run_subprocess_safe(
                 proc.kill()
                 proc.wait()
         raise
-        
+
     finally:
         # Ensure process is terminated if still running
         if proc.poll() is None:  # Process still running
@@ -170,19 +172,19 @@ def run_subprocess_safe(
 
 
 def run_subprocess_simple(
-    cmd: List[str],
+    cmd: list[str],
     timeout: int = 30,
-    cwd: Optional[Union[str, Path]] = None,
-    env: Optional[dict] = None,
-    input_text: Optional[str] = None,
-    raise_on_error: bool = True
-) -> Tuple[Optional[str], Optional[str], int]:
+    cwd: str | Path | None = None,
+    env: dict | None = None,
+    input_text: str | None = None,
+    raise_on_error: bool = True,
+) -> tuple[str | None, str | None, int]:
     """
     Simple wrapper for running subprocess commands safely.
-    
+
     This function provides a simple interface to run_subprocess_safe with
     optional error handling and return code access.
-    
+
     Args:
         cmd: Command and arguments to execute
         timeout: Maximum time to wait for command completion (seconds)
@@ -190,10 +192,10 @@ def run_subprocess_simple(
         env: Environment variables for the subprocess
         input_text: Text to send to subprocess stdin
         raise_on_error: Whether to raise exception on non-zero exit codes
-        
+
     Returns:
         tuple: (stdout, stderr, return_code)
-        
+
     Example:
         ```python
         stdout, stderr, code = run_subprocess_simple(['echo', 'hello'])
@@ -204,19 +206,20 @@ def run_subprocess_simple(
         ```
     """
     try:
-        with run_subprocess_safe(cmd, timeout, cwd, env, input_text) as (stdout, stderr):
+        with run_subprocess_safe(cmd, timeout, cwd, env, input_text) as (
+            stdout,
+            stderr,
+        ):
             return stdout, stderr, 0
-            
+
     except SubprocessExecutionError as e:
         if raise_on_error:
             raise
         # Extract return code from the exception message if possible
         # This is a bit hacky but works with our error format
-        return None, str(e), getattr(e, 'returncode', 1)
-        
+        return None, str(e), getattr(e, "returncode", 1)
+
     except (SubprocessTimeoutError, OSError) as e:
         if raise_on_error:
             raise
         return None, str(e), -1
-
-

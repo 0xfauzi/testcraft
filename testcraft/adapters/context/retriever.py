@@ -10,12 +10,12 @@ from __future__ import annotations
 
 import math
 import re
-from typing import Any, Dict, Iterable, List, Tuple
+from typing import Any
 
-from .indexer import InMemoryHybridIndexer, IndexedChunk
+from .indexer import IndexedChunk, InMemoryHybridIndexer
 
 
-def _tokenize(text: str) -> List[str]:
+def _tokenize(text: str) -> list[str]:
     return re.findall(r"[A-Za-z_][A-Za-z0-9_]*", text.lower())
 
 
@@ -23,12 +23,19 @@ class SimpleContextRetriever:
     def __init__(self, indexer: InMemoryHybridIndexer) -> None:
         self._indexer = indexer
 
-    def retrieve(self, query: str, *, limit: int = 10, context_type: str = "general", **kwargs: Any) -> Dict[str, Any]:
+    def retrieve(
+        self,
+        query: str,
+        *,
+        limit: int = 10,
+        context_type: str = "general",
+        **kwargs: Any,
+    ) -> dict[str, Any]:
         q_tokens = _tokenize(query)
-        scored: List[Tuple[float, IndexedChunk]] = []
+        scored: list[tuple[float, IndexedChunk]] = []
 
         # Precompute doc frequencies for a tiny BM25-ish scoring
-        df: Dict[str, int] = {}
+        df: dict[str, int] = {}
         for doc in self._indexer.iter_documents():
             seen_tokens = set()
             for chunk in doc.chunks:
@@ -79,5 +86,3 @@ class SimpleContextRetriever:
             "total_found": len(top),
             "query_metadata": {"context_type": context_type, "query": query},
         }
-
-

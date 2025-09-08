@@ -1,10 +1,8 @@
 """Prompt package exports."""
 
-from .registry import PromptRegistry, PromptError
+from .registry import PromptError, PromptRegistry
 
 __all__ = [
     "PromptRegistry",
     "PromptError",
 ]
-
-

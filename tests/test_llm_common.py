@@ -1,9 +1,9 @@
 from testcraft.adapters.llm import (
-    strip_code_fences,
     balance_braces,
-    try_parse_json,
-    parse_json_response,
     normalize_output,
+    parse_json_response,
+    strip_code_fences,
+    try_parse_json,
 )
 
 
@@ -33,12 +33,10 @@ def test_parse_json_response_variants():
     partial = parse_json_response('foo {"z": 9')
     assert partial.success and partial.data == {"z": 9}
 
-    bad = parse_json_response('not json at all')
+    bad = parse_json_response("not json at all")
     assert not bad.success and bad.error
 
 
 def test_normalize_output_quotes():
-    s = normalize_output('\u201cHello\u201d')
+    s = normalize_output("\u201cHello\u201d")
     assert s == '"Hello"'
-
-

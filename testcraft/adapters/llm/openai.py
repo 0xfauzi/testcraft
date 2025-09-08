@@ -3,13 +3,13 @@
 from __future__ import annotations
 
 import logging
-from typing import Any, Dict, Optional
+from typing import Any, Literal
 
 import openai
 from openai import OpenAI
 from openai.types.chat import ChatCompletion
 
-from ...config.credentials import CredentialManager, CredentialError
+from ...config.credentials import CredentialError, CredentialManager
 from ...ports.llm_port import LLMPort
 from ...prompts.registry import PromptRegistry
 from .common import parse_json_response, with_retries
@@ -20,6 +20,7 @@ logger = logging.getLogger(__name__)
 
 class OpenAIError(Exception):
     """OpenAI adapter specific errors."""
+
     pass
 
 
@@ -39,16 +40,16 @@ class OpenAIAdapter(LLMPort):
         self,
         model: str = "o4-mini",
         timeout: float = 60.0,
-        max_tokens: Optional[int] = None,  # Will be calculated automatically
+        max_tokens: int | None = None,  # Will be calculated automatically
         temperature: float = 0.1,
         max_retries: int = 3,
-        base_url: Optional[str] = None,
-        credential_manager: Optional[CredentialManager] = None,
-        prompt_registry: Optional[PromptRegistry] = None,
+        base_url: str | None = None,
+        credential_manager: CredentialManager | None = None,
+        prompt_registry: PromptRegistry | None = None,
         **kwargs: Any,
     ):
         """Initialize OpenAI adapter.
-        
+
         Args:
             model: OpenAI model name (e.g., "o4-mini", "gpt-5", "gpt-4.1")
             timeout: Request timeout in seconds
@@ -64,49 +65,53 @@ class OpenAIAdapter(LLMPort):
         self.timeout = timeout
         self.temperature = temperature
         self.max_retries = max_retries
-        
+
         # Initialize credential manager
         self.credential_manager = credential_manager or CredentialManager()
-        
+
         # Initialize prompt registry
         self.prompt_registry = prompt_registry or PromptRegistry()
-        
+
         # Initialize token calculator
-        self.token_calculator = TokenCalculator(provider='openai', model=model)
-        
+        self.token_calculator = TokenCalculator(provider="openai", model=model)
+
         # Set max_tokens (use provided value or calculate automatically)
-        self.max_tokens = max_tokens or self.token_calculator.calculate_max_tokens('test_generation')
-        
+        self.max_tokens = max_tokens or self.token_calculator.calculate_max_tokens(
+            "test_generation"
+        )
+
         # Initialize OpenAI client
-        self._client: Optional[OpenAI] = None
+        self._client: OpenAI | None = None
         self._initialize_client(base_url, **kwargs)
 
-    def _initialize_client(self, base_url: Optional[str] = None, **kwargs: Any) -> None:
+    def _initialize_client(self, base_url: str | None = None, **kwargs: Any) -> None:
         """Initialize the OpenAI client with credentials."""
         try:
-            credentials = self.credential_manager.get_provider_credentials('openai')
-            
+            credentials = self.credential_manager.get_provider_credentials("openai")
+
             client_kwargs = {
-                'api_key': credentials['api_key'],
-                'timeout': self.timeout,
-                'max_retries': self.max_retries,
-                **kwargs
+                "api_key": credentials["api_key"],
+                "timeout": self.timeout,
+                "max_retries": self.max_retries,
+                **kwargs,
             }
-            
+
             # Use custom base URL if provided
             if base_url:
-                client_kwargs['base_url'] = base_url
-            elif credentials.get('base_url'):
-                client_kwargs['base_url'] = credentials['base_url']
-            
+                client_kwargs["base_url"] = base_url
+            elif credentials.get("base_url"):
+                client_kwargs["base_url"] = credentials["base_url"]
+
             self._client = OpenAI(**client_kwargs)
-            
+
             logger.info(f"OpenAI client initialized with model: {self.model}")
-            
+
         except CredentialError as e:
             raise OpenAIError(f"Failed to initialize OpenAI client: {e}") from e
         except Exception as e:
-            raise OpenAIError(f"Unexpected error initializing OpenAI client: {e}") from e
+            raise OpenAIError(
+                f"Unexpected error initializing OpenAI client: {e}"
+            ) from e
 
     @property
     def client(self) -> OpenAI:
@@ -118,59 +123,58 @@ class OpenAIAdapter(LLMPort):
     def generate_tests(
         self,
         code_content: str,
-        context: Optional[str] = None,
+        context: str | None = None,
         test_framework: str = "pytest",
         **kwargs: Any,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Generate test cases for the provided code content."""
-        
+
         # Calculate optimal max_tokens and thinking_tokens for this specific request
-        input_length = self.token_calculator.estimate_input_tokens(code_content + (context or ""))
-        max_tokens = self.token_calculator.calculate_max_tokens(
-            use_case='test_generation',
-            input_length=input_length
+        input_length = self.token_calculator.estimate_input_tokens(
+            code_content + (context or "")
         )
-        
+        max_tokens = self.token_calculator.calculate_max_tokens(
+            use_case="test_generation", input_length=input_length
+        )
+
         # Calculate thinking tokens only for models that support configurable thinking
         # (OpenAI reasoning models like o4-mini handle reasoning internally)
         thinking_tokens = None
         if self.token_calculator.supports_thinking_mode():
             complexity_level = self._estimate_complexity(code_content)
             thinking_tokens = self.token_calculator.calculate_thinking_tokens(
-                use_case='test_generation',
-                complexity_level=complexity_level
+                use_case="test_generation", complexity_level=complexity_level
             )
-        
+
         # Get prompts from registry
         system_prompt = self.prompt_registry.get_system_prompt(
-            prompt_type="llm_test_generation",
-            test_framework=test_framework
+            prompt_type="llm_test_generation", test_framework=test_framework
         )
-        
+
         additional_context = {"context": context} if context else {}
         user_prompt = self.prompt_registry.get_user_prompt(
             prompt_type="llm_test_generation",
             code_content=code_content,
             additional_context=additional_context,
-            test_framework=test_framework
+            test_framework=test_framework,
         )
 
-        def call() -> Dict[str, Any]:
+        def call() -> dict[str, Any]:
             return self._chat_completion(
                 system_prompt=system_prompt,
                 user_prompt=user_prompt,
                 max_tokens=max_tokens,
                 thinking_tokens=thinking_tokens,
-                **kwargs
+                **kwargs,
             )
 
         try:
             result = with_retries(call, retries=self.max_retries)
             content = result.get("content", "")
-            
+
             # Parse JSON response
             parsed = parse_json_response(content)
-            
+
             if parsed.success and parsed.data:
                 return {
                     "tests": parsed.data.get("tests", content),
@@ -180,8 +184,8 @@ class OpenAIAdapter(LLMPort):
                         "model": self.model,
                         "parsed": True,
                         "reasoning": parsed.data.get("reasoning", ""),
-                        **result.get("usage", {})
-                    }
+                        **result.get("usage", {}),
+                    },
                 }
             else:
                 # Fallback if JSON parsing fails
@@ -194,64 +198,61 @@ class OpenAIAdapter(LLMPort):
                         "model": self.model,
                         "parsed": False,
                         "parse_error": parsed.error,
-                        **result.get("usage", {})
-                    }
+                        **result.get("usage", {}),
+                    },
                 }
-                
+
         except Exception as e:
             logger.error(f"OpenAI test generation failed: {e}")
             raise OpenAIError(f"Test generation failed: {e}") from e
 
     def analyze_code(
         self, code_content: str, analysis_type: str = "comprehensive", **kwargs: Any
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Analyze code for testability, complexity, and potential issues."""
-        
+
         # Calculate optimal max_tokens and thinking_tokens for this specific request
         input_length = self.token_calculator.estimate_input_tokens(code_content)
         max_tokens = self.token_calculator.calculate_max_tokens(
-            use_case='code_analysis',
-            input_length=input_length
+            use_case="code_analysis", input_length=input_length
         )
-        
+
         # Calculate thinking tokens only for models that support configurable thinking
         # (OpenAI reasoning models like o4-mini handle reasoning internally)
         thinking_tokens = None
         if self.token_calculator.supports_thinking_mode():
             complexity_level = self._estimate_complexity(code_content)
             thinking_tokens = self.token_calculator.calculate_thinking_tokens(
-                use_case='code_analysis',
-                complexity_level=complexity_level
+                use_case="code_analysis", complexity_level=complexity_level
             )
-        
+
         # Get prompts from registry
         system_prompt = self.prompt_registry.get_system_prompt(
-            prompt_type="llm_code_analysis",
-            analysis_type=analysis_type
+            prompt_type="llm_code_analysis", analysis_type=analysis_type
         )
-        
+
         user_prompt = self.prompt_registry.get_user_prompt(
             prompt_type="llm_code_analysis",
             code_content=code_content,
-            analysis_type=analysis_type
+            analysis_type=analysis_type,
         )
 
-        def call() -> Dict[str, Any]:
+        def call() -> dict[str, Any]:
             return self._chat_completion(
                 system_prompt=system_prompt,
                 user_prompt=user_prompt,
                 max_tokens=max_tokens,
                 thinking_tokens=thinking_tokens,
-                **kwargs
+                **kwargs,
             )
 
         try:
             result = with_retries(call, retries=self.max_retries)
             content = result.get("content", "")
-            
+
             # Parse JSON response
             parsed = parse_json_response(content)
-            
+
             if parsed.success and parsed.data:
                 return {
                     "testability_score": parsed.data.get("testability_score", 5.0),
@@ -263,8 +264,8 @@ class OpenAIAdapter(LLMPort):
                         "analysis_type": analysis_type,
                         "parsed": True,
                         "summary": parsed.data.get("analysis_summary", ""),
-                        **result.get("usage", {})
-                    }
+                        **result.get("usage", {}),
+                    },
                 }
             else:
                 # Fallback if JSON parsing fails
@@ -279,74 +280,76 @@ class OpenAIAdapter(LLMPort):
                         "parsed": False,
                         "raw_content": content,
                         "parse_error": parsed.error,
-                        **result.get("usage", {})
-                    }
+                        **result.get("usage", {}),
+                    },
                 }
-                
+
         except Exception as e:
             logger.error(f"OpenAI code analysis failed: {e}")
             raise OpenAIError(f"Code analysis failed: {e}") from e
 
     def refine_content(
         self, original_content: str, refinement_instructions: str, **kwargs: Any
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Refine existing content based on specific instructions."""
-        
+
         # Calculate optimal max_tokens and thinking_tokens for this specific request
-        input_length = self.token_calculator.estimate_input_tokens(original_content + refinement_instructions)
-        max_tokens = self.token_calculator.calculate_max_tokens(
-            use_case='refinement',
-            input_length=input_length
+        input_length = self.token_calculator.estimate_input_tokens(
+            original_content + refinement_instructions
         )
-        
+        max_tokens = self.token_calculator.calculate_max_tokens(
+            use_case="refinement", input_length=input_length
+        )
+
         # Calculate thinking tokens only for models that support configurable thinking
         # (OpenAI reasoning models like o4-mini handle reasoning internally)
         thinking_tokens = None
         if self.token_calculator.supports_thinking_mode():
             complexity_level = self._estimate_complexity(original_content)
             thinking_tokens = self.token_calculator.calculate_thinking_tokens(
-                use_case='refinement',
-                complexity_level=complexity_level
+                use_case="refinement", complexity_level=complexity_level
             )
-        
+
         # Get prompts from registry
         system_prompt = self.prompt_registry.get_system_prompt(
             prompt_type="llm_content_refinement"
         )
-        
+
         user_prompt = self.prompt_registry.get_user_prompt(
             prompt_type="llm_content_refinement",
             code_content=original_content,
-            refinement_instructions=refinement_instructions
+            refinement_instructions=refinement_instructions,
         )
 
-        def call() -> Dict[str, Any]:
+        def call() -> dict[str, Any]:
             return self._chat_completion(
                 system_prompt=system_prompt,
                 user_prompt=user_prompt,
                 max_tokens=max_tokens,
                 thinking_tokens=thinking_tokens,
-                **kwargs
+                **kwargs,
             )
 
         try:
             result = with_retries(call, retries=self.max_retries)
             content = result.get("content", "")
-            
+
             # Parse JSON response
             parsed = parse_json_response(content)
-            
+
             if parsed.success and parsed.data:
                 return {
-                    "refined_content": parsed.data.get("refined_content", original_content),
+                    "refined_content": parsed.data.get(
+                        "refined_content", original_content
+                    ),
                     "changes_made": parsed.data.get("changes_made", "No changes made"),
                     "confidence": parsed.data.get("confidence", 0.5),
                     "metadata": {
                         "model": self.model,
                         "parsed": True,
                         "improvement_areas": parsed.data.get("improvement_areas", []),
-                        **result.get("usage", {})
-                    }
+                        **result.get("usage", {}),
+                    },
                 }
             else:
                 # Fallback if JSON parsing fails
@@ -359,104 +362,136 @@ class OpenAIAdapter(LLMPort):
                         "parsed": False,
                         "raw_content": content,
                         "parse_error": parsed.error,
-                        **result.get("usage", {})
-                    }
+                        **result.get("usage", {}),
+                    },
                 }
-                
+
         except Exception as e:
             logger.error(f"OpenAI content refinement failed: {e}")
             raise OpenAIError(f"Content refinement failed: {e}") from e
 
-    def _estimate_complexity(self, code_content: str) -> Literal['simple', 'moderate', 'complex']:
+    def _estimate_complexity(
+        self, code_content: str
+    ) -> Literal["simple", "moderate", "complex"]:
         """Estimate code complexity for thinking token calculation.
-        
+
         Args:
             code_content: Code to analyze
-            
+
         Returns:
             Complexity level estimate
         """
-        lines = code_content.split('\n')
-        line_count = len([l for l in lines if l.strip()])
-        
+        lines = code_content.split("\n")
+        line_count = len([line for line in lines if line.strip()])
+
         # Count potential complexity indicators
         complexity_indicators = [
-            'class ', 'def ', 'async ', 'await ', 'try:', 'except:', 'finally:',
-            'with ', 'for ', 'while ', 'if ', 'elif ', 'lambda', 'yield',
-            'import ', 'from ', '@', 'raise ', 'assert '
+            "class ",
+            "def ",
+            "async ",
+            "await ",
+            "try:",
+            "except:",
+            "finally:",
+            "with ",
+            "for ",
+            "while ",
+            "if ",
+            "elif ",
+            "lambda",
+            "yield",
+            "import ",
+            "from ",
+            "@",
+            "raise ",
+            "assert ",
         ]
-        
-        indicator_count = sum(1 for line in lines for indicator in complexity_indicators if indicator in line)
-        
+
+        indicator_count = sum(
+            1
+            for line in lines
+            for indicator in complexity_indicators
+            if indicator in line
+        )
+
         # Simple heuristic based on lines and complexity indicators
         if line_count < 50 and indicator_count < 10:
-            return 'simple'
+            return "simple"
         elif line_count < 200 and indicator_count < 30:
-            return 'moderate' 
+            return "moderate"
         else:
-            return 'complex'
+            return "complex"
 
     def _chat_completion(
-        self, 
-        system_prompt: str, 
+        self,
+        system_prompt: str,
         user_prompt: str,
-        max_tokens: Optional[int] = None,
-        thinking_tokens: Optional[int] = None,
-        **kwargs: Any
-    ) -> Dict[str, Any]:
+        max_tokens: int | None = None,
+        thinking_tokens: int | None = None,
+        **kwargs: Any,
+    ) -> dict[str, Any]:
         """Make a chat completion request to OpenAI."""
-        
+
         messages = [
             {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_prompt}
+            {"role": "user", "content": user_prompt},
         ]
-        
+
         # Use provided max_tokens or fallback to instance default
         tokens_to_use = max_tokens if max_tokens is not None else self.max_tokens
-        
+
         request_kwargs = {
             "model": self.model,
             "messages": messages,
             "max_tokens": tokens_to_use,
             "temperature": self.temperature,
-            **kwargs
+            **kwargs,
         }
-        
+
         # Add thinking tokens only for models that support configurable thinking (not OpenAI)
         # OpenAI reasoning models (like o4-mini) handle reasoning internally without configurable budgets
-        if thinking_tokens is not None and self.token_calculator.supports_thinking_mode():
+        if (
+            thinking_tokens is not None
+            and self.token_calculator.supports_thinking_mode()
+        ):
             # Note: This would be for future non-OpenAI models that support configurable thinking tokens
             # Currently no OpenAI models use this pattern - they use built-in reasoning instead
-            logger.debug(f"Using thinking tokens: {thinking_tokens} for model {self.model}")
+            logger.debug(
+                f"Using thinking tokens: {thinking_tokens} for model {self.model}"
+            )
         elif self.token_calculator.is_reasoning_model():
             # Log that we're using a reasoning model with built-in capabilities
             logger.debug(f"Using reasoning model with built-in reasoning: {self.model}")
-        
+
         try:
-            response: ChatCompletion = self.client.chat.completions.create(**request_kwargs)
-            
+            response: ChatCompletion = self.client.chat.completions.create(
+                **request_kwargs
+            )
+
             # Extract content and usage information
             content = ""
             if response.choices and len(response.choices) > 0:
                 message = response.choices[0].message
                 if message.content:
                     content = message.content
-            
+
             usage_info = {}
             if response.usage:
                 usage_info = {
                     "prompt_tokens": response.usage.prompt_tokens,
                     "completion_tokens": response.usage.completion_tokens,
-                    "total_tokens": response.usage.total_tokens
+                    "total_tokens": response.usage.total_tokens,
                 }
-            
+
             return {
                 "content": content,
                 "usage": usage_info,
                 "model": response.model,
-                "finish_reason": response.choices[0].finish_reason if response.choices else None
+                "finish_reason": (
+                    response.choices[0].finish_reason if response.choices else None
+                ),
             }
-            
+
         except openai.APIError as e:
             logger.error(f"OpenAI API error: {e}")
             raise OpenAIError(f"OpenAI API error: {e}") from e

@@ -1,9 +1,9 @@
 from pathlib import Path
 
 from testcraft.adapters.context import (
+    ContextSummarizer,
     InMemoryHybridIndexer,
     SimpleContextRetriever,
-    ContextSummarizer,
     TestcraftContextAdapter,
 )
 
@@ -32,7 +32,10 @@ class Greeter:
     retriever = SimpleContextRetriever(indexer)
     results = retriever.retrieve("greet function", limit=5)
     assert results["total_found"] >= 1
-    assert any("greet" in (r.get("symbol") or "") for r in results["results"]) or results["results"], results
+    assert (
+        any("greet" in (r.get("symbol") or "") for r in results["results"])
+        or results["results"]
+    ), results
 
 
 def test_summarizer_and_adapter(tmp_path: Path) -> None:
@@ -60,5 +63,3 @@ def add(a: int, b: int) -> int:
     assert ret["total_found"] >= 0
     sum2 = adapter.summarize(src)
     assert "File: mod.py" in sum2["summary"]
-
-

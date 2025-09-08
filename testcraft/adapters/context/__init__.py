@@ -7,9 +7,9 @@ to be lightweight scaffolds that can be evolved as requirements grow.
 """
 
 from .indexer import InMemoryHybridIndexer
+from .main_adapter import TestcraftContextAdapter
 from .retriever import SimpleContextRetriever
 from .summarizer import ContextSummarizer
-from .main_adapter import TestcraftContextAdapter
 
 __all__ = [
     "InMemoryHybridIndexer",
@@ -17,5 +17,3 @@ __all__ = [
     "ContextSummarizer",
     "TestcraftContextAdapter",
 ]
-
-

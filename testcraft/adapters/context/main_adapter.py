@@ -9,13 +9,12 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any
 
 from ...ports.context_port import ContextPort
-from .indexer import InMemoryHybridIndexer, IndexedChunk
+from .indexer import InMemoryHybridIndexer
 from .retriever import SimpleContextRetriever
 from .summarizer import ContextSummarizer
-
 
 logger = logging.getLogger(__name__)
 
@@ -38,10 +37,10 @@ class TestcraftContextAdapter(ContextPort):
     # ContextPort
     def index(
         self,
-        file_path: Union[str, Path],
-        content: Optional[str] = None,
+        file_path: str | Path,
+        content: str | None = None,
         **kwargs: Any,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         try:
             path = Path(file_path)
             logger.info("Indexing file: %s", str(path))
@@ -68,9 +67,11 @@ class TestcraftContextAdapter(ContextPort):
         context_type: str = "general",
         limit: int = 10,
         **kwargs: Any,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         try:
-            results = self._retriever.retrieve(query, limit=limit, context_type=context_type, **kwargs)
+            results = self._retriever.retrieve(
+                query, limit=limit, context_type=context_type, **kwargs
+            )
             return results
         except Exception as exc:  # pragma: no cover - logged and re-raised
             logger.exception("Retrieval failed: %s", exc)
@@ -78,22 +79,24 @@ class TestcraftContextAdapter(ContextPort):
 
     def summarize(
         self,
-        file_path: Union[str, Path],
+        file_path: str | Path,
         summary_type: str = "comprehensive",
         **kwargs: Any,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         try:
-            return self._summarizer.summarize_file(Path(file_path), summary_type=summary_type, **kwargs)
+            return self._summarizer.summarize_file(
+                Path(file_path), summary_type=summary_type, **kwargs
+            )
         except Exception as exc:  # pragma: no cover - logged and re-raised
             logger.exception("Summarization failed for %s: %s", str(file_path), exc)
             raise
 
     def get_related_context(
         self,
-        file_path: Union[str, Path],
+        file_path: str | Path,
         relationship_type: str = "all",
         **kwargs: Any,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         path = Path(file_path)
         indexed = self._indexer.get_index_by_path(path)
         if not indexed:
@@ -106,8 +109,8 @@ class TestcraftContextAdapter(ContextPort):
             }
 
         imports = set(indexed.imports)
-        related_files: List[str] = []
-        relationships: List[Tuple[str, str]] = []  # (from, to)
+        related_files: list[str] = []
+        relationships: list[tuple[str, str]] = []  # (from, to)
 
         for other in self._indexer.iter_documents():
             if other.path == indexed.path:
@@ -134,10 +137,10 @@ class TestcraftContextAdapter(ContextPort):
         }
 
     def build_context_graph(
-        self, project_root: Union[str, Path], **kwargs: Any
-    ) -> Dict[str, Any]:
-        nodes: List[str] = []
-        edges: List[Tuple[str, str]] = []
+        self, project_root: str | Path, **kwargs: Any
+    ) -> dict[str, Any]:
+        nodes: list[str] = []
+        edges: list[tuple[str, str]] = []
         for doc in self._indexer.iter_documents():
             nodes.append(doc.path)
             for imp in doc.imports:
@@ -148,13 +151,15 @@ class TestcraftContextAdapter(ContextPort):
 
         # De-duplicate
         nodes = sorted(set(nodes))
-        edges = sorted(set(set(edges)))
+        edges = sorted(set(edges))
 
         return {
             "graph": {"directed": True},
             "nodes": nodes,
             "edges": [{"from": f, "to": t, "type": "import"} for f, t in edges],
-            "graph_metadata": {"project_root": str(project_root), "node_count": len(nodes), "edge_count": len(edges)},
+            "graph_metadata": {
+                "project_root": str(project_root),
+                "node_count": len(nodes),
+                "edge_count": len(edges),
+            },
         }
-
-

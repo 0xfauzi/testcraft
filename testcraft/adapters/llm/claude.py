@@ -3,13 +3,13 @@
 from __future__ import annotations
 
 import logging
-from typing import Any, Dict, Optional
+from typing import Any
 
 import anthropic
 from anthropic import Anthropic
 from anthropic.types import Message
 
-from ...config.credentials import CredentialManager, CredentialError
+from ...config.credentials import CredentialError, CredentialManager
 from ...ports.llm_port import LLMPort
 from ...prompts.registry import PromptRegistry
 from .common import parse_json_response, with_retries
@@ -20,6 +20,7 @@ logger = logging.getLogger(__name__)
 
 class ClaudeError(Exception):
     """Claude adapter specific errors."""
+
     pass
 
 
@@ -40,15 +41,15 @@ class ClaudeAdapter(LLMPort):
         self,
         model: str = "claude-3-7-sonnet",
         timeout: float = 60.0,
-        max_tokens: Optional[int] = None,  # Will be calculated automatically
+        max_tokens: int | None = None,  # Will be calculated automatically
         temperature: float = 0.1,
         max_retries: int = 3,
-        credential_manager: Optional[CredentialManager] = None,
-        prompt_registry: Optional[PromptRegistry] = None,
+        credential_manager: CredentialManager | None = None,
+        prompt_registry: PromptRegistry | None = None,
         **kwargs: Any,
     ):
         """Initialize Claude adapter.
-        
+
         Args:
             model: Claude model name (e.g., "claude-3-7-sonnet", "claude-sonnet-4", "claude-opus-4")
             timeout: Request timeout in seconds
@@ -63,43 +64,47 @@ class ClaudeAdapter(LLMPort):
         self.timeout = timeout
         self.temperature = temperature
         self.max_retries = max_retries
-        
+
         # Initialize credential manager
         self.credential_manager = credential_manager or CredentialManager()
-        
+
         # Initialize prompt registry
         self.prompt_registry = prompt_registry or PromptRegistry()
-        
+
         # Initialize token calculator
-        self.token_calculator = TokenCalculator(provider='anthropic', model=model)
-        
+        self.token_calculator = TokenCalculator(provider="anthropic", model=model)
+
         # Set max_tokens (use provided value or calculate automatically)
-        self.max_tokens = max_tokens or self.token_calculator.calculate_max_tokens('test_generation')
-        
+        self.max_tokens = max_tokens or self.token_calculator.calculate_max_tokens(
+            "test_generation"
+        )
+
         # Initialize Anthropic client
-        self._client: Optional[Anthropic] = None
+        self._client: Anthropic | None = None
         self._initialize_client(**kwargs)
 
     def _initialize_client(self, **kwargs: Any) -> None:
         """Initialize the Anthropic client with credentials."""
         try:
-            credentials = self.credential_manager.get_provider_credentials('anthropic')
-            
+            credentials = self.credential_manager.get_provider_credentials("anthropic")
+
             client_kwargs = {
-                'api_key': credentials['api_key'],
-                'timeout': self.timeout,
-                'max_retries': self.max_retries,
-                **kwargs
+                "api_key": credentials["api_key"],
+                "timeout": self.timeout,
+                "max_retries": self.max_retries,
+                **kwargs,
             }
-            
+
             self._client = Anthropic(**client_kwargs)
-            
+
             logger.info(f"Anthropic client initialized with model: {self.model}")
-            
+
         except CredentialError as e:
             raise ClaudeError(f"Failed to initialize Anthropic client: {e}") from e
         except Exception as e:
-            raise ClaudeError(f"Unexpected error initializing Anthropic client: {e}") from e
+            raise ClaudeError(
+                f"Unexpected error initializing Anthropic client: {e}"
+            ) from e
 
     @property
     def client(self) -> Anthropic:
@@ -111,12 +116,12 @@ class ClaudeAdapter(LLMPort):
     def generate_tests(
         self,
         code_content: str,
-        context: Optional[str] = None,
+        context: str | None = None,
         test_framework: str = "pytest",
         **kwargs: Any,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Generate test cases for the provided code content."""
-        
+
         system_prompt = f"""You are an expert Python test generator specializing in {test_framework} tests. Your task is to generate comprehensive, production-ready test cases for the provided Python code.
 
 Requirements:
@@ -138,24 +143,22 @@ Please return your response as valid JSON in this exact format:
 Generate thorough, professional-quality test code."""
 
         user_prompt = f"Code to generate tests for:\n\n```python\n{code_content}\n```"
-        
+
         if context:
             user_prompt += f"\n\nAdditional context:\n{context}"
 
-        def call() -> Dict[str, Any]:
+        def call() -> dict[str, Any]:
             return self._create_message(
-                system=system_prompt,
-                user_message=user_prompt,
-                **kwargs
+                system=system_prompt, user_message=user_prompt, **kwargs
             )
 
         try:
             result = with_retries(call, retries=self.max_retries)
             content = result.get("content", "")
-            
+
             # Parse JSON response
             parsed = parse_json_response(content)
-            
+
             if parsed.success and parsed.data:
                 return {
                     "tests": parsed.data.get("tests", content),
@@ -165,8 +168,8 @@ Generate thorough, professional-quality test code."""
                         "model": self.model,
                         "parsed": True,
                         "reasoning": parsed.data.get("reasoning", ""),
-                        **result.get("usage", {})
-                    }
+                        **result.get("usage", {}),
+                    },
                 }
             else:
                 # Fallback if JSON parsing fails
@@ -179,19 +182,19 @@ Generate thorough, professional-quality test code."""
                         "model": self.model,
                         "parsed": False,
                         "parse_error": parsed.error,
-                        **result.get("usage", {})
-                    }
+                        **result.get("usage", {}),
+                    },
                 }
-                
+
         except Exception as e:
             logger.error(f"Claude test generation failed: {e}")
             raise ClaudeError(f"Test generation failed: {e}") from e
 
     def analyze_code(
         self, code_content: str, analysis_type: str = "comprehensive", **kwargs: Any
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Analyze code for testability, complexity, and potential issues."""
-        
+
         system_prompt = f"""You are an expert Python code analyst. Perform a {analysis_type} analysis of the provided code to assess its quality, testability, and potential issues.
 
 Your analysis should cover:
@@ -219,20 +222,18 @@ Provide actionable, specific recommendations."""
 
         user_prompt = f"Code to analyze:\n\n```python\n{code_content}\n```"
 
-        def call() -> Dict[str, Any]:
+        def call() -> dict[str, Any]:
             return self._create_message(
-                system=system_prompt,
-                user_message=user_prompt,
-                **kwargs
+                system=system_prompt, user_message=user_prompt, **kwargs
             )
 
         try:
             result = with_retries(call, retries=self.max_retries)
             content = result.get("content", "")
-            
+
             # Parse JSON response
             parsed = parse_json_response(content)
-            
+
             if parsed.success and parsed.data:
                 return {
                     "testability_score": parsed.data.get("testability_score", 5.0),
@@ -244,8 +245,8 @@ Provide actionable, specific recommendations."""
                         "analysis_type": analysis_type,
                         "parsed": True,
                         "summary": parsed.data.get("analysis_summary", ""),
-                        **result.get("usage", {})
-                    }
+                        **result.get("usage", {}),
+                    },
                 }
             else:
                 # Fallback if JSON parsing fails
@@ -260,19 +261,19 @@ Provide actionable, specific recommendations."""
                         "parsed": False,
                         "raw_content": content,
                         "parse_error": parsed.error,
-                        **result.get("usage", {})
-                    }
+                        **result.get("usage", {}),
+                    },
                 }
-                
+
         except Exception as e:
             logger.error(f"Claude code analysis failed: {e}")
             raise ClaudeError(f"Code analysis failed: {e}") from e
 
     def refine_content(
         self, original_content: str, refinement_instructions: str, **kwargs: Any
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Refine existing content based on specific instructions."""
-        
+
         system_prompt = """You are an expert Python developer with deep knowledge of testing best practices, code quality, and software engineering principles. Your task is to refine the provided content according to the specific instructions given.
 
 Focus on:
@@ -303,31 +304,31 @@ Specific refinement instructions:
 
 Please improve the content according to these instructions while maintaining functionality."""
 
-        def call() -> Dict[str, Any]:
+        def call() -> dict[str, Any]:
             return self._create_message(
-                system=system_prompt,
-                user_message=user_prompt,
-                **kwargs
+                system=system_prompt, user_message=user_prompt, **kwargs
             )
 
         try:
             result = with_retries(call, retries=self.max_retries)
             content = result.get("content", "")
-            
+
             # Parse JSON response
             parsed = parse_json_response(content)
-            
+
             if parsed.success and parsed.data:
                 return {
-                    "refined_content": parsed.data.get("refined_content", original_content),
+                    "refined_content": parsed.data.get(
+                        "refined_content", original_content
+                    ),
                     "changes_made": parsed.data.get("changes_made", "No changes made"),
                     "confidence": parsed.data.get("confidence", 0.5),
                     "metadata": {
                         "model": self.model,
                         "parsed": True,
                         "improvement_areas": parsed.data.get("improvement_areas", []),
-                        **result.get("usage", {})
-                    }
+                        **result.get("usage", {}),
+                    },
                 }
             else:
                 # Fallback if JSON parsing fails
@@ -340,63 +341,59 @@ Please improve the content according to these instructions while maintaining fun
                         "parsed": False,
                         "raw_content": content,
                         "parse_error": parsed.error,
-                        **result.get("usage", {})
-                    }
+                        **result.get("usage", {}),
+                    },
                 }
-                
+
         except Exception as e:
             logger.error(f"Claude content refinement failed: {e}")
             raise ClaudeError(f"Content refinement failed: {e}") from e
 
     def _create_message(
-        self, 
-        system: str, 
-        user_message: str, 
-        **kwargs: Any
-    ) -> Dict[str, Any]:
+        self, system: str, user_message: str, **kwargs: Any
+    ) -> dict[str, Any]:
         """Create a message using Claude's messages API."""
-        
+
         request_kwargs = {
             "model": self.model,
             "max_tokens": self.max_tokens,
             "temperature": self.temperature,
             "system": system,
-            "messages": [
-                {"role": "user", "content": user_message}
-            ],
-            **kwargs
+            "messages": [{"role": "user", "content": user_message}],
+            **kwargs,
         }
-        
+
         try:
             response: Message = self.client.messages.create(**request_kwargs)
-            
+
             # Extract content from response
             content = ""
             if response.content and len(response.content) > 0:
                 # Claude responses come as a list of content blocks
                 content_blocks = []
                 for block in response.content:
-                    if hasattr(block, 'text'):
+                    if hasattr(block, "text"):
                         content_blocks.append(block.text)
                 content = "\n".join(content_blocks)
-            
+
             # Extract usage information
             usage_info = {}
             if response.usage:
                 usage_info = {
                     "input_tokens": response.usage.input_tokens,
                     "output_tokens": response.usage.output_tokens,
-                    "total_tokens": response.usage.input_tokens + response.usage.output_tokens
+                    "total_tokens": response.usage.input_tokens
+                    + response.usage.output_tokens,
                 }
-            
+
             return {
                 "content": content,
                 "usage": usage_info,
                 "model": response.model,
                 "stop_reason": response.stop_reason,
-                "stop_sequence": getattr(response, 'stop_sequence', None)
+                "stop_sequence": getattr(response, "stop_sequence", None),
             }
-            
+
         except anthropic.APIError as e:
             logger.error(f"Anthropic API error: {e}")
             raise ClaudeError(f"Anthropic API error: {e}") from e

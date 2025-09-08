@@ -1,7 +1,7 @@
-from testcraft.adapters.llm.openai import OpenAIAdapter
-from testcraft.adapters.llm.claude import ClaudeAdapter
 from testcraft.adapters.llm.azure import AzureOpenAIAdapter
 from testcraft.adapters.llm.bedrock import BedrockAdapter
+from testcraft.adapters.llm.claude import ClaudeAdapter
+from testcraft.adapters.llm.openai import OpenAIAdapter
 
 
 def test_openai_generate_tests():

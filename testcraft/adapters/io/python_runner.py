@@ -7,16 +7,13 @@ utilities. It intentionally focuses on Python-specific execution
 patterns to keep `subprocess_safe` generic and single-purpose.
 """
 
-from typing import List, Optional, Tuple
+
 from .subprocess_safe import run_subprocess_simple
 
 
 def run_python_module(
-    module_name: str,
-    args: Optional[List[str]] = None,
-    timeout: int = 30,
-    **kwargs
-) -> Tuple[Optional[str], Optional[str], int]:
+    module_name: str, args: list[str] | None = None, timeout: int = 30, **kwargs
+) -> tuple[str | None, str | None, int]:
     """
     Run a Python module using 'python -m module_name'.
 
@@ -29,7 +26,7 @@ def run_python_module(
     Returns:
         tuple: (stdout, stderr, return_code)
     """
-    cmd = ['python', '-m', module_name]
+    cmd = ["python", "-m", module_name]
     if args:
         cmd.extend(args)
 

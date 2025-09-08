@@ -9,9 +9,9 @@ from __future__ import annotations
 
 import hashlib
 import re
+from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, Iterable, List, Optional, Tuple
 
 
 @dataclass(frozen=True)
@@ -22,8 +22,8 @@ class IndexedChunk:
     chunk_id: int
     text: str
     path: str
-    symbol: Optional[str]
-    imports: Tuple[str, ...]
+    symbol: str | None
+    imports: tuple[str, ...]
 
 
 @dataclass
@@ -32,8 +32,8 @@ class IndexedDocument:
 
     index_id: str
     path: str
-    chunks: List[IndexedChunk]
-    imports: Tuple[str, ...]
+    chunks: list[IndexedChunk]
+    imports: tuple[str, ...]
 
 
 class InMemoryHybridIndexer:
@@ -47,15 +47,15 @@ class InMemoryHybridIndexer:
     """
 
     def __init__(self) -> None:
-        self._docs: Dict[str, IndexedDocument] = {}
+        self._docs: dict[str, IndexedDocument] = {}
 
     def _make_index_id(self, path: Path) -> str:
         absolute = str(path.resolve())
         return hashlib.sha1(absolute.encode("utf-8")).hexdigest()[:16]
 
     def index_file(
-        self, path: Path, *, content: Optional[str] = None, max_chunk_chars: int = 1200
-    ) -> Tuple[str, List[IndexedChunk]]:
+        self, path: Path, *, content: str | None = None, max_chunk_chars: int = 1200
+    ) -> tuple[str, list[IndexedChunk]]:
         if content is None:
             if not path.exists():
                 raise FileNotFoundError(str(path))
@@ -63,7 +63,9 @@ class InMemoryHybridIndexer:
 
         index_id = self._make_index_id(path)
         imports = tuple(self._extract_imports(content))
-        chunks = self._chunk_content(index_id, path, content, max_chunk_chars=max_chunk_chars)
+        chunks = self._chunk_content(
+            index_id, path, content, max_chunk_chars=max_chunk_chars
+        )
 
         self._docs[str(path.resolve())] = IndexedDocument(
             index_id=index_id, path=str(path.resolve()), chunks=chunks, imports=imports
@@ -72,7 +74,9 @@ class InMemoryHybridIndexer:
         return index_id, chunks
 
     def _extract_imports(self, content: str) -> Iterable[str]:
-        pattern = re.compile(r"^(?:from\s+([\w\.]+)\s+import|import\s+([\w\.]+))", re.MULTILINE)
+        pattern = re.compile(
+            r"^(?:from\s+([\w\.]+)\s+import|import\s+([\w\.]+))", re.MULTILINE
+        )
         for match in pattern.finditer(content):
             module = match.group(1) or match.group(2)
             if module:
@@ -80,10 +84,10 @@ class InMemoryHybridIndexer:
 
     def _chunk_content(
         self, index_id: str, path: Path, content: str, *, max_chunk_chars: int
-    ) -> List[IndexedChunk]:
+    ) -> list[IndexedChunk]:
         # Try function/class boundaries first
         boundaries = list(self._find_symbol_blocks(content))
-        chunks: List[IndexedChunk] = []
+        chunks: list[IndexedChunk] = []
         if boundaries:
             for i, (symbol, start, end) in enumerate(boundaries):
                 text = content[start:end]
@@ -102,7 +106,7 @@ class InMemoryHybridIndexer:
             return chunks
 
         # Fallback: split by blank lines and size budget
-        current: List[str] = []
+        current: list[str] = []
         acc = 0
         chunk_id = 0
         for line in content.splitlines(keepends=True):
@@ -139,7 +143,7 @@ class InMemoryHybridIndexer:
 
         return chunks
 
-    def _find_symbol_blocks(self, content: str) -> Iterable[Tuple[str, int, int]]:
+    def _find_symbol_blocks(self, content: str) -> Iterable[tuple[str, int, int]]:
         # Very lightweight: find "def" and "class" blocks using regex and indentation
         lines = content.splitlines(keepends=True)
         header_pattern = re.compile(r"^(def|class)\s+([\w_]+)\s*\(?.*", re.MULTILINE)
@@ -157,7 +161,5 @@ class InMemoryHybridIndexer:
     def iter_documents(self) -> Iterable[IndexedDocument]:
         return list(self._docs.values())
 
-    def get_index_by_path(self, path: Path) -> Optional[IndexedDocument]:
+    def get_index_by_path(self, path: Path) -> IndexedDocument | None:
         return self._docs.get(str(path.resolve()))
-
-

@@ -8,9 +8,9 @@ import json
 import logging
 import re
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any, Callable, Dict, Optional, Tuple
-
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -32,7 +32,7 @@ def balance_braces(text: str) -> str:
     return text
 
 
-def try_parse_json(text: str) -> Tuple[Optional[Dict[str, Any]], Optional[Exception]]:
+def try_parse_json(text: str) -> tuple[dict[str, Any] | None, Exception | None]:
     cleaned = strip_code_fences(balance_braces(text))
     try:
         return json.loads(cleaned), None
@@ -41,9 +41,13 @@ def try_parse_json(text: str) -> Tuple[Optional[Dict[str, Any]], Optional[Except
 
 
 def with_retries(
-    func: Callable[[], Any], *, retries: int = 3, base_delay: float = 0.5, jitter: float = 0.2
+    func: Callable[[], Any],
+    *,
+    retries: int = 3,
+    base_delay: float = 0.5,
+    jitter: float = 0.2,
 ) -> Any:
-    last_err: Optional[Exception] = None
+    last_err: Exception | None = None
     for attempt in range(retries):
         try:
             return func()
@@ -51,7 +55,9 @@ def with_retries(
             last_err = e
             sleep_s = base_delay * (2**attempt)
             sleep_s += jitter * (attempt + 1)
-            logger.warning("LLM call failed (attempt %s/%s): %s", attempt + 1, retries, e)
+            logger.warning(
+                "LLM call failed (attempt %s/%s): %s", attempt + 1, retries, e
+            )
             time.sleep(min(5.0, sleep_s))
     assert last_err is not None
     raise last_err
@@ -60,9 +66,9 @@ def with_retries(
 @dataclass
 class ParsedResponse:
     success: bool
-    data: Optional[Dict[str, Any]]
+    data: dict[str, Any] | None
     raw: str
-    error: Optional[str] = None
+    error: str | None = None
 
 
 def normalize_output(text: str) -> str:
@@ -93,5 +99,3 @@ def enforce_timeout(start_time: float, timeout_s: float) -> None:
         return
     if time.time() - start_time > timeout_s:
         raise TimeoutError("LLM operation timed out")
-
-
