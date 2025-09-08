@@ -126,9 +126,7 @@ class StatePort(Protocol):
         """
         ...
 
-    def load_state(
-        self, state_key: str | None = None, **kwargs: Any
-    ) -> dict[str, Any]:
+    def load_state(self, state_key: str | None = None, **kwargs: Any) -> dict[str, Any]:
         """
         Load state from storage.
 

@@ -16,9 +16,7 @@ class TokenLimits:
     max_context: int
     max_output: int
     recommended_output: int  # Conservative recommendation
-    max_thinking: int | None = (
-        None  # Maximum thinking/reasoning tokens (if supported)
-    )
+    max_thinking: int | None = None  # Maximum thinking/reasoning tokens (if supported)
     recommended_thinking: int | None = None  # Conservative thinking tokens
 
 

@@ -171,9 +171,7 @@ class PromptRegistry:
         sanitized = {k: _sanitize_text(str(v)) for k, v in customizations.items()}
         return self._render(base_prompt, {**sanitized, **kwargs})
 
-    def get_prompt(
-        self, category: str, prompt_type: str, **kwargs: Any
-    ) -> str | None:
+    def get_prompt(self, category: str, prompt_type: str, **kwargs: Any) -> str | None:
         """
         Get a prompt from either system or user templates.
 

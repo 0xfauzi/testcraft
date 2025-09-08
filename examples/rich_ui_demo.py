@@ -234,7 +234,6 @@ def demo_interactive_wizard() -> None:
 
     ui.print_divider("🧙‍♂️ Interactive Configuration Wizard")
 
-
     ui.console.print(
         "\n[info]🎯 This is a demo - no actual configuration will be saved[/]\n"
     )

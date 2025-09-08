@@ -45,9 +45,7 @@ class ClickContext:
     "--dry-run", "--dry", is_flag=True, help="Preview operations without executing them"
 )
 @click.pass_context
-def app(
-    ctx: click.Context, config: Path | None, verbose: bool, dry_run: bool
-) -> None:
+def app(ctx: click.Context, config: Path | None, verbose: bool, dry_run: bool) -> None:
     """TestCraft - AI-powered test generation tool for Python projects."""
     # Initialize context
     ctx.ensure_object(ClickContext)

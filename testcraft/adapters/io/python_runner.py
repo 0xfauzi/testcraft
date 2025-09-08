@@ -7,7 +7,6 @@ utilities. It intentionally focuses on Python-specific execution
 patterns to keep `subprocess_safe` generic and single-purpose.
 """
 
-
 from .subprocess_safe import run_subprocess_simple
 
 

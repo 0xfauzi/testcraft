@@ -29,9 +29,7 @@ class StateJsonAdapter:
     and generation logs.
     """
 
-    def __init__(
-        self, project_root: Path | None = None, state_file: str | None = None
-    ):
+    def __init__(self, project_root: Path | None = None, state_file: str | None = None):
         """
         Initialize the JSON state adapter.
 
@@ -401,9 +399,7 @@ class StateJsonAdapter:
         except (OSError, SafetyError, json.JSONEncodeError) as e:
             raise StateJsonError(f"Failed to persist state: {e}") from e
 
-    def load_state(
-        self, state_key: str | None = None, **kwargs: Any
-    ) -> dict[str, Any]:
+    def load_state(self, state_key: str | None = None, **kwargs: Any) -> dict[str, Any]:
         """
         Load state from storage.
 

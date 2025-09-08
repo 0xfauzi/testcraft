@@ -1249,7 +1249,9 @@ Respond in JSON format:
         except Exception as e:
             logger.warning(f"Failed to parse LLM evaluation response: {e}")
             # Return default scores
-            return dict.fromkeys(dimensions, 3.0), dict.fromkeys(dimensions, "Parse error")
+            return dict.fromkeys(dimensions, 3.0), dict.fromkeys(
+                dimensions, "Parse error"
+            )
 
     def _parse_pairwise_response(self, llm_response: dict[str, Any]) -> dict[str, Any]:
         """Parse pairwise comparison response."""
@@ -1782,9 +1784,7 @@ Respond in JSON format:
         # This is a simplified implementation - you would integrate with your test generation system
         try:
             source_file = test_case.get("source_file", "example.py")
-            test_case.get(
-                "source_content", "# No source content available"
-            )
+            test_case.get("source_content", "# No source content available")
 
             # Use LLM to generate test with the specific variant
             prompt_content = variant.get(

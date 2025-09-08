@@ -450,7 +450,9 @@ class CostManager:
         # Get active limits to check
         limits_to_check = self.cost_limits
         if limit_id:
-            limits_to_check = [limit for limit in self.cost_limits if limit.id == limit_id]
+            limits_to_check = [
+                limit for limit in self.cost_limits if limit.id == limit_id
+            ]
         else:
             limits_to_check = [limit for limit in self.cost_limits if limit.active]
 
