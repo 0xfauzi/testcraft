@@ -172,8 +172,8 @@ backoff_base_sec = 1.0             # Base delay between refinement attempts
 backoff_max_sec = 8.0              # Maximum delay between attempts
 stop_on_no_change = true           # Stop if LLM returns no changes
 max_total_minutes = 5.0            # Maximum total time for refinement
-strategy = "auto"                  # Options: "auto", "comprehensive", "balanced",
-                                   # "dependency_focused", "logic_focused", "setup_focused"
+# strategy = "auto"                # Refinement strategies not yet implemented
+                                   # Currently all refinement uses generic approach
 ```
 
 ### Generation Options Reference

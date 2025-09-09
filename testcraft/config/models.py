@@ -37,6 +37,8 @@ class TestPatternConfig(BaseModel):
             "envs",
             # Pipenv environments
             ".venv-*",
+            # UV environments (modern package manager)
+            ".uv-cache",
             # Python build directories
             "build",
             "dist",
@@ -81,7 +83,7 @@ class TestPatternConfig(BaseModel):
             ".testrepository",
             # Test generation artifacts - IMPORTANT: Exclude from LLM context
             ".artifacts",
-            # Python-specific directories
+            # Python-specific directories that are commonly in virtual environments
             "site-packages",
             "lib",
             "lib64",
@@ -90,6 +92,14 @@ class TestPatternConfig(BaseModel):
             "Scripts",
             "share",
             "pyvenv.cfg",
+            "Lib",  # Windows Python virtual env
+            "local",  # Unix virtual env symlink directory
+            # Third-party package directories (common in virtual environments)
+            "pkg_resources",
+            "pip",
+            "setuptools",
+            "wheel",
+            "distutils-precedence.pth",
             # OS-specific
             ".DS_Store",
             "Thumbs.db",
@@ -100,6 +110,7 @@ class TestPatternConfig(BaseModel):
             ".temp",
             # Legacy Python
             "lib2to3",
+            # Common test directories (only exclude if at root level via logic)
             "test",
             "tests",
             # Jupyter
@@ -107,6 +118,22 @@ class TestPatternConfig(BaseModel):
             # Docker
             ".dockerignore",
             "docker-compose.override.yml",
+            # Package management files and directories
+            ".pipfile",
+            ".poetry",
+            ".pdm-build",
+            # Additional virtual environment indicators
+            "pyvenv.cfg",
+            "conda-meta",
+            # Common CI/CD directories
+            ".github",
+            ".gitlab",
+            ".circleci",
+            ".travis",
+            # Documentation directories that might contain large files
+            "docs",
+            "_static",
+            "_templates",
         ],
         description="Directories to exclude from scanning",
     )
@@ -265,15 +292,6 @@ class RefineConfig(BaseModel):
     max_total_minutes: float = Field(
         default=5.0, ge=0.1, description="Maximum total time for refinement"
     )
-
-    strategy: Literal[
-        "auto",
-        "comprehensive",
-        "balanced",
-        "dependency_focused",
-        "logic_focused",
-        "setup_focused",
-    ] = Field(default="auto", description="Refinement strategy")
 
 
 class TestGenerationConfig(BaseModel):

@@ -774,11 +774,139 @@
             "testStrategy": "Write integration tests that send real requests and validate outputs against schemas. Test error handling by simulating malformed, partial, or invalid responses. Ensure all adapters reject or correct invalid outputs and log errors appropriately."
           }
         ]
+      },
+      {
+        "id": 23,
+        "title": "Implement Individual and Smart-Batched Element Processing for LLM Test Generation",
+        "description": "Refactor the test generation workflow to process each code element (function, class, method) individually, with support for both granular and smart-batched LLM requests, enabling improved focus, quality, and context control.",
+        "details": "1. Refactor the core test generation pipeline to support processing each testable element (function, class, method) as a discrete unit. Update the orchestration logic to allow both single-element and batch processing modes, configurable via CLI or configuration.\n\n2. Implement a batching strategy that groups related elements (e.g., methods of the same class, tightly coupled functions) for joint processing when beneficial. Use code structure analysis (AST) and semantic similarity (optionally leveraging embeddings) to inform batching decisions. Ensure that context sharing is optimized within batches without exceeding LLM context window limits.\n\n3. Integrate with the existing context pipeline to retrieve and inject relevant code context for each element or batch, ensuring that prompts remain focused and within token budgets. Use prompt engineering best practices: break complex requests into smaller steps, set explicit output expectations, and leverage LLM parameters (temperature, max tokens) for deterministic results[5].\n\n4. Update the LLM adapter invocation logic to handle both single and batched requests, ensuring robust error handling, retries, and response validation. Maintain compatibility with all supported LLM providers.\n\n5. Provide configuration options for users to select processing mode (individual, batch, smart-batch) and batch size, with sensible defaults. Expose these options via CLI and configuration files.\n\n6. Ensure that the orchestration layer collects and merges results from individual/batched LLM calls, preserving correct mapping to source elements and supporting downstream refinement and writing workflows.\n\n7. Document the new processing modes, configuration options, and their trade-offs in the user and developer documentation.\n\nBest practices to follow include: chunking code at semantic boundaries, using embeddings for grouping related elements[3][4], and prompt iteration for quality control[5]. Design for extensibility to support future batching strategies and LLM capabilities.",
+        "testStrategy": "1. Unit tests: Verify that the pipeline correctly identifies and processes individual elements and forms appropriate batches based on code structure and semantic similarity. Test with files containing diverse code structures (nested classes, overloaded methods, etc.).\n\n2. Integration tests: Mock LLM adapters to ensure correct prompt construction, batching logic, and response handling for both individual and batched modes. Validate that context is correctly retrieved and injected for each element or batch.\n\n3. CLI/config tests: Ensure that processing mode and batch size options are correctly parsed and respected. Test switching between modes and edge cases (e.g., batch size 1, maximum batch size).\n\n4. End-to-end tests: Run the full generation workflow on representative repositories, comparing output quality, coverage, and correctness between individual and batched modes. Verify that results are mapped to the correct source elements and that downstream refinement and writing steps function as expected.\n\n5. Performance tests: Measure and compare LLM call efficiency, token usage, and overall runtime for different processing strategies. Ensure batching does not exceed LLM context limits.\n\n6. Documentation review: Confirm that user and developer documentation accurately describes the new modes and configuration.",
+        "status": "pending",
+        "dependencies": [
+          2,
+          11,
+          12,
+          13,
+          17,
+          19
+        ],
+        "priority": "high",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "Design and Implement Configuration System for Processing Strategies",
+            "description": "Develop a configuration system that allows users to select between individual, batch, and smart-batch processing modes, including batch size and related parameters, accessible via CLI and configuration files.",
+            "dependencies": [],
+            "details": "The configuration system must support dynamic switching between processing strategies and expose all relevant options to both CLI and config files. Ensure sensible defaults and validation of user input.",
+            "status": "pending",
+            "testStrategy": "Unit tests for configuration parsing, CLI argument handling, and validation. Integration tests to verify correct propagation of configuration to the processing pipeline."
+          },
+          {
+            "id": 2,
+            "title": "Refactor Test Generation Pipeline for Element-Level Processing",
+            "description": "Refactor the core test generation workflow to process each code element (function, class, method) as a discrete unit, updating orchestration logic to support both single-element and batch processing.",
+            "dependencies": [
+              "23.1"
+            ],
+            "details": "The pipeline must identify and process each testable element individually, maintaining compatibility with existing workflows. Ensure orchestration logic can switch between modes based on configuration.",
+            "status": "pending",
+            "testStrategy": "Unit tests to verify correct identification and processing of elements. Integration tests with files containing diverse code structures."
+          },
+          {
+            "id": 3,
+            "title": "Implement Smart Batching Logic for Related Elements",
+            "description": "Develop batching logic that groups related elements (e.g., methods of the same class, tightly coupled functions) for joint processing, using AST analysis and semantic similarity (optionally embeddings).",
+            "dependencies": [
+              "23.2"
+            ],
+            "details": "Batching must optimize context sharing within LLM context window limits. Use code structure analysis and, where available, embeddings to inform grouping. Design for extensibility to support future strategies.",
+            "status": "pending",
+            "testStrategy": "Unit tests for batch formation logic with various code structures. Tests for context window compliance and semantic grouping accuracy."
+          },
+          {
+            "id": 4,
+            "title": "Enhance Context Gathering for Individual and Batched Elements",
+            "description": "Integrate with the context pipeline to retrieve and inject relevant code context for each element or batch, ensuring prompts remain focused and within token budgets.",
+            "dependencies": [
+              "23.2",
+              "23.3"
+            ],
+            "details": "Leverage prompt engineering best practices: break complex requests into smaller steps, set explicit output expectations, and tune LLM parameters for deterministic results.",
+            "status": "pending",
+            "testStrategy": "Unit and integration tests for context retrieval accuracy, prompt construction, and token budget adherence."
+          },
+          {
+            "id": 5,
+            "title": "Enable Parallel Processing of Individual Elements",
+            "description": "Implement parallel processing capabilities for individual element test generation to improve throughput and resource utilization.",
+            "dependencies": [
+              "23.2"
+            ],
+            "details": "Design the orchestration layer to support concurrent LLM requests, ensuring thread/process safety and efficient resource management.",
+            "status": "pending",
+            "testStrategy": "Performance and concurrency tests to verify correct parallel execution, result integrity, and absence of race conditions."
+          },
+          {
+            "id": 6,
+            "title": "Improve Error Handling and Recovery at Element Level",
+            "description": "Update LLM adapter invocation logic to robustly handle errors, retries, and response validation for both single and batched requests, maintaining compatibility with all supported LLM providers.",
+            "dependencies": [
+              "23.2",
+              "23.3"
+            ],
+            "details": "Implement granular error tracking, retry logic with backoff, and clear reporting for failures at the element or batch level.",
+            "status": "pending",
+            "testStrategy": "Unit and integration tests simulating various error scenarios, including LLM timeouts, malformed responses, and partial failures."
+          },
+          {
+            "id": 7,
+            "title": "Optimize Performance and Token Management",
+            "description": "Optimize the orchestration and batching logic for performance, ensuring efficient token usage and adherence to LLM context window constraints.",
+            "dependencies": [
+              "23.3",
+              "23.4",
+              "23.5"
+            ],
+            "details": "Monitor and log token usage, batch sizes, and response times. Implement safeguards to prevent exceeding context limits and optimize for cost and speed.",
+            "status": "pending",
+            "testStrategy": "Performance benchmarks, stress tests, and validation of token budgeting under various workloads."
+          },
+          {
+            "id": 8,
+            "title": "Test, Validate, and Document New Processing Modes",
+            "description": "Develop comprehensive unit and integration tests for all new workflows, and document processing modes, configuration options, and trade-offs in user and developer documentation.",
+            "dependencies": [
+              "23.1",
+              "23.2",
+              "23.3",
+              "23.4",
+              "23.5",
+              "23.6",
+              "23.7"
+            ],
+            "details": "Ensure all features are covered by automated tests and documentation is clear, up-to-date, and accessible to both users and developers.",
+            "status": "pending",
+            "testStrategy": "Automated test coverage reports, manual validation of documentation, and user acceptance testing."
+          }
+        ]
+      },
+      {
+        "id": 24,
+        "title": "Conduct Comprehensive Configuration Parameter Audit Across Codebase",
+        "description": "Perform a thorough audit of all configuration parameters in the TestCraft codebase, tracing their definition, usage, and impact, and produce a detailed report with actionable recommendations.",
+        "details": "1. Enumerate all configuration parameters defined in config/models.py and all other configuration files, including YAML, JSON, and environment variable sources. Use static analysis tools (e.g., AST parsing, grep, or custom scripts) to automate discovery where possible.\n\n2. For each parameter, trace its usage throughout the codebase using code search, static analysis, and cross-referencing with domain models and adapters. Document every location where each parameter is read, written, or referenced.\n\n3. Verify that each parameter affects behavior as documented by reviewing code logic, comments, and documentation. For parameters with unclear or missing documentation, flag them for review.\n\n4. Identify parameters that are defined but never used, as well as code that references non-existent configuration parameters. Use static analysis and test coverage tools to assist in this process.\n\n5. Document gaps between configuration options and actual implementation, including partially implemented parameters and missing parameters that should exist based on code usage.\n\n6. Cover all configuration sections: test patterns, style, coverage, generation, environment, cost management, security, quality, prompt engineering, context, telemetry, evaluation, and LLM providers.\n\n7. Compile a comprehensive report including:\n   - Parameters that work as documented\n   - Parameters that are defined but unused\n   - Parameters that are partially implemented\n   - Missing parameters that should exist\n   - Recommendations for cleanup and improvement\n\nBest practices: Use automated tools for static analysis (e.g., Codesonar, Codescene), cross-reference with configuration validation logic (from pydantic models), and ensure findings are reproducible. Maintain traceability between configuration definitions and their usage in code and documentation.",
+        "testStrategy": "1. Use automated scripts to extract all configuration parameters and cross-check with code references.\n2. Manually review a sample of parameters to verify that automated tracing is accurate.\n3. Validate that every parameter listed in config/models.py and related files is either used in code or flagged as unused.\n4. For each parameter, verify that its documented behavior matches actual code logic by reviewing relevant code paths and test cases.\n5. Run static analysis tools to detect references to undefined parameters and unused definitions.\n6. Review the final report for completeness, accuracy, and actionable recommendations. Peer review by at least one other engineer is required before completion.",
+        "status": "pending",
+        "dependencies": [
+          3
+        ],
+        "priority": "high",
+        "subtasks": []
       }
     ],
     "metadata": {
       "created": "2025-01-27T20:16:58.061Z",
-      "updated": "2025-09-08T14:29:25.245Z",
+      "updated": "2025-09-09T00:03:16.550Z",
       "description": "Tasks for master context"
     }
   }

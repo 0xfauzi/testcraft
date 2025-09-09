@@ -8,6 +8,8 @@ multiple use cases.
 """
 
 import logging
+import os
+import fnmatch
 from pathlib import Path
 
 from ...config.models import TestPatternConfig
@@ -92,40 +94,38 @@ class FileDiscoveryService:
                 f"Discovering source files in {project_path} with patterns: {patterns}"
             )
 
-            # Find files using glob patterns
-            for pattern in patterns:
-                try:
-                    files = list(project_path.glob(f"**/{pattern}"))
-                    logger.debug(
-                        f"Pattern '{pattern}' found {len(files)} files: {[f.name for f in files]}"
+            # Use os.walk for efficient directory traversal with exclusion
+            total_found = 0
+            for root, dirs, files in os.walk(project_path):
+                # Filter directories in-place to avoid scanning excluded directories
+                dirs[:] = [d for d in dirs if not self._should_exclude_directory(Path(root) / d)]
+                
+                # Check each file against patterns
+                for filename in files:
+                    file_path = Path(root) / filename
+                    
+                    # Quick check: must match at least one pattern
+                    matches_pattern = any(fnmatch.fnmatch(filename, pattern) for pattern in patterns)
+                    if not matches_pattern:
+                        continue
+                    
+                    total_found += 1
+                    should_include = self._should_include_file(
+                        file_path, project_path, include_test_files=include_test_files
                     )
+                    
+                    logger.debug(
+                        f"File {filename}: should_include={should_include}"
+                    )
+                    
+                    if should_include:
+                        resolved_path = str(file_path.resolve())
+                        source_files.append(resolved_path)
+                        logger.debug(f"Added file: {resolved_path}")
 
-                    for file_path in files:
-                        should_include = self._should_include_file(
-                            file_path, include_test_files=include_test_files
-                        )
-                        logger.debug(
-                            f"File {file_path.name}: should_include={should_include}"
-                        )
-                        if should_include:
-                            resolved_path = str(file_path.resolve())
-                            source_files.append(resolved_path)
-                            logger.debug(f"Added file: {resolved_path}")
-
-                except Exception as e:
-                    logger.warning(f"Failed to process pattern '{pattern}': {e}")
-                    continue
-
-            # Remove duplicates while preserving order
-            unique_files = []
-            seen = set()
-            for file_path in source_files:
-                if file_path not in seen:
-                    seen.add(file_path)
-                    unique_files.append(file_path)
-
-            logger.info(f"Discovered {len(unique_files)} source files")
-            return unique_files
+            logger.debug(f"Total files scanned: {total_found}, included: {len(source_files)}")
+            logger.info(f"Discovered {len(source_files)} source files")
+            return source_files
 
         except Exception as e:
             if isinstance(e, FileDiscoveryError):
@@ -161,24 +161,28 @@ class FileDiscoveryService:
                 f"Discovering test files in {project_path} with patterns: {patterns}"
             )
 
-            # Find test files using configured patterns
-            for pattern in patterns:
-                try:
-                    files = list(project_path.glob(f"**/{pattern}"))
+            # Use os.walk for efficient directory traversal with exclusion
+            total_found = 0
+            for root, dirs, files in os.walk(project_path):
+                # Filter directories in-place to avoid scanning excluded directories
+                dirs[:] = [d for d in dirs if not self._should_exclude_directory(Path(root) / d)]
+                
+                # Check each file against patterns
+                for filename in files:
+                    file_path = Path(root) / filename
+                    
+                    # Quick check: must match at least one pattern
+                    matches_pattern = any(fnmatch.fnmatch(filename, pattern) for pattern in patterns)
+                    if not matches_pattern:
+                        continue
+                    
+                    total_found += 1
+                    if self._should_include_test_file(file_path):
+                        test_files.append(str(file_path.resolve()))
 
-                    for file_path in files:
-                        if self._should_include_test_file(file_path):
-                            test_files.append(str(file_path.resolve()))
-
-                except Exception as e:
-                    logger.warning(f"Failed to process test pattern '{pattern}': {e}")
-                    continue
-
-            # Remove duplicates
-            unique_files = list(set(test_files))
-
-            logger.info(f"Discovered {len(unique_files)} test files")
-            return unique_files
+            logger.debug(f"Total test files scanned: {total_found}, included: {len(test_files)}")
+            logger.info(f"Discovered {len(test_files)} test files")
+            return test_files
 
         except Exception as e:
             if isinstance(e, FileDiscoveryError):
@@ -250,13 +254,15 @@ class FileDiscoveryService:
         return filtered_files
 
     def _should_include_file(
-        self, file_path: Path, include_test_files: bool = False
+        self, file_path: Path, project_path: Path | None = None, include_test_files: bool = False
     ) -> bool:
         """
         Determine if a file should be included based on exclusion rules.
 
         Args:
             file_path: Path to the file to check
+            project_path: Root path of the project (for relative path checking). 
+                         If None, only basic file extension and pattern checks are performed.
             include_test_files: Whether to include test files
 
         Returns:
@@ -279,10 +285,64 @@ class FileDiscoveryService:
                 return False
 
         # Check exclude directories (from config.exclude_dirs)
-        if any(part in self.exclude_dirs_set for part in file_path.parts):
-            return False
+        # Only check directories relative to the project path, not absolute path
+        if project_path is not None:
+            try:
+                relative_path = file_path.relative_to(project_path)
+                if any(part in self.exclude_dirs_set for part in relative_path.parts[:-1]):  # Exclude filename part
+                    return False
+            except ValueError:
+                # File is not under project path, exclude it
+                return False
+        else:
+            # No project context - only check immediate directory name
+            parent_name = file_path.parent.name
+            if parent_name in self.exclude_dirs_set:
+                return False
 
         return True
+
+    def _should_exclude_directory(self, dir_path: Path) -> bool:
+        """
+        Determine if a directory should be excluded during traversal.
+        
+        This is more efficient than checking after scanning all files.
+        
+        Args:
+            dir_path: Path to the directory to check
+        
+        Returns:
+            True if the directory should be excluded (skip traversing it)
+        """
+        # Check if any part of the path is in exclude_dirs
+        dir_name = dir_path.name
+        if dir_name in self.exclude_dirs_set:
+            return True
+        
+        # Check for patterns that might match directories
+        dir_str = str(dir_path)
+        for pattern in self.exclude_patterns_set:
+            if self._matches_pattern(dir_str, pattern):
+                return True
+        
+        # Specific checks for common virtual environment patterns
+        if (dir_name.startswith('.venv') or 
+            dir_name.endswith('.egg-info') or
+            dir_name.endswith('.dist-info') or
+            dir_name == 'site-packages' or
+            dir_name in {'lib', 'lib64', 'bin', 'Scripts', 'include', 'share'}):
+            return True
+        
+        # Check if this looks like a virtual environment based on structure
+        # Look for pyvenv.cfg which indicates a virtual environment
+        if (dir_path / 'pyvenv.cfg').exists():
+            return True
+        
+        # Check for Conda environment structure
+        if (dir_path / 'conda-meta').exists():
+            return True
+            
+        return False
 
     def _should_include_test_file(self, file_path: Path) -> bool:
         """

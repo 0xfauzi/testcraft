@@ -763,8 +763,8 @@ class GenerateUseCase:
         if plan.elements_to_test:
             # Use first element to determine naming
             element = plan.elements_to_test[0]
-            return f"test_{element.name.lower()}.py"
-        return "test_generated.py"
+            return f"tests/test_{element.name.lower()}.py"
+        return "tests/test_generated.py"
 
     async def _write_test_files(
         self, generation_results: list[GenerationResult]

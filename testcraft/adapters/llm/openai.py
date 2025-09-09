@@ -376,6 +376,44 @@ class OpenAIAdapter(LLMPort):
             logger.error(f"OpenAI content refinement failed: {e}")
             raise OpenAIError(f"Content refinement failed: {e}") from e
 
+    def _requires_completion_tokens_param(self) -> bool:
+        """Check if the model requires max_completion_tokens instead of max_tokens.
+        
+        OpenAI's newer models (o4-mini, o3, o4) require max_completion_tokens
+        instead of the legacy max_tokens parameter.
+        
+        Returns:
+            True if model requires max_completion_tokens, False for max_tokens
+        """
+        # Models that require max_completion_tokens instead of max_tokens
+        completion_token_models = [
+            "o4-mini",
+            "o3", 
+            "o4",
+            # Add other models as OpenAI updates their API requirements
+        ]
+        
+        return any(model_name in self.model for model_name in completion_token_models)
+
+    def _supports_temperature_adjustment(self) -> bool:
+        """Check if the model supports custom temperature values.
+        
+        OpenAI's reasoning models (o4-mini, o3, o4) only support the default
+        temperature of 1.0 and don't allow custom temperature values.
+        
+        Returns:
+            True if model supports temperature adjustment, False if only default
+        """
+        # Reasoning models that only support default temperature (1.0)
+        reasoning_models = [
+            "o4-mini",
+            "o3",
+            "o4",
+            # Add other reasoning models as they're released
+        ]
+        
+        return not any(model_name in self.model for model_name in reasoning_models)
+
     def _estimate_complexity(
         self, code_content: str
     ) -> Literal["simple", "moderate", "complex"]:
@@ -449,10 +487,21 @@ class OpenAIAdapter(LLMPort):
         request_kwargs = {
             "model": self.model,
             "messages": messages,
-            "max_tokens": tokens_to_use,
-            "temperature": self.temperature,
             **kwargs,
         }
+        
+        # Add temperature only if the model supports custom temperature values
+        if self._supports_temperature_adjustment():
+            request_kwargs["temperature"] = self.temperature
+        else:
+            # Reasoning models use default temperature (1.0) - don't specify it
+            logger.debug(f"Skipping temperature parameter for reasoning model {self.model} (uses default temperature)")
+        
+        # Use max_completion_tokens for newer OpenAI models that require it
+        if self._requires_completion_tokens_param():
+            request_kwargs["max_completion_tokens"] = tokens_to_use
+        else:
+            request_kwargs["max_tokens"] = tokens_to_use
 
         # Add thinking tokens only for models that support configurable thinking (not OpenAI)
         # OpenAI reasoning models (like o4-mini) handle reasoning internally without configurable budgets

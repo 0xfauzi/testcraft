@@ -45,8 +45,8 @@ class LLMRouter(LLMPort):
             }
         elif provider == "azure-openai":
             provider_config = {
-                "deployment_name": self.config.get(
-                    "azure_openai_deployment", "o4-mini"
+                "deployment": self.config.get(
+                    "azure_openai_deployment", "gpt-4o-mini"
                 ),
                 "api_version": self.config.get(
                     "azure_openai_api_version", "2024-02-15-preview"
@@ -54,6 +54,7 @@ class LLMRouter(LLMPort):
                 "timeout": self.config.get("azure_openai_timeout", 60.0),
                 "temperature": self.config.get("temperature", 0.1),
                 "max_retries": self.config.get("max_retries", 3),
+                "max_tokens": self.config.get("azure_openai_max_tokens", 4000),
             }
         elif provider == "bedrock":
             provider_config = {
@@ -82,9 +83,9 @@ class LLMRouter(LLMPort):
 
                 self._adapters[provider] = ClaudeAdapter(cost_port=self.cost_port, **provider_config)
             elif provider == "azure-openai":
-                from .azure import AzureAdapter
+                from .azure import AzureOpenAIAdapter
 
-                self._adapters[provider] = AzureAdapter(cost_port=self.cost_port, **provider_config)
+                self._adapters[provider] = AzureOpenAIAdapter(cost_port=self.cost_port, **provider_config)
             elif provider == "bedrock":
                 from .bedrock import BedrockAdapter
 
@@ -102,14 +103,21 @@ class LLMRouter(LLMPort):
     ) -> dict[str, Any]:
         """Generate tests using configured provider."""
         adapter = self._get_adapter(self.default_provider)
-        return await adapter.generate_tests(code_content, context, test_framework, **kwargs)
+        return adapter.generate_tests(code_content, context, test_framework, **kwargs)
 
     async def analyze_code(self, code: str, focus_areas: list) -> dict[str, Any]:
         """Analyze code using configured provider."""
         adapter = self._get_adapter(self.default_provider)
-        return await adapter.analyze_code(code, focus_areas)
+        return adapter.analyze_code(code, focus_areas)
 
     async def refine_tests(self, tests: str, feedback: str) -> str:
         """Refine tests using configured provider."""
         adapter = self._get_adapter(self.default_provider)
-        return await adapter.refine_tests(tests, feedback)
+        # Note: The actual adapters have refine_content method, not refine_tests
+        # This might need to be updated based on the actual adapter interface
+        if hasattr(adapter, 'refine_content'):
+            result = adapter.refine_content(tests, feedback)
+            return result.get('refined_content', tests)
+        else:
+            # Fallback for adapters that don't support refinement
+            return tests

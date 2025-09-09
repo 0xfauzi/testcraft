@@ -88,9 +88,28 @@ class SafetyPolicies:
 
         # Check for hidden files/directories (allow system files in project root)
         if any(part.startswith(".") for part in file_path.parts):
-            # Allow system files in project root
+            # Allow system files only at project root
             filename = file_path.name
-            if filename not in SafetyPolicies.ALLOWED_SYSTEM_FILES:
+            if filename in SafetyPolicies.ALLOWED_SYSTEM_FILES:
+                # Check if file is at project root
+                if project_root:
+                    # Resolve both paths to handle symlinks
+                    resolved_file = file_path.resolve()
+                    resolved_root = project_root.resolve()
+                    # Check if file is directly in project root (no subdirectories)
+                    if resolved_file.parent != resolved_root:
+                        raise SafetyError(
+                            f"System file {filename} only allowed at project root, "
+                            f"not in subdirectory: {file_path}"
+                        )
+                else:
+                    # Without project root, check if it's a single part path
+                    if len(file_path.parts) != 1:
+                        raise SafetyError(
+                            f"System file {filename} only allowed at project root, "
+                            f"not in subdirectory: {file_path}"
+                        )
+            else:
                 raise SafetyError(f"Hidden files/directories not allowed: {file_path}")
 
     @staticmethod
