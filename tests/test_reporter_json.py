@@ -12,14 +12,9 @@ from pathlib import Path
 import pytest
 
 from testcraft.adapters.io.reporter_json import JsonReportAdapter, ReportError
-from testcraft.domain.models import (
-    AnalysisReport,
-    CoverageResult,
-    GenerationResult,
-    TestElement,
-    TestElementType,
-    TestGenerationPlan,
-)
+from testcraft.domain.models import (AnalysisReport, CoverageResult,
+                                     GenerationResult, TestElement,
+                                     TestElementType, TestGenerationPlan)
 
 
 class TestJsonReportAdapter:

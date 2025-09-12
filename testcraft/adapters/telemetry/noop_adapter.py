@@ -44,16 +44,17 @@ class NoOpSpanContext:
     def get_trace_context(self) -> SpanContext | None:
         """
         Get the trace context for this span.
-        
+
         Returns:
             SpanContext with trace information for consistency with OpenTelemetry adapter
         """
         from ...ports.telemetry_port import SpanContext
+
         return SpanContext(
             trace_id=self.trace_id,
             span_id=self.span_id,
             parent_span_id=self.parent_span_id,
-            baggage=self.baggage
+            baggage=self.baggage,
         )
 
 

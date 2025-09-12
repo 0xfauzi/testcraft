@@ -9,7 +9,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from testcraft.application.analyze_usecase import AnalyzeUseCase, AnalyzeUseCaseError
+from testcraft.application.analyze_usecase import (AnalyzeUseCase,
+                                                   AnalyzeUseCaseError)
 from testcraft.domain.models import AnalysisReport
 
 
@@ -42,16 +43,30 @@ class TestAnalyzeUseCase:
 
         from testcraft.adapters.io.file_discovery import FileDiscoveryService
 
-        # Create a mock file discovery service
+        # Create a mock file discovery service with realistic behavior
         mock_file_discovery = Mock(spec=FileDiscoveryService)
-        mock_file_discovery.discover_source_files.return_value = [
-            "/test/module1.py",
-            "/test/module2.py",
-        ]
-        mock_file_discovery.filter_existing_files.return_value = [
-            "/test/module1.py",
-            "/test/module2.py",
-        ]
+
+        def mock_discover_source_files(project_path, include_test_files=False):
+            # Return empty list for empty directories, otherwise return sample files
+            if "empty" in str(project_path):
+                return []
+            return [
+                "/test/module1.py",
+                "/test/module2.py",
+            ]
+
+        def mock_filter_existing_files(file_paths):
+            # Filter based on what files are actually passed in
+            # Return only valid files that exist in the input
+            return [f for f in file_paths if f.endswith(".py")]
+
+        mock_file_discovery.discover_source_files.side_effect = (
+            mock_discover_source_files
+        )
+        mock_file_discovery.filter_existing_files.side_effect = (
+            mock_filter_existing_files
+        )
+        mock_file_discovery.discover_test_files.return_value = []
 
         return AnalyzeUseCase(
             coverage_port=mock_ports["coverage_port"],

@@ -16,9 +16,11 @@ This document provides a comprehensive reference for all TestCraft configuration
 10. [Quality Analysis](#quality-analysis)
 11. [Prompt Engineering](#prompt-engineering)
 12. [Context Retrieval](#context-retrieval)
-13. [Telemetry & Observability](#telemetry--observability)
-14. [LLM Providers](#llm-providers)
-15. [Environment Variable Overrides](#environment-variable-overrides)
+13. [Context Enrichment](#context-enrichment)  
+14. [Enhanced Import System](#enhanced-import-system)
+15. [Telemetry & Observability](#telemetry--observability)
+16. [LLM Providers](#llm-providers)
+17. [Environment Variable Overrides](#environment-variable-overrides)
 
 ## Configuration File Structure
 
@@ -172,9 +174,81 @@ backoff_base_sec = 1.0             # Base delay between refinement attempts
 backoff_max_sec = 8.0              # Maximum delay between attempts
 stop_on_no_change = true           # Stop if LLM returns no changes
 max_total_minutes = 5.0            # Maximum total time for refinement
-# strategy = "auto"                # Refinement strategies not yet implemented
-                                   # Currently all refinement uses generic approach
+
+# Content validation and equivalence checking (NEW)
+allow_ast_equivalence_check = true           # Enable AST-based semantic equivalence checking
+treat_cosmetic_as_no_change = true           # Treat cosmetic changes as no change
+max_diff_hunks = 3                           # Max diff hunks in logs/reports
+
+# Import path resolution and targeting (NEW)
+prefer_runtime_import_paths = true           # Prefer runtime import paths from error traces
+
+# Timeout and hang prevention (NEW)
+enable_timeout_detection = true              # Enable timeout detection and classification
+timeout_threshold_seconds = 30.0             # Threshold for hanging test classification
+
+# Schema validation and repair (NEW)
+enable_schema_repair = true                  # Enable LLM schema repair for malformed outputs
+schema_repair_temperature = 0.0              # Temperature for schema repair (0.0 = deterministic)
+
+# Preflight analysis (NEW)
+enable_preflight_analysis = true             # Enable preflight canonicalization analysis
 ```
+
+### LLM Refinement Reliability Features (NEW)
+
+TestCraft now includes advanced features to improve the reliability and effectiveness of AI-powered test refinement:
+
+#### Content Equivalence Detection
+
+The system now uses **layered content validation** to accurately detect when LLM changes are meaningful:
+
+- **String Identity**: Basic string comparison (fastest)
+- **Normalization**: Whitespace and line-ending normalization
+- **Cosmetic Detection**: Identifies formatting-only changes (indentation, spacing)
+- **AST Equivalence**: Semantic comparison using Python AST parsing
+
+This prevents unnecessary refinement iterations when the LLM makes cosmetic or semantically equivalent changes.
+
+#### Import Path Targeting
+
+TestCraft now extracts **runtime import paths** from pytest failure traces to provide more accurate context to the LLM:
+
+```python
+# Instead of source tree aliases:
+from myproject.modules.scheduler import JobScheduler  # Less reliable
+
+# LLM now sees runtime paths from traces:
+from myproject_package.scheduler import JobScheduler  # More reliable for mocking
+```
+
+#### Schema Validation and Repair
+
+LLM responses now undergo strict JSON schema validation with automatic repair:
+
+- **Required Fields**: `refined_content`, `changes_made`, `reason`
+- **Optional Fields**: `suspected_prod_bug` (auto-added as `null`)
+- **Single-Shot Repair**: If validation fails, a focused repair prompt attempts to fix the response
+- **Type Coercion**: Automatic string-to-boolean conversion where appropriate
+
+#### Preflight Analysis
+
+Before sending code to the LLM, TestCraft performs **canonicalization analysis** to detect common Python issues:
+
+- Incorrect dunder method casing (`__Init__` → `__init__`)
+- Keyword casing issues (`False` vs `false`)
+- Import statement formatting problems
+
+These suggestions are included in the LLM prompt to prevent common errors.
+
+#### Timeout and Hang Detection
+
+TestCraft now detects and classifies timeouts in test execution:
+
+- **Execution Time Analysis**: Warns when tests approach timeout thresholds
+- **Pattern Detection**: Identifies `time.sleep()`, `input()`, and other blocking operations
+- **Hang Classification**: Categorizes timeouts as immediate hangs vs. slow execution
+- **Actionable Suggestions**: Provides specific guidance for stubbing problematic operations
 
 ### Generation Options Reference
 
@@ -184,6 +258,68 @@ max_total_minutes = 5.0            # Maximum total time for refinement
 | `generate_fixtures` | `bool` | `true` | Create pytest fixtures for setup |
 | `parametrize_similar_tests` | `bool` | `true` | Use parametrized tests where appropriate |
 | `max_test_methods_per_class` | `int` | `20` | Limit test methods per class |
+
+### Refinement Options Reference (NEW)
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `allow_ast_equivalence_check` | `bool` | `true` | Enable AST-based semantic equivalence checking |
+| `treat_cosmetic_as_no_change` | `bool` | `true` | Treat formatting-only changes as no change |
+| `max_diff_hunks` | `int` | `3` | Maximum diff hunks to include in logs |
+| `prefer_runtime_import_paths` | `bool` | `true` | Extract import paths from error traces |
+| `enable_timeout_detection` | `bool` | `true` | Enable timeout detection and classification |
+| `timeout_threshold_seconds` | `float` | `30.0` | Threshold for classifying hangs |
+| `enable_schema_repair` | `bool` | `true` | Enable LLM schema validation and repair |
+| `schema_repair_temperature` | `float` | `0.0` | Temperature for repair prompts |
+| `enable_preflight_analysis` | `bool` | `true` | Enable canonicalization preflight checks |
+
+### Modular Configuration System
+
+TestCraft uses a **centralized configuration system** that handles complex merging of defaults, user overrides, and nested settings. Configuration is managed through the `GenerationConfig` class in `testcraft/application/generation/config.py`.
+
+#### Configuration Merging
+
+The system supports deep merging for nested settings like `context_categories` and `prompt_budgets`:
+
+```toml
+[generation]
+batch_size = 10
+enable_context = true
+
+[generation.context_categories]
+snippets = true
+neighbors = true
+contracts = false
+
+[generation.prompt_budgets]
+per_item_chars = 2000
+total_chars = 15000
+
+[generation.prompt_budgets.section_caps]
+snippets = 8
+neighbors = 3
+```
+
+#### Context Enrichment Mapping
+
+The legacy `context_enrichment` configuration is automatically mapped to the new `context_categories` system:
+
+```toml
+[generation.context_enrichment]
+enable_env_detection = true
+enable_db_boundary_detection = true
+enable_side_effect_detection = false
+```
+
+This automatically enables corresponding context categories and preserves backward compatibility.
+
+#### Configuration Validation
+
+The system validates configuration values and provides sensible defaults for invalid settings:
+- `batch_size` must be ≥ 1 (default: 5)
+- `coverage_threshold` must be 0.0-1.0 (default: 0.8)
+- `max_refinement_iterations` must be ≥ 1 (default: 3)
+- Character limits must be reasonable values
 
 ## Evaluation Harness
 
@@ -668,3 +804,146 @@ cp .testcraft.prod.toml .testcraft.toml
 ---
 
 For practical usage examples, see the [Advanced Usage Guide](advanced-usage.md) and [Architecture Guide](architecture.md).
+
+## Context Enrichment Flags and Budgets
+
+TestCraft can enrich LLM prompts with additional, size-bounded context. These features are controlled via configuration flags and budgets.
+
+Configuration keys (override in your app config):
+
+```toml
+[context_categories]
+snippets = true
+neighbors = true
+test_exemplars = true
+contracts = true
+deps_config_fixtures = true
+coverage_hints = true
+callgraph = true
+error_paths = true
+usage_examples = true
+pytest_settings = true
+side_effects = true
+path_constraints = true
+
+[prompt_budgets]
+per_item_chars = 1500
+total_chars = 10000
+
+[prompt_budgets.section_caps]
+snippets = 10
+neighbors = 5
+test_exemplars = 5
+contracts = 8
+deps_config_fixtures = 2
+coverage_hints = 3
+callgraph = 3
+error_paths = 3
+usage_examples = 5
+pytest_settings = 1
+side_effects = 1
+path_constraints = 3
+
+[context_budgets.directory_tree]
+max_depth = 4                 # Maximum directory depth for recursive tree (1-10)
+max_entries_per_dir = 200     # Maximum files/dirs per directory (10-1000)
+include_py_only = true        # Only include .py files and directories
+```
+
+Notes:
+- **Prompt budgets** enforce hard caps: per-item character limit and a total prompt cap.
+- **Section caps** limit how many entries from each category are included.
+- **Context budgets** control resource-intensive operations like directory tree building.
+- **Directory tree budgets** prevent performance issues with large codebases.
+- Disable any category by setting its flag to `false`.
+
+## Enhanced Import System
+
+TestCraft includes an enhanced import system that provides recursive directory trees and authoritative module path derivation to ensure generated tests have correct import statements.
+
+### Features
+
+#### 1. Recursive Directory Tree
+- Provides comprehensive project structure context to the LLM
+- Configurable depth and entry limits for performance
+- Optional filtering to Python files only
+
+#### 2. Authoritative Module Path Derivation
+- Automatically derives correct dotted import paths (e.g., `src.mypackage.module`)
+- Handles `src/` layouts, namespace packages, and complex project structures
+- Validates import paths by attempting actual imports
+- Provides fallback candidates when primary path fails
+
+#### 3. Enhanced Usage Examples
+- Prioritizes module-qualified import patterns in context examples
+- Searches for usage examples using derived module paths
+- Provides better context for LLM test generation
+
+#### 4. Reliable Test Execution Environment
+- Automatically configures `PYTHONPATH` to include project root and `src/`
+- Ensures generated tests can import modules correctly during pytest execution
+- Applies to both coverage measurement and test refinement
+
+### Configuration
+
+```toml
+[context_budgets.directory_tree]
+max_depth = 4                 # Maximum directory depth for recursive tree (1-10)
+max_entries_per_dir = 200     # Maximum files/dirs per directory (10-1000)  
+include_py_only = true        # Only include .py files and directories
+
+[context_enrichment]
+enable_usage_examples = true  # Use enhanced module-qualified usage examples
+```
+
+### How It Works
+
+1. **During Context Assembly**: 
+   - Builds recursive directory tree with safety limits
+   - Provides comprehensive project structure to LLM
+
+2. **During Test Generation**:
+   - Derives authoritative module path for the target file
+   - Injects module path and import suggestions into LLM context
+   - Enhances usage examples with module-qualified imports
+
+3. **During Test Execution**:
+   - Configures `PYTHONPATH` to include project root and `src/` 
+   - Ensures imports work correctly in both coverage and refinement
+
+### Benefits
+
+- **Eliminates Import Guessing**: LLM gets exact import paths instead of guessing
+- **Higher Success Rate**: More generated tests work correctly on first attempt
+- **Better Project Understanding**: LLM sees complete project structure
+- **Consistent Import Patterns**: All tests follow the same import conventions
+- **Reduced Manual Fixes**: Less time spent fixing import statements
+
+### Telemetry
+
+The system tracks module path derivation success rates:
+
+- `module_path_derived_total`: Total attempts
+- `module_path_derived_success`: Successful validations  
+- `module_path_status_*`: Breakdown by validation status
+- `module_path_fallback_used`: When fallback paths are used
+- `module_path_has_src`: Whether `src/` is in the path
+- `module_path_depth`: Depth of derived module paths
+
+### Troubleshooting
+
+#### Common Issues
+
+1. **Module not found errors**: Check that `PYTHONPATH` includes project root
+2. **Wrong import paths**: Verify project structure follows Python conventions
+3. **Performance issues**: Reduce `max_depth` or `max_entries_per_dir`
+4. **Validation failures**: Check logs for specific import validation errors
+
+#### Debug Mode
+
+Enable debug logging to see module path derivation details:
+
+```bash
+export TESTCRAFT_LOG_LEVEL=DEBUG
+testcraft generate --verbose
+```

@@ -6,11 +6,13 @@ pytest failure-based test refinement functionality.
 """
 
 from pathlib import Path
+from typing import Any
 from unittest.mock import Mock, patch
 
 import pytest
 
 from testcraft.adapters.refine.main_adapter import RefineAdapter
+from testcraft.config.models import RefineConfig
 from testcraft.ports.llm_port import LLMPort
 
 
@@ -20,15 +22,49 @@ class MockLLMPort:
     def __init__(self, responses: list = None):
         self.responses = responses or []
         self.call_count = 0
-        self.last_prompt = None
+        self.last_refinement_instructions = None
 
-    def generate(self, prompt: str, **kwargs) -> str:
-        self.last_prompt = prompt
+    def refine_content(
+        self, original_content: str, refinement_instructions: str, **kwargs
+    ) -> dict[str, Any]:
+        self.last_refinement_instructions = refinement_instructions
         if self.call_count < len(self.responses):
             response = self.responses[self.call_count]
             self.call_count += 1
-            return response
-        return "def test_example():\n    assert True"
+            return {
+                "refined_content": response,
+                "changes_made": "Mock refinement",
+                "confidence": 0.8,
+            }
+        return {
+            "refined_content": "def test_example():\n    assert True",
+            "changes_made": "Mock refinement",
+            "confidence": 0.8,
+        }
+
+    def generate_tests(
+        self,
+        code_content: str,
+        context: str = None,
+        test_framework: str = "pytest",
+        **kwargs,
+    ) -> dict[str, Any]:
+        return {
+            "tests": "def test_mock(): pass",
+            "coverage_focus": [],
+            "confidence": 0.5,
+            "metadata": {},
+        }
+
+    def analyze_code(
+        self, code_content: str, analysis_type: str = "comprehensive", **kwargs
+    ) -> dict[str, Any]:
+        return {
+            "testability_score": 5.0,
+            "complexity_metrics": {},
+            "recommendations": [],
+            "potential_issues": [],
+        }
 
 
 class TestRefineAdapter:
@@ -151,7 +187,7 @@ class TestRefineAdapter:
         # Mock LLM raising exception
         self.mock_llm.responses = []  # Empty responses will cause error
         with patch.object(
-            self.mock_llm, "generate", side_effect=Exception("LLM error")
+            self.mock_llm, "refine_content", side_effect=Exception("LLM error")
         ):
             result = self.adapter.refine_from_failures(
                 test_file="test_example.py", failure_output="AssertionError"
@@ -225,8 +261,8 @@ class TestRefineAdapter:
         assert payload["source_context"] == source_context
         assert payload["iteration"] == 2
 
-    def test_payload_to_prompt(self):
-        """Test converting payload to prompt."""
+    def test_payload_to_instructions(self):
+        """Test converting payload to refinement instructions."""
         payload = {
             "test_file_path": "test_example.py",
             "current_test_content": "def test_example():\n    assert False",
@@ -234,16 +270,15 @@ class TestRefineAdapter:
             "iteration": 1,
         }
 
-        prompt = self.adapter._payload_to_prompt(payload)
+        instructions = self.adapter._payload_to_instructions(payload)
 
-        assert "test_example.py" in prompt
-        assert "assert False" in prompt
-        assert "AssertionError" in prompt
-        assert "Iteration: 1" in prompt
-        assert "```python" in prompt
+        assert "test_example.py" in instructions
+        assert "assert False" in instructions
+        assert "AssertionError" in instructions
+        assert "Iteration: 1" in instructions
 
-    def test_payload_to_prompt_with_source_context(self):
-        """Test prompt generation with source context."""
+    def test_payload_to_instructions_with_source_context(self):
+        """Test instructions generation with source context."""
         payload = {
             "test_file_path": "test_example.py",
             "current_test_content": "def test_add(): pass",
@@ -252,10 +287,10 @@ class TestRefineAdapter:
             "source_context": {"imports": ["import math"], "functions": ["add"]},
         }
 
-        prompt = self.adapter._payload_to_prompt(payload)
+        instructions = self.adapter._payload_to_instructions(payload)
 
-        assert "Source Code Context:" in prompt
-        assert "import math" in prompt
+        assert "Source Code Context:" in instructions
+        assert "import math" in instructions
 
     def test_extract_test_content_with_code_block(self):
         """Test extracting test content from LLM response with code block."""
@@ -422,9 +457,240 @@ class TestRefineAdapterIntegration:
             assert result["iterations_used"] == 1
             assert "def test_fixed()" in result["refined_content"]
 
-            # Verify LLM was called with correct prompt
-            assert "AssertionError: assert 1 == 2" in mock_llm.last_prompt
-            assert "assert 1 == 2" in mock_llm.last_prompt
+            # Verify LLM was called with correct refinement instructions
+            assert (
+                "AssertionError: assert 1 == 2" in mock_llm.last_refinement_instructions
+            )
+            assert "assert 1 == 2" in mock_llm.last_refinement_instructions
+
+
+class TestRefineAdapterHardening:
+    """Tests for refinement hardening and validation."""
+
+    def test_validate_refined_content_none_content(self):
+        """Test validation rejects None content."""
+        llm = MockLLMPort()
+        config = RefineConfig()
+        adapter = RefineAdapter(llm, config=config)
+        
+        result = adapter._validate_refined_content(None, "original content")
+        
+        assert not result["is_valid"]
+        assert "None content" in result["reason"]
+
+    def test_validate_refined_content_empty_content(self):
+        """Test validation rejects empty content when configured."""
+        llm = MockLLMPort()
+        config = RefineConfig()
+        adapter = RefineAdapter(llm, config=config)
+        
+        result = adapter._validate_refined_content("", "original content")
+        
+        assert not result["is_valid"]
+        assert "empty or whitespace-only" in result["reason"]
+
+    def test_validate_refined_content_whitespace_only(self):
+        """Test validation rejects whitespace-only content."""
+        llm = MockLLMPort()
+        config = RefineConfig()
+        adapter = RefineAdapter(llm, config=config)
+        
+        result = adapter._validate_refined_content("   \n\t  ", "original content")
+        
+        assert not result["is_valid"]
+        assert "empty or whitespace-only" in result["reason"]
+
+    def test_validate_refined_content_literal_none(self):
+        """Test validation rejects literal 'None' strings."""
+        llm = MockLLMPort()
+        config = RefineConfig()
+        adapter = RefineAdapter(llm, config=config)
+        
+        test_cases = ["None", "none", "NONE", "null", "NULL", "Null"]
+        
+        for literal_none in test_cases:
+            result = adapter._validate_refined_content(literal_none, "original content")
+            assert not result["is_valid"], f"Should reject literal '{literal_none}'"
+            assert "literal" in result["reason"].lower()
+
+    def test_validate_refined_content_identical_content(self):
+        """Test validation rejects identical content when configured."""
+        llm = MockLLMPort()
+        config = RefineConfig()
+        adapter = RefineAdapter(llm, config=config)
+        
+        original = "def test_example():\n    assert True"
+        
+        result = adapter._validate_refined_content(original, original)
+        
+        assert not result["is_valid"]
+        assert "identical content" in result["reason"]
+
+    def test_validate_refined_content_syntax_error(self):
+        """Test validation rejects content with syntax errors."""
+        llm = MockLLMPort()
+        config = RefineConfig()
+        adapter = RefineAdapter(llm, config=config)
+        
+        invalid_python = "def test_example(\n    assert True  # missing closing paren"
+        
+        result = adapter._validate_refined_content(invalid_python, "original")
+        
+        assert not result["is_valid"]
+        assert "invalid Python syntax" in result["reason"]
+
+    def test_validate_refined_content_valid_python(self):
+        """Test validation passes for valid Python content."""
+        llm = MockLLMPort()
+        config = RefineConfig()
+        adapter = RefineAdapter(llm, config=config)
+        
+        valid_python = "def test_example():\n    assert True"
+        
+        result = adapter._validate_refined_content(valid_python, "different content")
+        
+        assert result["is_valid"]
+        assert "reason" not in result
+
+    def test_validate_test_path_safety_valid_paths(self):
+        """Test path safety validation accepts valid test paths."""
+        llm = MockLLMPort()
+        adapter = RefineAdapter(llm)
+        
+        valid_paths = [
+            Path("tests/test_example.py"),
+            Path("test_module.py"),
+            Path("/some/project/tests/test_feature.py"),
+        ]
+        
+        for path in valid_paths:
+            result = adapter._validate_test_path_safety(path)
+            assert result, f"Should accept valid path: {path}"
+
+    def test_validate_test_path_safety_invalid_paths(self):
+        """Test path safety validation rejects invalid paths."""
+        llm = MockLLMPort()
+        adapter = RefineAdapter(llm)
+        
+        invalid_paths = [
+            Path("src/module.py"),  # Not a test file
+            Path("tests/example.txt"),  # Not Python
+            Path("example.py"),  # No test indicator
+            Path("/etc/passwd"),  # System file
+        ]
+        
+        for path in invalid_paths:
+            result = adapter._validate_test_path_safety(path)
+            assert not result, f"Should reject invalid path: {path}"
+
+    def test_refine_from_failures_llm_no_change_early_exit(self, tmp_path):
+        """Test that llm_no_change status causes early exit."""
+        # Create test file
+        test_file = tmp_path / "test_example.py"
+        test_file.write_text("def test_example():\n    assert False")
+        
+        # Mock LLM that returns None (triggers validation failure)
+        llm = MockLLMPort([None])
+        config = RefineConfig()
+        adapter = RefineAdapter(llm, config=config)
+        
+        result = adapter.refine_from_failures(
+            test_file=test_file,
+            failure_output="Test failed",
+            max_iterations=3
+        )
+        
+        assert not result["success"]
+        assert result["final_status"] == "llm_no_change"
+        assert result["iterations_used"] == 1
+        assert "None content" in result["error"]
+
+    def test_refine_from_failures_identical_content_early_exit(self, tmp_path):
+        """Test that identical content causes early exit."""
+        # Create test file
+        original_content = "def test_example():\n    assert False"
+        test_file = tmp_path / "test_example.py"
+        test_file.write_text(original_content)
+        
+        # Mock LLM that returns identical content
+        llm = MockLLMPort([original_content])
+        config = RefineConfig()
+        adapter = RefineAdapter(llm, config=config)
+        
+        result = adapter.refine_from_failures(
+            test_file=test_file,
+            failure_output="Test failed",
+            max_iterations=3
+        )
+        
+        assert not result["success"]
+        assert result["final_status"] == "llm_no_change"
+        assert result["iterations_used"] == 1
+        assert "identical content" in result["error"]
+
+    def test_refine_from_failures_syntax_error_rollback(self, tmp_path):
+        """Test that syntax errors trigger rollback."""
+        # Create test file
+        original_content = "def test_example():\n    assert False"
+        test_file = tmp_path / "test_example.py"
+        test_file.write_text(original_content)
+        
+        # Mock LLM that returns invalid syntax
+        llm = MockLLMPort(["def test_example(\n    assert True  # syntax error"])
+        config = RefineConfig()
+        adapter = RefineAdapter(llm, config=config)
+        
+        result = adapter.refine_from_failures(
+            test_file=test_file,
+            failure_output="Test failed",
+            max_iterations=3
+        )
+        
+        assert not result["success"]
+        assert result["final_status"] == "llm_no_change"
+        assert "invalid Python syntax" in result["error"]
+        
+        # Verify original content is preserved
+        assert test_file.read_text() == original_content
+
+    def test_refine_config_guardrails_can_be_disabled(self):
+        """Test that guardrails can be selectively disabled."""
+        llm = MockLLMPort()
+        config = RefineConfig()
+        config.refinement_guardrails = {
+            "reject_empty": False,
+            "reject_literal_none": False,
+            "reject_identical": False,
+            "validate_syntax": False,
+            "format_on_refine": False,
+        }
+        adapter = RefineAdapter(llm, config=config)
+        
+        # Test that validation passes when guardrails are disabled
+        result = adapter._validate_refined_content("", "original")
+        assert result["is_valid"]  # Empty content allowed when reject_empty=False
+        
+        result = adapter._validate_refined_content("None", "original")
+        assert result["is_valid"]  # Literal None allowed when reject_literal_none=False
+        
+        result = adapter._validate_refined_content("original", "original")
+        assert result["is_valid"]  # Identical content allowed when reject_identical=False
+
+    def test_configuration_pytest_args_default(self):
+        """Test that pytest args have sensible defaults."""
+        config = RefineConfig()
+        assert config.pytest_args_for_refinement == ["-vv", "--tb=short", "-x"]
+
+    def test_configuration_guardrails_defaults(self):
+        """Test that guardrails have safe defaults."""
+        config = RefineConfig()
+        guardrails = config.refinement_guardrails
+        
+        assert guardrails["reject_empty"] is True
+        assert guardrails["reject_literal_none"] is True
+        assert guardrails["reject_identical"] is True
+        assert guardrails["validate_syntax"] is True
+        assert guardrails["format_on_refine"] is True
 
 
 if __name__ == "__main__":

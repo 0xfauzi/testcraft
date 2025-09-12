@@ -3,342 +3,89 @@
   "file_states": {},
   "generation_log": [],
   "idempotent_decisions": {},
+  "immediate_generation_log": {
+    "errors": [
+      "Refinement failed: Maximum refinement iterations (3) exceeded"
+    ],
+    "file_path": "tests/test_testelementtype.py",
+    "stages": {
+      "generation": {
+        "content_length": 6,
+        "error": null,
+        "success": true
+      },
+      "refinement": {
+        "error": "Maximum refinement iterations (3) exceeded",
+        "final_status": "failed",
+        "iterations": 3,
+        "success": false
+      },
+      "write": {
+        "bytes_written": 6,
+        "error": null,
+        "formatted": true,
+        "success": true
+      }
+    },
+    "success": false,
+    "timestamp": "2025-09-10T00:13:15.904638"
+  },
   "last_generation_run": {
     "config_used": {
       "batch_size": 5,
-      "context": {
-        "hybrid_weights": {},
-        "hyde": false,
-        "rerank_model": null,
-        "retrieval_settings": {}
+      "context_categories": {
+        "callgraph": true,
+        "contracts": true,
+        "coverage_hints": true,
+        "deps_config_fixtures": true,
+        "error_paths": true,
+        "neighbors": true,
+        "path_constraints": true,
+        "pytest_settings": true,
+        "side_effects": true,
+        "snippets": true,
+        "test_exemplars": true,
+        "usage_examples": true
       },
-      "cost_management": {
-        "cost_thresholds": {
-          "daily_limit": 50.0,
-          "per_request_limit": 2.0,
-          "warning_threshold": 1.0
-        },
-        "enable_content_compression": true,
-        "max_context_size_chars": 100000,
-        "max_file_size_kb": 50,
-        "max_files_per_request": 15,
-        "skip_trivial_files": true,
-        "token_usage_logging": true,
-        "use_cheaper_model_threshold_kb": 10
-      },
-      "coverage": {
-        "env": {
-          "append_pythonpath": [],
-          "extra": {},
-          "propagate": true
-        },
-        "junit_xml": true,
-        "minimum_branch_coverage": 70.0,
-        "minimum_line_coverage": 80.0,
-        "pytest_args": [],
-        "regenerate_if_below": 60.0,
-        "runner": {
-          "args": [],
-          "custom_cmd": [],
-          "cwd": null,
-          "mode": "python-module",
-          "pytest_path": "pytest",
-          "python": null
-        }
+      "context_enrichment": {
+        "enable_comprehensive_fixtures": true,
+        "enable_db_boundary_detection": true,
+        "enable_env_detection": true,
+        "enable_http_boundary_detection": true,
+        "enable_side_effect_detection": true,
+        "max_env_vars": 20,
+        "max_fixtures": 15
       },
       "coverage_threshold": 0.8,
+      "disable_ruff_format": false,
       "enable_context": true,
       "enable_refinement": true,
       "enable_streaming": false,
-      "environment": {
-        "auto_detect": true,
-        "dependency_validation": true,
-        "overrides": {
-          "conda": {
-            "activate_environment": true
-          },
-          "pipenv": {
-            "use_pipenv_run": true
-          },
-          "poetry": {
-            "respect_poetry_venv": true,
-            "use_poetry_run": true
-          },
-          "uv": {
-            "use_uv_run": false
-          }
-        },
-        "preferred_manager": "auto",
-        "respect_virtual_env": true
-      },
-      "evaluation": {
-        "acceptance_checks": true,
-        "artifacts_path": ".testcraft/evaluation_artifacts",
-        "batch_size": 10,
-        "confidence_level": 0.95,
-        "enabled": false,
-        "evaluation_timeout_seconds": 300,
-        "golden_repos_path": null,
-        "human_review_enabled": false,
-        "llm_judge_enabled": false,
-        "prompt_version": null,
-        "rubric_dimensions": [
-          "correctness",
-          "coverage",
-          "clarity",
-          "safety"
-        ],
-        "state_file": ".testcraft_evaluation_state.json",
-        "statistical_testing": true
-      },
-      "generation": {
-        "always_analyze_new_files": false,
-        "generate_fixtures": true,
-        "include_docstrings": true,
-        "max_test_methods_per_class": 20,
-        "merge": {
-          "dry_run": false,
-          "formatter": "none",
-          "strategy": "append"
-        },
-        "parametrize_similar_tests": true,
-        "refine": {
-          "backoff_base_sec": 1.0,
-          "backoff_max_sec": 8.0,
-          "enable": false,
-          "max_retries": 2,
-          "max_total_minutes": 5.0,
-          "stop_on_no_change": true,
-          "strategy": "auto"
-        },
-        "test_runner": {
-          "args": [],
-          "cwd": null,
-          "enable": false,
-          "junit_xml": true
-        }
-      },
-      "llm": {
-        "anthropic_api_key": null,
-        "anthropic_max_tokens": 100000,
-        "anthropic_model": "claude-3-7-sonnet",
-        "anthropic_timeout": 60.0,
-        "aws_access_key_id": null,
-        "aws_region": null,
-        "aws_secret_access_key": null,
-        "azure_openai_api_key": null,
-        "azure_openai_api_version": "2024-02-15-preview",
-        "azure_openai_deployment": "o4-mini",
-        "azure_openai_endpoint": null,
-        "azure_openai_timeout": 60.0,
-        "bedrock_model_id": "anthropic.claude-3-7-sonnet-v1:0",
-        "bedrock_timeout": 60.0,
-        "default_provider": "openai",
-        "enable_streaming": false,
-        "max_retries": 3,
-        "openai_api_key": null,
-        "openai_base_url": null,
-        "openai_max_tokens": 12000,
-        "openai_model": "gpt-4",
-        "openai_timeout": 60.0,
-        "temperature": 0.1
-      },
+      "immediate_refinement": true,
+      "keep_failed_writes": false,
+      "max_refine_workers": 2,
       "max_refinement_iterations": 3,
-      "prompt_engineering": {
-        "confidence_based_adaptation": true,
-        "decisive_recommendations": true,
-        "enable_failure_strategies": true,
-        "enable_self_debugging": true,
-        "encourage_step_by_step": true,
-        "minimize_xml_structure": true,
-        "preserve_uncertainty": false,
-        "track_reasoning_quality": true,
-        "use_2025_guidelines": true,
-        "use_enhanced_examples": true,
-        "use_enhanced_reasoning": true,
-        "use_positive_negative_examples": true
-      },
-      "quality": {
-        "display_detailed_results": true,
-        "enable_mutation_testing": true,
-        "enable_pattern_analysis": true,
-        "enable_quality_analysis": true,
-        "max_mutants_per_file": 50,
-        "minimum_mutation_score": 80.0,
-        "minimum_quality_score": 75.0,
-        "modern_mutators": {
-          "async_severity": "high",
-          "dataclass_severity": "medium",
-          "enable_async_await": true,
-          "enable_dataclass": true,
-          "enable_type_hints": true,
-          "type_hints_severity": "medium"
+      "prompt_budgets": {
+        "per_item_chars": 1500,
+        "section_caps": {
+          "callgraph": 3,
+          "contracts": 8,
+          "coverage_hints": 3,
+          "deps_config_fixtures": 2,
+          "error_paths": 3,
+          "neighbors": 5,
+          "path_constraints": 3,
+          "pytest_settings": 1,
+          "side_effects": 1,
+          "snippets": 10,
+          "test_exemplars": 5,
+          "usage_examples": 5
         },
-        "mutation_timeout": 30
+        "total_chars": 10000
       },
-      "security": {
-        "block_dangerous_patterns": true,
-        "block_patterns": [
-          "eval\\s*\\(",
-          "exec\\s*\\(",
-          "__import__\\s*\\(",
-          "subprocess\\.",
-          "os\\.system"
-        ],
-        "enable_ast_validation": false,
-        "max_generated_file_size": 50000
-      },
-      "style": {
-        "assertion_style": "pytest",
-        "framework": "pytest",
-        "mock_library": "unittest.mock"
-      },
-      "telemetry": {
-        "anonymize_code_content": true,
-        "anonymize_file_paths": true,
-        "backend": "opentelemetry",
-        "backends": {
-          "datadog": {
-            "api_key": null,
-            "env": "development",
-            "service": "testcraft",
-            "site": "datadoghq.com",
-            "version": null
-          },
-          "jaeger": {
-            "agent_host_name": "localhost",
-            "agent_port": 6831,
-            "endpoint": "http://localhost:14268/api/traces"
-          },
-          "opentelemetry": {
-            "endpoint": null,
-            "headers": {},
-            "insecure": false,
-            "timeout": 10
-          }
-        },
-        "capture_coverage_runs": true,
-        "capture_file_operations": true,
-        "capture_llm_calls": true,
-        "capture_test_generation": true,
-        "collect_metrics": true,
-        "enabled": false,
-        "environment": "development",
-        "global_attributes": {},
-        "metrics_interval_seconds": 30,
-        "opt_out_data_collection": false,
-        "service_name": "testcraft",
-        "service_version": null,
-        "trace_sampling_rate": 1.0,
-        "track_coverage_delta": true,
-        "track_test_pass_rate": true,
-        "track_token_usage": true
-      },
-      "test_framework": "pytest",
-      "test_patterns": {
-        "exclude": [
-          "migrations/*",
-          "*/deprecated/*",
-          "__pycache__/*",
-          "*.pyc"
-        ],
-        "exclude_dirs": [
-          "venv",
-          "env",
-          ".env",
-          ".venv",
-          "virtualenv",
-          "ENV",
-          "env.bak",
-          "venv.bak",
-          ".venv-*",
-          "poetry-*",
-          "conda-meta",
-          "envs",
-          ".venv-*",
-          ".uv-cache",
-          "build",
-          "dist",
-          "*.egg-info",
-          "*.dist-info",
-          "pip-wheel-metadata",
-          "pip-build-env",
-          "__pycache__",
-          ".pytest_cache",
-          ".coverage",
-          ".cache",
-          ".mypy_cache",
-          ".ruff_cache",
-          ".tox",
-          ".nox",
-          ".hypothesis",
-          ".vscode",
-          ".idea",
-          ".vs",
-          ".atom",
-          ".sublime-project",
-          ".sublime-workspace",
-          ".git",
-          ".hg",
-          ".svn",
-          ".bzr",
-          "node_modules",
-          "bower_components",
-          "docs/_build",
-          "_build",
-          "site",
-          ".pytest_cache",
-          ".coverage",
-          "htmlcov",
-          ".stestr",
-          ".testrepository",
-          ".artifacts",
-          "site-packages",
-          "lib",
-          "lib64",
-          "include",
-          "bin",
-          "Scripts",
-          "share",
-          "pyvenv.cfg",
-          "Lib",
-          "local",
-          "pkg_resources",
-          "pip",
-          "setuptools",
-          "wheel",
-          "distutils-precedence.pth",
-          ".DS_Store",
-          "Thumbs.db",
-          "tmp",
-          "temp",
-          ".tmp",
-          ".temp",
-          "lib2to3",
-          "test",
-          "tests",
-          ".ipynb_checkpoints",
-          ".dockerignore",
-          "docker-compose.override.yml",
-          ".pipfile",
-          ".poetry",
-          ".pdm-build",
-          "pyvenv.cfg",
-          "conda-meta",
-          ".github",
-          ".gitlab",
-          ".circleci",
-          ".travis",
-          "docs",
-          "_static",
-          "_templates"
-        ],
-        "test_patterns": [
-          "test_*.py",
-          "*_test.py",
-          "tests/**/test_*.py"
-        ]
-      }
+      "refine_on_first_failure_only": true,
+      "refinement_backoff_sec": 0.2,
+      "test_framework": "pytest"
     },
     "coverage_improvement": {
       "branch_coverage_delta": 0.0,
@@ -351,14 +98,14 @@
       "total_lines_delta": 0
     },
     "generation_summary": {
-      "failed_generations": 1,
-      "successful_generations": 0,
+      "failed_generations": 0,
+      "successful_generations": 1,
       "total_files_processed": 1
     },
-    "last_run_timestamp": 730114.199151791,
+    "last_run_timestamp": 793113.26958975,
     "refinement_summary": {
       "successful_refinements": 0,
-      "total_files_refined": 0
+      "total_files_refined": 1
     }
   },
   "metadata": {

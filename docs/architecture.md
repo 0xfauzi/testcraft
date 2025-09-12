@@ -39,8 +39,12 @@ TestCraft follows **Clean Architecture** principles, organizing code in concentr
 │         Application Services            │
 │  ┌─────────────────┐ ┌────────────────┐ │
 │  │  Generate Use   │ │  Evaluate Use  │ │
-│  │     Cases       │ │     Cases      │ │
-│  └─────────────────┘ └────────────────┘ │
+│  │   Case (Orch)   │ │     Cases      │ │
+│  │  ┌──────────┐   │ └────────────────┘ │
+│  │  │Generation│   │                    │
+│  │  │ Services │   │                    │
+│  │  └──────────┘   │                    │
+│  └─────────────────┘                    │
 ├─────────────────────────────────────────┤
 │            Domain Models                │
 │  ┌─────────────────┐ ┌────────────────┐ │
@@ -209,6 +213,40 @@ class GenerateUseCase:
                 success=False
             )
 ```
+
+### Modular Generation Architecture
+
+TestCraft employs a **modular service architecture** for test generation, breaking down the complex workflow into focused, testable services. This design promotes maintainability, testability, and reusability.
+
+```
+testcraft/application/generation/
+├── config.py                     # Centralized configuration management
+└── services/
+    ├── state_discovery.py        # State sync & file discovery
+    ├── coverage_evaluator.py     # Coverage measurement & deltas
+    ├── plan_builder.py           # File selection & plan creation  
+    ├── content_builder.py        # Source extraction & test paths
+    ├── context_assembler.py      # Unified context building
+    ├── enrichment_detectors.py   # Context enrichment detection
+    ├── batch_executor.py         # Concurrent test generation
+    ├── pytest_refiner.py         # Test execution & refinement
+    └── structure.py              # Directory tree building
+```
+
+#### Service Responsibilities
+
+- **StateSyncDiscovery**: State sync and source file discovery
+- **CoverageEvaluator**: Coverage measurement with graceful failure handling
+- **PlanBuilder**: File selection decisions and TestGenerationPlan creation
+- **ContentBuilder**: Source code extraction and test path determination
+- **ContextAssembler**: Unified context building for generation and refinement
+- **EnrichmentDetectors**: Detection of env/config, clients, fixtures, side-effects
+- **BatchExecutor**: Concurrent execution with proper error aggregation
+- **PytestRefiner**: Test execution, failure formatting, and refinement loops
+
+#### Orchestrator Pattern
+
+The `GenerateUseCase` class serves as a **thin orchestrator** that delegates to focused services while maintaining the original public API contract. This preserves backward compatibility while enabling modular testing and maintenance.
 
 ### Use Case Composition
 

@@ -108,9 +108,9 @@ class CIArtifactManager:
                 for file_path in dest_dir.rglob("*"):
                     if file_path.is_file():
                         artifacts["prompt_artifacts"].append(str(file_path))
-                        artifacts["size_info"][str(file_path)] = (
-                            file_path.stat().st_size
-                        )
+                        artifacts["size_info"][
+                            str(file_path)
+                        ] = file_path.stat().st_size
 
                 print(
                     f"  ✓ Collected {len(artifacts['prompt_artifacts'])} prompt artifact files"

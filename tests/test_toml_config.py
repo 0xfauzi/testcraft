@@ -154,14 +154,23 @@ coverage:
         # Change to the temp directory so the files are found
         import os
 
-        original_cwd = os.getcwd()
+        try:
+            original_cwd = os.getcwd()
+        except (OSError, FileNotFoundError):
+            # If we can't get current directory, use a safe fallback
+            original_cwd = "/tmp"
+
         try:
             os.chdir(tmp_path)
             loader = ConfigLoader()
             config = loader.load_config()
             assert config.coverage.minimum_line_coverage == 90.0  # From TOML, not YAML
         finally:
-            os.chdir(original_cwd)
+            try:
+                os.chdir(original_cwd)
+            except (OSError, FileNotFoundError):
+                # If restoration fails, just continue - test env cleanup will handle it
+                pass
 
     def test_invalid_toml_syntax_error(self, tmp_path: Path) -> None:
         """Test handling of invalid TOML syntax."""
@@ -278,7 +287,12 @@ class TestTOMLConfigurationGeneration:
         """Test creating TOML config with default filename."""
         import os
 
-        original_cwd = os.getcwd()
+        try:
+            original_cwd = os.getcwd()
+        except (OSError, FileNotFoundError):
+            # If we can't get current directory, use a safe fallback
+            original_cwd = "/tmp"
+
         try:
             os.chdir(tmp_path)
             loader = ConfigLoader()
@@ -288,7 +302,11 @@ class TestTOMLConfigurationGeneration:
             assert str(created_path) == ".testcraft.toml"  # Returns relative path
             assert expected_path.exists()
         finally:
-            os.chdir(original_cwd)
+            try:
+                os.chdir(original_cwd)
+            except (OSError, FileNotFoundError):
+                # If restoration fails, just continue - test env cleanup will handle it
+                pass
 
 
 class TestTOMLEvaluationConfiguration:

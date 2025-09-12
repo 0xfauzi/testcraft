@@ -10,20 +10,29 @@ dependencies = [
     # Core config and validation
     "pydantic>=2.0.0",
     "pydantic-settings>=2.0.0",
-    "tomli-w>=1.0.0",         # TOML writing support (reading via built-in tomllib)
+    "tomli-w>=1.0.0", # TOML writing support (reading via built-in tomllib)
     # AI/LLM SDKs - Latest versions as of September 2025
-    "openai>=1.106.1",        # OpenAI SDK v1.106.1
-    "anthropic>=0.66.0",      # Anthropic Claude SDK v0.66.0
+    "openai>=1.106.1", # OpenAI SDK v1.106.1
+    "anthropic>=0.66.0", # Anthropic Claude SDK v0.66.0
     # Azure OpenAI uses the same openai package with Azure endpoint configuration
-    "langchain-aws>=0.1.0",   # AWS Bedrock via LangChain ChatBedrock
+    "langchain-aws>=0.1.0", # AWS Bedrock via LangChain ChatBedrock
     "azure-identity>=1.15.0", # Azure AD authentication
     # HTTP and async support
-    "httpx>=0.24.0",          # Modern HTTP client for async support
-    "aiofiles>=23.0.0",       # Async file operations
+    "httpx>=0.24.0", # Modern HTTP client for async support
+    "aiofiles>=23.0.0", # Async file operations
+    "textual>=6.1.0",
+    "textual-dev>=1.7.0",
+    "textual-web>=0.4.2",
 ]
 
 [project.scripts]
 testcraft = "testcraft.cli.main:app"
+
+[project.optional-dependencies]
+# Code formatting tools - users can install their preferred combination
+formatters-ruff = ["ruff>=0.12.0"]
+formatters-legacy = ["black>=23.0.0", "isort>=5.12.0"]
+formatters-all = ["ruff>=0.12.0", "black>=23.0.0", "isort>=5.12.0"]
 
 [tool.uv]
 package = true
@@ -36,6 +45,7 @@ build-backend = "setuptools.build_meta"
 dev = [
     "mypy>=1.17.1",
     "pytest>=8.4.2",
+    "pytest-asyncio>=0.23.7",
     "pytest-cov>=6.3.0",
     "ruff>=0.12.12",
 ]

@@ -7,6 +7,7 @@ utilities. It intentionally focuses on Python-specific execution
 patterns to keep `subprocess_safe` generic and single-purpose.
 """
 
+import sys
 from .subprocess_safe import run_subprocess_simple
 
 
@@ -25,7 +26,10 @@ def run_python_module(
     Returns:
         tuple: (stdout, stderr, return_code)
     """
-    cmd = ["python", "-m", module_name]
+    # Use the same Python executable that's running this script
+    # This ensures we use the correct Python (python3, python3.11, etc.)
+    python_executable = sys.executable
+    cmd = [python_executable, "-m", module_name]
     if args:
         cmd.extend(args)
 

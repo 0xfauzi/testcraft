@@ -11,7 +11,8 @@ from unittest.mock import ANY, Mock
 import pytest
 
 from testcraft.adapters.io.file_discovery import FileDiscoveryService
-from testcraft.application.coverage_usecase import CoverageUseCase, CoverageUseCaseError
+from testcraft.application.coverage_usecase import (CoverageUseCase,
+                                                    CoverageUseCaseError)
 from testcraft.domain.models import CoverageResult
 from testcraft.ports.coverage_port import CoveragePort
 from testcraft.ports.state_port import StatePort

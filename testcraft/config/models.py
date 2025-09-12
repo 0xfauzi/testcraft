@@ -293,6 +293,154 @@ class RefineConfig(BaseModel):
         default=5.0, ge=0.1, description="Maximum total time for refinement"
     )
 
+    # Immediate refinement configuration
+    immediate_refinement: bool = Field(
+        default=True, description="Enable immediate write-and-refine per file"
+    )
+
+    max_refine_workers: int = Field(
+        default=2, ge=1, le=8, description="Limit concurrent pytest/refine workers"
+    )
+
+    keep_failed_writes: bool = Field(
+        default=False, description="Keep test files that fail to write or have syntax errors"
+    )
+
+    refine_on_first_failure_only: bool = Field(
+        default=True, description="Stop refinement at first pytest failure within a file"
+    )
+
+    refinement_backoff_sec: float = Field(
+        default=0.2, ge=0.0, le=5.0, description="Backoff between refinement iterations"
+    )
+
+    # Strict refinement policies (new)
+    strict_assertion_preservation: bool = Field(
+        default=True, 
+        description="Prevent refinement from weakening test assertions to pass (detects production bugs)"
+    )
+    
+    fail_on_xfail_markers: bool = Field(
+        default=True,
+        description="Treat tests marked with xfail as refinement failures (prevents masking bugs)"
+    )
+    
+    allow_xfail_on_suspected_bugs: bool = Field(
+        default=False,
+        description="Allow adding xfail markers when production bugs are suspected (teams can opt-in)"
+    )
+    
+    report_suspected_prod_bugs: bool = Field(
+        default=True,
+        description="Generate detailed reports when refinement suspects production bugs"
+    )
+
+    # Refinement guardrails configuration
+    refinement_guardrails: dict[str, Any] = Field(
+        default_factory=lambda: {
+            "reject_empty": True,
+            "reject_literal_none": True, 
+            "reject_identical": True,
+            "validate_syntax": True,
+            "format_on_refine": True,
+        },
+        description="Safety guardrails for refinement operations"
+    )
+
+    pytest_args_for_refinement: list[str] = Field(
+        default=["-vv", "--tb=short", "-x"],
+        description="Pytest arguments specifically for refinement runs"
+    )
+
+    # Content validation and equivalence checking
+    allow_ast_equivalence_check: bool = Field(
+        default=True,
+        description="Enable AST-based semantic equivalence checking to detect meaningful vs cosmetic changes"
+    )
+    
+    treat_cosmetic_as_no_change: bool = Field(
+        default=True,
+        description="Treat cosmetic-only changes (whitespace, formatting) as no change to avoid unnecessary iterations"
+    )
+    
+    max_diff_hunks: int = Field(
+        default=3,
+        ge=1,
+        le=20,
+        description="Maximum number of diff hunks to include in logs and reports for readability"
+    )
+    
+    # Failed test annotation configuration
+    annotate_failed_tests: bool = Field(
+        default=True,
+        description="Annotate test files with fix instructions when refinement fails"
+    )
+    
+    annotation_placement: Literal["top", "bottom"] = Field(
+        default="top",
+        description="Where to place failure annotations in test files"
+    )
+    
+    annotation_include_failure_excerpt: bool = Field(
+        default=True,
+        description="Include trimmed failure output in annotations"
+    )
+    
+    annotation_max_failure_chars: int = Field(
+        default=600,
+        ge=100,
+        le=2000,
+        description="Maximum characters of failure output to include in annotations"
+    )
+    
+    annotation_style: Literal["docstring", "hash"] = Field(
+        default="docstring",
+        description="Style of annotation: docstring (triple quotes) or hash (comment lines)"
+    )
+    
+    include_llm_fix_instructions: bool = Field(
+        default=True,
+        description="Include LLM fix instructions in failure annotations"
+    )
+    
+    # Import path resolution and targeting
+    prefer_runtime_import_paths: bool = Field(
+        default=True,
+        description="Prefer import paths extracted from error traces over source tree aliases for better mocking"
+    )
+    
+    # Timeout and hang prevention
+    enable_timeout_detection: bool = Field(
+        default=True,
+        description="Enable timeout detection and classification for hanging tests"
+    )
+    
+    timeout_threshold_seconds: float = Field(
+        default=30.0,
+        ge=5.0,
+        le=300.0,
+        description="Threshold for classifying test executions as hanging/timing out"
+    )
+    
+    # Schema validation and repair
+    enable_schema_repair: bool = Field(
+        default=True,
+        description="Enable single-shot LLM schema repair for malformed refinement outputs"
+    )
+    
+    schema_repair_temperature: float = Field(
+        default=0.0,
+        ge=0.0,
+        le=1.0,
+        description="Temperature for schema repair prompts (lower = more deterministic)"
+    )
+    
+    # Preflight analysis
+    enable_preflight_analysis: bool = Field(
+        default=True,
+        description="Enable preflight canonicalization analysis to provide proactive suggestions to LLM"
+    )
+
 
 class TestGenerationConfig(BaseModel):
     """Configuration for test generation behavior."""
@@ -331,6 +479,38 @@ class TestGenerationConfig(BaseModel):
     )
 
 
+class ContextEnrichmentConfig(BaseModel):
+    """Configuration for context enrichment during test generation."""
+
+    enable_env_detection: bool = Field(
+        default=True, description="Enable environment variable usage detection"
+    )
+
+    enable_db_boundary_detection: bool = Field(
+        default=True, description="Enable database client boundary detection"
+    )
+
+    enable_http_boundary_detection: bool = Field(
+        default=True, description="Enable HTTP client boundary detection"
+    )
+
+    enable_comprehensive_fixtures: bool = Field(
+        default=True, description="Enable comprehensive pytest fixture discovery"
+    )
+
+    enable_side_effect_detection: bool = Field(
+        default=True, description="Enable side-effect boundary detection"
+    )
+
+    max_env_vars: int = Field(
+        default=20, ge=1, le=100, description="Maximum environment variables to include"
+    )
+
+    max_fixtures: int = Field(
+        default=15, ge=1, le=50, description="Maximum fixtures to include"
+    )
+
+
 class EnvironmentOverrideConfig(BaseModel):
     """Configuration for environment-specific overrides."""
 
@@ -359,9 +539,9 @@ class EnvironmentConfig(BaseModel):
         default=True, description="Auto-detect current environment manager"
     )
 
-    preferred_manager: Literal["poetry", "pipenv", "conda", "uv", "venv", "auto"] = (
-        Field(default="auto", description="Preferred environment manager")
-    )
+    preferred_manager: Literal[
+        "poetry", "pipenv", "conda", "uv", "venv", "auto"
+    ] = Field(default="auto", description="Preferred environment manager")
 
     respect_virtual_env: bool = Field(
         default=True, description="Always use current virtual env"
@@ -429,63 +609,6 @@ class CostConfig(BaseModel):
     )
 
 
-class SecurityConfig(BaseModel):
-    """Configuration for security settings."""
-
-    enable_ast_validation: bool = Field(
-        default=False, description="Use AST validation (slower but more secure)"
-    )
-
-    max_generated_file_size: int = Field(
-        default=50000,
-        ge=1000,
-        description="Maximum size for generated test files (bytes)",
-    )
-
-    block_dangerous_patterns: bool = Field(
-        default=True, description="Block potentially dangerous code patterns"
-    )
-
-    block_patterns: list[str] = Field(
-        default_factory=lambda: [
-            r"eval\s*\(",
-            r"exec\s*\(",
-            r"__import__\s*\(",
-            r"subprocess\.",
-            r"os\.system",
-        ],
-        description="Patterns to block in generated code",
-    )
-
-
-class ModernMutatorConfig(BaseModel):
-    """Configuration for modern Python mutators."""
-
-    enable_type_hints: bool = Field(
-        default=True, description="Enable type hint mutations"
-    )
-
-    enable_async_await: bool = Field(
-        default=True, description="Enable async/await mutations"
-    )
-
-    enable_dataclass: bool = Field(
-        default=True, description="Enable dataclass mutations"
-    )
-
-    type_hints_severity: Literal["low", "medium", "high"] = Field(
-        default="medium", description="Severity for type hint mutations"
-    )
-
-    async_severity: Literal["low", "medium", "high"] = Field(
-        default="high", description="Async mutations severity"
-    )
-
-    dataclass_severity: Literal["low", "medium", "high"] = Field(
-        default="medium", description="Dataclass mutations severity"
-    )
-
-
 class QualityConfig(BaseModel):
     """Configuration for test quality analysis."""
 
@@ -527,82 +650,11 @@ class QualityConfig(BaseModel):
         default=True, description="Enable failure pattern analysis for smart refinement"
     )
 
-    modern_mutators: ModernMutatorConfig = Field(
-        default_factory=ModernMutatorConfig,
-        description="Modern Python mutators configuration",
-    )
 
-
-class PromptEngineeringConfig(BaseModel):
-    """Configuration for prompt engineering settings."""
-
-    use_2025_guidelines: bool = Field(
-        default=True, description="Use improved prompts following latest best practices"
-    )
-
-    encourage_step_by_step: bool = Field(
-        default=True, description="Include step-by-step reasoning prompts (legacy)"
-    )
-
-    use_positive_negative_examples: bool = Field(
-        default=True, description="Include positive/negative examples in prompts"
-    )
-
-    minimize_xml_structure: bool = Field(
-        default=True, description="Reduce excessive XML tags in prompts"
-    )
-
-    decisive_recommendations: bool = Field(
-        default=True, description="Encourage single, strong recommendations"
-    )
-
-    preserve_uncertainty: bool = Field(
-        default=False, description="Whether to include hedging language"
-    )
-
-    use_enhanced_reasoning: bool = Field(
-        default=True, description="Use advanced Chain-of-Thought reasoning"
-    )
-
-    enable_self_debugging: bool = Field(
-        default=True, description="Enable self-debugging and review checkpoints"
-    )
-
-    use_enhanced_examples: bool = Field(
-        default=True, description="Use detailed examples with reasoning"
-    )
-
-    enable_failure_strategies: bool = Field(
-        default=True, description="Use failure-specific debugging strategies"
-    )
-
-    confidence_based_adaptation: bool = Field(
-        default=True, description="Adapt prompts based on confidence levels"
-    )
-
-    track_reasoning_quality: bool = Field(
-        default=True, description="Monitor and track reasoning quality"
-    )
-
-
-class ContextConfig(BaseModel):
-    """Configuration for context retrieval and processing."""
-
-    retrieval_settings: dict[str, Any] = Field(
-        default_factory=dict, description="Context retrieval settings"
-    )
-
-    hybrid_weights: dict[str, float] = Field(
-        default_factory=dict, description="Weights for hybrid search"
-    )
-
-    rerank_model: str | None = Field(
-        default=None, description="Model to use for reranking"
-    )
-
-    hyde: bool = Field(
-        default=False, description="Enable HyDE (Hypothetical Document Embeddings)"
-    )
+"""
+Note: security, prompt_engineering, and context settings were removed
+because no runtime logic consumes them yet. Reintroduce only when wired.
+"""
 
 
 class TelemetryBackendConfig(BaseModel):
@@ -648,7 +700,7 @@ class LLMProviderConfig(BaseModel):
         description="OpenAI API key (or set OPENAI_API_KEY environment variable)",
     )
     openai_model: str = Field(
-        default="o4-mini", description="OpenAI model to use for test generation"
+        default="gpt-4.1", description="OpenAI model to use for test generation"
     )
     openai_base_url: str | None = Field(
         default=None, description="Custom OpenAI API base URL (optional)"
@@ -672,7 +724,7 @@ class LLMProviderConfig(BaseModel):
         description="Anthropic API key (or set ANTHROPIC_API_KEY environment variable)",
     )
     anthropic_model: str = Field(
-        default="claude-3-7-sonnet",
+        default="claude-sonnet-4",
         description="Anthropic model to use for test generation",
     )
     anthropic_max_tokens: int = Field(
@@ -698,7 +750,7 @@ class LLMProviderConfig(BaseModel):
         description="Azure OpenAI endpoint URL (or set AZURE_OPENAI_ENDPOINT environment variable)",
     )
     azure_openai_deployment: str = Field(
-        default="o4-mini", description="Azure OpenAI deployment name"
+        default="claude-sonnet-4", description="Azure OpenAI deployment name"
     )
     azure_openai_api_version: str = Field(
         default="2024-02-15-preview", description="Azure OpenAI API version"
@@ -965,6 +1017,12 @@ class TestCraftConfig(BaseModel):
         description="Test generation behavior configuration",
     )
 
+    # Context enrichment configuration
+    context_enrichment: ContextEnrichmentConfig = Field(
+        default_factory=ContextEnrichmentConfig,
+        description="Context enrichment configuration",
+    )
+
     # Environment management
     environment: EnvironmentConfig = Field(
         default_factory=EnvironmentConfig,
@@ -976,26 +1034,11 @@ class TestCraftConfig(BaseModel):
         default_factory=CostConfig, description="Cost management and optimization"
     )
 
-    # Security settings
-    security: SecurityConfig = Field(
-        default_factory=SecurityConfig, description="Security configuration"
-    )
+    # Removed unused sections: security, prompt_engineering, context
 
     # Quality analysis
     quality: QualityConfig = Field(
         default_factory=QualityConfig, description="Test quality analysis configuration"
-    )
-
-    # Prompt engineering
-    prompt_engineering: PromptEngineeringConfig = Field(
-        default_factory=PromptEngineeringConfig,
-        description="Prompt engineering configuration",
-    )
-
-    # Context processing
-    context: ContextConfig = Field(
-        default_factory=ContextConfig,
-        description="Context retrieval and processing configuration",
     )
 
     # Telemetry and observability

@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Any
 
 from ..adapters.io.file_discovery import FileDiscoveryService
+from ..adapters.parsing.test_mapper import TestMapper
 from ..domain.models import AnalysisReport
 from ..ports.coverage_port import CoveragePort
 from ..ports.state_port import StatePort
@@ -69,6 +70,11 @@ class AnalyzeUseCase:
             **(config or {}),
         }
 
+        # Per-run caches for AST-based test detection
+        self._current_project_path: Path | None = None
+        self._cached_test_files: list[str] | None = None
+        self._test_mapper = TestMapper()
+
     async def analyze_generation_needs(
         self,
         project_path: str | Path,
@@ -99,6 +105,15 @@ class AnalyzeUseCase:
         ) as span:
             try:
                 logger.info("Starting analysis for project: %s", project_path)
+
+                # Cache project path and discovered test files for AST-based detection
+                self._current_project_path = project_path
+                try:
+                    self._cached_test_files = self._file_discovery.discover_test_files(
+                        project_path
+                    )
+                except Exception:
+                    self._cached_test_files = []
 
                 # Step 1: Sync state and discover files
                 discovery_result = await self._sync_state_and_discover_files(
@@ -367,14 +382,49 @@ class AnalyzeUseCase:
             return True
 
     def _has_existing_tests(self, file_path: Path) -> bool:
-        """Check if a file has existing test files."""
-        potential_test_files = [
-            file_path.parent / f"test_{file_path.name}",
-            file_path.parent / f"{file_path.stem}_test.py",
-            file_path.parent.parent / "tests" / f"test_{file_path.name}",
-        ]
+        """Determine if the source file already has tests using AST-based mapping.
 
-        return any(test_file.exists() for test_file in potential_test_files)
+        Falls back to filename pattern checks on failure.
+        """
+        try:
+            # Ensure we have candidate test files discovered
+            if self._cached_test_files is None and self._current_project_path is not None:
+                # Cache not initialized, discover test files once
+                test_files = self._file_discovery.discover_test_files(
+                    self._current_project_path, quiet=True  # Reduce log noise during analysis
+                )
+                self._cached_test_files = test_files
+            else:
+                # Use cached result (which may be an empty list if no tests exist)
+                test_files = self._cached_test_files or []
+
+            if not test_files:
+                return False
+
+            # Parse source elements
+            parse_result = self._coverage  # placeholder to keep linter context
+            del parse_result
+            from ..adapters.parsing.codebase_parser import CodebaseParser
+
+            parser = CodebaseParser()
+            parse_result = parser.parse_file(file_path)
+            elements = parse_result.get("elements", [])
+            if not elements:
+                return False
+
+            # Map tests to source elements
+            mapping = self._test_mapper.map_tests(elements, existing_tests=test_files)
+            coverage_pct = float(mapping.get("coverage_percentage", 0.0))
+            return coverage_pct > 0.0
+
+        except Exception:
+            # Fallback: simple filename-based heuristics
+            potential_test_files = [
+                file_path.parent / f"test_{file_path.name}",
+                file_path.parent / f"{file_path.stem}_test.py",
+                file_path.parent.parent / "tests" / f"test_{file_path.name}",
+            ]
+            return any(test_file.exists() for test_file in potential_test_files)
 
     def _get_file_coverage(
         self, file_path: Path, coverage_data: dict[str, Any]

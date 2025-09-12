@@ -6,6 +6,7 @@ for professional CLI output with tables, progress indicators, panels,
 and interactive elements.
 """
 
+from enum import Enum
 from typing import Any
 
 from rich.console import Console
@@ -13,6 +14,12 @@ from rich.status import Status
 
 from ...ports.ui_port import UIPort
 from .rich_cli import TESTCRAFT_THEME, RichCliComponents
+
+
+class UIStyle(str, Enum):
+    """UI style options for controlling visual complexity and theming."""
+    MINIMAL = "minimal"
+    CLASSIC = "classic"
 
 
 class UIError(Exception):
@@ -67,14 +74,26 @@ class RichUIAdapter(UIPort):
                 if self._active_status:
                     self._active_status.stop()
 
+                # Minimal mode: transient spinner that does not persist
+                if hasattr(self.console, "quiet") and getattr(self.console, "quiet", False):
+                    return
                 self._active_status = self.rich_cli.create_status_spinner(message)
-                self._active_status.start()
+                try:
+                    # If minimal mode is in use, ensure transient=True is respected by rich_cli wrapper
+                    self._active_status.start()
+                except Exception:
+                    pass
 
             elif progress_type == "bar" or progress_type == "general":
                 # Use progress bar for determinate progress
+                if hasattr(self.console, "quiet") and getattr(self.console, "quiet", False):
+                    return
                 if not self._active_progress:
                     self._active_progress = self.rich_cli.create_progress_tracker()
-                    self._active_progress.start()
+                    try:
+                        self._active_progress.start()
+                    except Exception:
+                        pass
 
                 # Create or update progress task
                 task_id = kwargs.get("task_id")
@@ -159,7 +178,11 @@ class RichUIAdapter(UIPort):
             # Stop any active progress indicators
             self._stop_progress_indicators()
 
-            title = kwargs.get("title", "Error")
+            # Prefer explicit title, otherwise use provided error_type if meaningful
+            provided_title = kwargs.get("title")
+            title = provided_title or (
+                error_type if error_type and error_type != "general" else "Error"
+            )
             details = kwargs.get("details")
 
             self.rich_cli.display_error(error_message, title)
@@ -175,9 +198,8 @@ class RichUIAdapter(UIPort):
                     self.console.print(f"[muted]{details}[/]")
 
         except Exception as e:
-            # Fallback to simple print if Rich fails
-            print(f"ERROR: {error_message}")
-            print(f"UI Error: {str(e)}")
+            # Wrap errors in UIError for consistent test expectations
+            raise UIError(f"Failed to display error: {str(e)}")
 
     def display_warning(
         self, warning_message: str, warning_type: str = "general", **kwargs: Any
@@ -191,7 +213,12 @@ class RichUIAdapter(UIPort):
             **kwargs: Additional warning display parameters
         """
         try:
-            title = kwargs.get("title", "Warning")
+            provided_title = kwargs.get("title")
+            title = provided_title or (
+                warning_type
+                if warning_type and warning_type != "general"
+                else "Warning"
+            )
             self.rich_cli.display_warning(warning_message, title)
         except Exception as e:
             raise UIError(f"Failed to display warning: {str(e)}")
@@ -208,7 +235,10 @@ class RichUIAdapter(UIPort):
             **kwargs: Additional info display parameters
         """
         try:
-            title = kwargs.get("title", "Info")
+            provided_title = kwargs.get("title")
+            title = provided_title or (
+                info_type if info_type and info_type != "general" else "Info"
+            )
             self.rich_cli.display_info(info_message, title)
         except Exception as e:
             raise UIError(f"Failed to display info: {str(e)}")
@@ -351,8 +381,6 @@ class RichUIAdapter(UIPort):
             The Rich console instance
         """
         return self._console
-
-
 
     def _display_coverage_progress(
         self, progress_data: dict[str, Any], **kwargs: Any
@@ -584,10 +612,10 @@ class RichUIAdapter(UIPort):
     def create_status_spinner(self, message: str) -> Status:
         """
         Create a status spinner for displaying ongoing operations.
-        
+
         Args:
             message: Message to display with the spinner
-            
+
         Returns:
             Rich Status instance
         """

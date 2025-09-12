@@ -194,9 +194,10 @@ class AnalysisReport(BaseModel):
 
     @validator("files_to_process")
     def validate_files_not_empty(cls, v):
-        """Validate that at least one file is provided for processing."""
-        if not v:
-            raise ValueError("At least one file must be provided for processing")
+        """Validate that files_to_process is a valid list."""
+        # Allow empty lists for empty projects - this is a valid scenario
+        if v is None:
+            raise ValueError("files_to_process cannot be None")
         return v
 
     @validator("reasons")

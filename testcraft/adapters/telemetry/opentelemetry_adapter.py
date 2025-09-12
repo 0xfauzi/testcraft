@@ -15,21 +15,18 @@ from ...ports.telemetry_port import MetricValue, SpanContext, SpanKind
 # OpenTelemetry imports (optional - graceful degradation if not available)
 try:
     from opentelemetry import metrics, trace
-    from opentelemetry.exporter.otlp.proto.grpc.metric_exporter import (
-        OTLPMetricExporter,
-    )
-    from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
+    from opentelemetry.exporter.otlp.proto.grpc.metric_exporter import \
+        OTLPMetricExporter
+    from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import \
+        OTLPSpanExporter
     from opentelemetry.sdk.metrics import MeterProvider
     from opentelemetry.sdk.metrics.export import (
-        ConsoleMetricExporter,
-        PeriodicExportingMetricReader,
-    )
-    from opentelemetry.sdk.resources import SERVICE_NAME, SERVICE_VERSION, Resource
+        ConsoleMetricExporter, PeriodicExportingMetricReader)
+    from opentelemetry.sdk.resources import (SERVICE_NAME, SERVICE_VERSION,
+                                             Resource)
     from opentelemetry.sdk.trace import TracerProvider
-    from opentelemetry.sdk.trace.export import (
-        BatchSpanProcessor,
-        ConsoleSpanExporter,
-    )
+    from opentelemetry.sdk.trace.export import (BatchSpanProcessor,
+                                                ConsoleSpanExporter)
     from opentelemetry.trace import Status, StatusCode
     from opentelemetry.util.types import AttributeValue
 
@@ -38,14 +35,57 @@ except ImportError:
     # Define stubs for type hints when OpenTelemetry is not available
     OPENTELEMETRY_AVAILABLE = False
 
+    # Provide simple module-like stubs so tests can patch attributes
+    class _TraceStub:
+        def __getattr__(self, name):
+            return None
+
+    class _MetricsStub:
+        def __getattr__(self, name):
+            return None
+
+    trace = _TraceStub()  # type: ignore
+    metrics = _MetricsStub()  # type: ignore
+
+    # Provide a minimal Resource stub to avoid NameError when patched availability
+    class Resource:  # type: ignore
+        @staticmethod
+        def create(attributes: dict[str, Any] | None = None):
+            return {"attributes": attributes or {}}
+
+    SERVICE_NAME = "service.name"  # type: ignore
+    SERVICE_VERSION = "service.version"  # type: ignore
+
     # Type stubs for OpenTelemetry types
     AttributeValue = Union[str, bool, int, float]
 
     class MockTracer:
-        pass
+        def start_as_current_span(self, *args, **kwargs):
+            from contextlib import nullcontext
+
+            return nullcontext()
 
     class MockMeter:
-        pass
+        def create_counter(self, *_, **__):
+            class _C:
+                def add(self, *args, **kwargs):
+                    return None
+
+            return _C()
+
+        def create_histogram(self, *_, **__):
+            class _H:
+                def record(self, *args, **kwargs):
+                    return None
+
+            return _H()
+
+        def create_up_down_counter(self, *_, **__):
+            class _G:
+                def add(self, *args, **kwargs):
+                    return None
+
+            return _G()
 
 
 class OtelSpanContextManager:
@@ -58,41 +98,29 @@ class OtelSpanContextManager:
 
     def set_attribute(self, key: str, value: Any) -> None:
         """Set an attribute on the current span."""
-        if not OPENTELEMETRY_AVAILABLE:
-            return
-
         # Sanitize sensitive data
         sanitized_value = self._sanitize_value(key, value)
-        if sanitized_value is not None:
+        if sanitized_value is not None and hasattr(self.span, "set_attribute"):
             self.span.set_attribute(key, sanitized_value)
 
     def set_attributes(self, attributes: dict[str, Any]) -> None:
         """Set multiple attributes on the current span."""
-        if not OPENTELEMETRY_AVAILABLE:
-            return
-
         for key, value in attributes.items():
             self.set_attribute(key, value)
 
     def add_event(self, name: str, attributes: dict[str, Any] | None = None) -> None:
         """Add an event to the current span."""
-        if not OPENTELEMETRY_AVAILABLE:
-            return
-
         sanitized_attributes = {}
         if attributes:
             for key, value in attributes.items():
                 sanitized_value = self._sanitize_value(key, value)
                 if sanitized_value is not None:
                     sanitized_attributes[key] = sanitized_value
-
-        self.span.add_event(name, sanitized_attributes)
+        if hasattr(self.span, "add_event"):
+            self.span.add_event(name, sanitized_attributes)
 
     def set_status(self, status_code: str, description: str | None = None) -> None:
         """Set the status of the current span."""
-        if not OPENTELEMETRY_AVAILABLE:
-            return
-
         # Map string status codes to OpenTelemetry StatusCode enum
         status_mapping = {
             "OK": StatusCode.OK,
@@ -101,14 +129,13 @@ class OtelSpanContextManager:
         }
 
         otel_status = status_mapping.get(status_code.upper(), StatusCode.UNSET)
-        self.span.set_status(Status(otel_status, description))
+        if hasattr(self.span, "set_status"):
+            self.span.set_status(Status(otel_status, description))
 
     def record_exception(self, exception: Exception) -> None:
         """Record an exception that occurred during the span."""
-        if not OPENTELEMETRY_AVAILABLE:
-            return
-
-        self.span.record_exception(exception)
+        if hasattr(self.span, "record_exception"):
+            self.span.record_exception(exception)
         self.set_status("ERROR", str(exception))
 
     def _sanitize_value(self, key: str, value: Any) -> AttributeValue | None:
@@ -188,7 +215,10 @@ class OpenTelemetryAdapter:
 
     def _initialize_tracing(self, resource: "Resource") -> None:
         """Initialize OpenTelemetry tracing."""
-        # Create tracer provider
+        # Create tracer provider (guarded for tests that patch availability only)
+        if not OPENTELEMETRY_AVAILABLE:
+            self.tracer = MockTracer()
+            return
         tracer_provider = TracerProvider(
             resource=resource, sampler=self._create_sampler()
         )
@@ -210,6 +240,9 @@ class OpenTelemetryAdapter:
         # Create metric reader
         metric_reader = self._create_metric_reader()
 
+        if not OPENTELEMETRY_AVAILABLE:
+            self.meter = MockMeter()
+            return
         # Create meter provider
         meter_provider = MeterProvider(
             resource=resource, metric_readers=[metric_reader] if metric_reader else []
@@ -226,10 +259,10 @@ class OpenTelemetryAdapter:
 
     def _create_sampler(self):
         """Create a sampler based on configuration."""
-        from opentelemetry.sdk.trace.sampling import TraceIdRatioBasedSampler
+        from opentelemetry.sdk.trace.sampling import TraceIdRatioBased
 
         sampling_rate = self.config.get("trace_sampling_rate", 1.0)
-        return TraceIdRatioBasedSampler(sampling_rate)
+        return TraceIdRatioBased(sampling_rate)
 
     def _create_span_processor(self):
         """Create span processor with appropriate exporter."""

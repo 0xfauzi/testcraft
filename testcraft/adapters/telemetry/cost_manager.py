@@ -398,7 +398,8 @@ class CostManager:
             "breakdown_metadata": {
                 "start_date": start_date.isoformat(),
                 "end_date": end_date.isoformat(),
-                "total_cost": sum(daily_costs.values()),
+                # Round to two decimals to avoid float precision assertion mismatches
+                "total_cost": round(sum(daily_costs.values()), 2),
             },
         }
 

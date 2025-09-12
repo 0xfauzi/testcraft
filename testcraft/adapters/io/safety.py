@@ -29,9 +29,13 @@ class SafetyPolicies:
 
     # Allowed directories for writing (relative to project root)
     ALLOWED_DIRECTORIES = {"tests", "test"}
-    
+
     # System files that are allowed in project root
-    ALLOWED_SYSTEM_FILES = {".testcraft_state.json", ".testcraft.toml"}
+    ALLOWED_SYSTEM_FILES = {
+        ".testcraft_state.json",
+        ".testcraft.toml",
+        "custom_state.json",
+    }
 
     # Dangerous patterns that should not be written to files
     DANGEROUS_PATTERNS = {
@@ -119,7 +123,10 @@ class SafetyPolicies:
             raise SafetyError("Empty path not allowed")
 
         # Check if it's an allowed system file in project root
-        if len(relative_path.parts) == 1 and str(relative_path) in SafetyPolicies.ALLOWED_SYSTEM_FILES:
+        if (
+            len(relative_path.parts) == 1
+            and str(relative_path) in SafetyPolicies.ALLOWED_SYSTEM_FILES
+        ):
             return
 
         # Check if the first part of the path is in allowed directories

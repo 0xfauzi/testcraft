@@ -287,7 +287,7 @@ class WriterAppendAdapter:
         Raises:
             WriterAppendError: If formatting fails
         """
-        return format_python_content(content, timeout=30)
+        return format_python_content(content, timeout=15, disable_ruff=False)
 
     def _extract_test_info(self, content: str) -> dict[str, Any]:
         """

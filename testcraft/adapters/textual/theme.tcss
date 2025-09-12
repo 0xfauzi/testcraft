@@ -1,0 +1,243 @@
+/*
+TestCraft Textual Theme
+Simplified theme using Textual's standard colors and layouts
+*/
+
+/* Header */
+Header {
+    dock: top;
+    height: 3;
+    background: $boost;
+    color: $text;
+}
+
+/* Footer */
+Footer {
+    dock: bottom;
+    height: 3;
+    background: $boost;
+    color: $text;
+}
+
+/* DataTable Styling */
+DataTable {
+    background: $surface;
+    color: $text;
+    border: solid $primary;
+}
+
+DataTable > .datatable--header {
+    background: $primary;
+    color: $text;
+    text-style: bold;
+}
+
+DataTable > .datatable--cursor {
+    background: $secondary;
+    color: $text;
+}
+
+/* Button Styling */
+Button {
+    margin: 1 0;
+    background: $boost;
+    color: $text;
+}
+
+Button:hover {
+    background: $secondary;
+}
+
+Button.-primary {
+    background: $primary;
+}
+
+Button.-success {
+    background: green;
+}
+
+Button.-error {
+    background: red;
+}
+
+Button.-warning {
+    background: yellow;
+}
+
+/* Input Styling */
+Input {
+    margin: 1 0;
+    background: $surface;
+    color: $text;
+    border: solid $primary;
+}
+
+Input:focus {
+    border: solid $secondary;
+}
+
+/* Switch/Checkbox Styling */
+Switch {
+    margin: 1 0;
+}
+
+Switch:focus {
+    background: $secondary;
+}
+
+/* Select Styling */
+Select {
+    margin: 1 0;
+    background: $surface;
+    color: $text;
+    border: solid $primary;
+}
+
+/* Panel/Container Styling */
+.panel {
+    background: $surface;
+    border: solid $primary;
+    padding: 1;
+    margin: 1;
+}
+
+.stats-panel {
+    background: $boost;
+    color: $text;
+    padding: 1;
+    margin: 1;
+    border: solid $primary;
+}
+
+/* Log/RichLog Styling */
+RichLog {
+    background: $surface;
+    color: $text;
+    border: solid $primary;
+    padding: 1;
+}
+
+/* Status Indicators */
+.status-success {
+    color: green;
+    text-style: bold;
+}
+
+.status-error {
+    color: red;
+    text-style: bold;
+}
+
+.status-warning {
+    color: yellow;
+    text-style: bold;
+}
+
+.status-working {
+    color: blue;
+    text-style: bold;
+}
+
+.status-pending {
+    color: $text-muted;
+}
+
+/* Progress Bar */
+ProgressBar {
+    margin: 1 0;
+}
+
+ProgressBar > .bar--bar {
+    color: green;
+}
+
+ProgressBar > .bar--percentage {
+    color: $text;
+    text-style: bold;
+}
+
+/* Loading Indicator */
+LoadingIndicator {
+    color: $secondary;
+    background: transparent;
+}
+
+/* Notifications */
+.notification {
+    background: $boost;
+    color: $text;
+    border: solid $primary;
+    padding: 1;
+    margin: 1;
+}
+
+.notification-success {
+    background: green;
+    border: solid green;
+}
+
+.notification-error {
+    background: red;
+    border: solid red;
+}
+
+.notification-warning {
+    background: yellow;
+    border: solid yellow;
+}
+
+/* Code Pane */
+.code-pane {
+    background: $surface;
+    color: $text;
+    border: solid $primary;
+    padding: 1;
+    margin: 1;
+}
+
+/* Toolbar */
+.toolbar {
+    background: $boost;
+    color: $text;
+    height: 3;
+    padding: 0 1;
+}
+
+.toolbar Button {
+    margin: 0 1;
+    height: 100%;
+}
+
+/* Modal/Dialog Styling */
+.modal {
+    background: rgba(0, 0, 0, 0.7);
+}
+
+.dialog {
+    background: $surface;
+    color: $text;
+    border: thick $primary;
+    padding: 2;
+}
+
+/* File Table Specific Styling */
+.file-table {
+    width: 100%;
+    height: 100%;
+}
+
+.file-table .status-done {
+    color: green;
+}
+
+.file-table .status-failed {
+    color: red;
+}
+
+.file-table .status-pending {
+    color: $text-muted;
+}
+
+.file-table .status-running {
+    color: blue;
+}

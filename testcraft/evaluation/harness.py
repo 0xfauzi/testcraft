@@ -16,7 +16,8 @@ from typing import Any
 from testcraft.adapters.coverage.main_adapter import TestcraftCoverageAdapter
 from testcraft.adapters.evaluation import TestcraftEvaluationAdapter
 from testcraft.adapters.evaluation.main_adapter import EvaluationError
-from testcraft.adapters.io.artifact_store import ArtifactStoreAdapter, ArtifactType
+from testcraft.adapters.io.artifact_store import (ArtifactStoreAdapter,
+                                                  ArtifactType)
 from testcraft.adapters.io.state_json import StateJsonAdapter
 from testcraft.adapters.llm.router import LLMRouter
 from testcraft.config import TestCraftConfig
@@ -449,16 +450,16 @@ class TestEvaluationHarness:
 
             # Cross-scenario analysis
             if len(campaign_results["scenario_results"]) > 1:
-                campaign_results["cross_scenario_analysis"] = (
-                    self._analyze_cross_scenario_results(
-                        campaign_results["scenario_results"]
-                    )
+                campaign_results[
+                    "cross_scenario_analysis"
+                ] = self._analyze_cross_scenario_results(
+                    campaign_results["scenario_results"]
                 )
 
             # Generate final recommendations
-            campaign_results["final_recommendations"] = (
-                self._generate_campaign_recommendations(campaign_results)
-            )
+            campaign_results[
+                "final_recommendations"
+            ] = self._generate_campaign_recommendations(campaign_results)
 
             # Store campaign results
             self.artifact_store.store_artifact(

@@ -26,9 +26,7 @@ class TestTestCraftConfig:
         assert config.style.framework == "pytest"
         assert config.environment.auto_detect is True
         assert config.cost_management.max_file_size_kb == 50
-        assert config.security.block_dangerous_patterns is True
         assert config.quality.enable_quality_analysis is True
-        assert config.prompt_engineering.use_2025_guidelines is True
 
     def test_coverage_validation_success(self):
         """Test successful coverage validation."""

@@ -420,21 +420,6 @@ cost_management:
   token_usage_logging: true        # Log token usage for cost tracking
 
 # =============================================================================
-# SECURITY SETTINGS
-# =============================================================================
-
-security:
-  enable_ast_validation: false     # Use AST validation (slower but more secure)
-  max_generated_file_size: 50000   # Maximum size for generated test files (bytes)
-  block_dangerous_patterns: true   # Block potentially dangerous code patterns
-  block_patterns:                  # Patterns to block in generated code
-    - 'eval\\s*\\('
-    - 'exec\\s*\\('
-    - '__import__\\s*\\('
-    - 'subprocess\\.'
-    - 'os\\.system'
-
-# =============================================================================
 # TEST QUALITY ANALYSIS
 # =============================================================================
 
@@ -458,35 +443,7 @@ quality:
     async_severity: 'high'         # Async mutations often critical
     dataclass_severity: 'medium'   # Dataclass mutations typically medium severity
 
-# =============================================================================
-# PROMPT ENGINEERING (Advanced AI Settings)
-# =============================================================================
-
-prompt_engineering:
-  use_2025_guidelines: true        # Use latest prompt best practices
-  encourage_step_by_step: true     # Include step-by-step reasoning prompts
-  use_positive_negative_examples: true # Include positive/negative examples
-  minimize_xml_structure: true     # Reduce excessive XML tags in prompts
-  decisive_recommendations: true   # Encourage single, strong recommendations
-  preserve_uncertainty: false      # Include hedging language (usually false)
-
-  # Enhanced 2024-2025 Features
-  use_enhanced_reasoning: true     # Use advanced Chain-of-Thought reasoning
-  enable_self_debugging: true      # Enable self-debugging and review checkpoints
-  use_enhanced_examples: true      # Use detailed examples with reasoning
-  enable_failure_strategies: true  # Use failure-specific debugging strategies
-  confidence_based_adaptation: true # Adapt prompts based on confidence levels
-  track_reasoning_quality: true    # Monitor and track reasoning quality
-
-# =============================================================================
-# CONTEXT RETRIEVAL & PROCESSING
-# =============================================================================
-
-context:
-  retrieval_settings: {}           # Context retrieval settings
-  hybrid_weights: {}               # Weights for hybrid search
-  rerank_model: null               # Model to use for reranking
-  hyde: false                      # Enable HyDE (Hypothetical Document Embeddings)
+# (Removed sections: security, prompt_engineering, context)
 
 # =============================================================================
 # ENVIRONMENT VARIABLE OVERRIDES
@@ -595,7 +552,7 @@ context:
             },
             "llm": {
                 "default_provider": "openai",
-                "openai_model": "o4-mini",
+                "openai_model": "gpt-4.1",
                 "temperature": 0.1,
             },
         }

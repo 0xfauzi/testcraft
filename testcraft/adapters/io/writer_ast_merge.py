@@ -555,7 +555,7 @@ class WriterASTMergeAdapter:
         Raises:
             WriterASTMergeError: If formatting fails
         """
-        return format_python_content(content, timeout=30)
+        return format_python_content(content, timeout=15, disable_ruff=False)
 
     def _generate_diff(self, original: str, modified: str, filename: str) -> str:
         """Generate unified diff between original and modified content."""

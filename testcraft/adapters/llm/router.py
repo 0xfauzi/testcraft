@@ -1,15 +1,20 @@
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 from ...ports.cost_port import CostPort
 from ...ports.llm_port import LLMPort
 
+logger = logging.getLogger(__name__)
+
 
 class LLMRouter(LLMPort):
     """Router for multiple LLM providers using user configuration."""
 
-    def __init__(self, config: dict[str, Any] | None = None, cost_port: CostPort | None = None):
+    def __init__(
+        self, config: dict[str, Any] | None = None, cost_port: CostPort | None = None
+    ):
         """Initialize LLM Router with configuration and optional cost tracking."""
         self.config = config or {}
         self.cost_port = cost_port
@@ -28,30 +33,28 @@ class LLMRouter(LLMPort):
 
         if provider == "openai":
             provider_config = {
-                "model": self.config.get("openai_model", "o4-mini"),
+                "model": self.config.get("openai_model", "gpt-4.1"),
                 "max_tokens": self.config.get("openai_max_tokens", 12000),
-                "timeout": self.config.get("openai_timeout", 60.0),
+                "timeout": self.config.get("openai_timeout", 180.0),
                 "temperature": self.config.get("temperature", 0.1),
                 "max_retries": self.config.get("max_retries", 3),
                 "base_url": self.config.get("openai_base_url"),
             }
         elif provider == "anthropic":
             provider_config = {
-                "model": self.config.get("anthropic_model", "claude-3-7-sonnet"),
+                "model": self.config.get("anthropic_model", "claude-sonnet-4"),
                 "max_tokens": self.config.get("anthropic_max_tokens", 100000),
-                "timeout": self.config.get("anthropic_timeout", 60.0),
+                "timeout": self.config.get("anthropic_timeout", 180.0),
                 "temperature": self.config.get("temperature", 0.1),
                 "max_retries": self.config.get("max_retries", 3),
             }
         elif provider == "azure-openai":
             provider_config = {
-                "deployment": self.config.get(
-                    "azure_openai_deployment", "gpt-4o-mini"
-                ),
+                "deployment": self.config.get("azure_openai_deployment", "claude-sonnet-4"),
                 "api_version": self.config.get(
                     "azure_openai_api_version", "2024-02-15-preview"
                 ),
-                "timeout": self.config.get("azure_openai_timeout", 60.0),
+                "timeout": self.config.get("azure_openai_timeout", 180.0),
                 "temperature": self.config.get("temperature", 0.1),
                 "max_retries": self.config.get("max_retries", 3),
                 "max_tokens": self.config.get("azure_openai_max_tokens", 4000),
@@ -62,7 +65,7 @@ class LLMRouter(LLMPort):
                     "bedrock_model_id", "anthropic.claude-3-7-sonnet-v1:0"
                 ),
                 "region": self.config.get("aws_region", "us-east-1"),
-                "timeout": self.config.get("bedrock_timeout", 60.0),
+                "timeout": self.config.get("bedrock_timeout", 180.0),
                 "temperature": self.config.get("temperature", 0.1),
                 "max_retries": self.config.get("max_retries", 3),
             }
@@ -77,19 +80,27 @@ class LLMRouter(LLMPort):
             if provider == "openai":
                 from .openai import OpenAIAdapter
 
-                self._adapters[provider] = OpenAIAdapter(cost_port=self.cost_port, **provider_config)
+                self._adapters[provider] = OpenAIAdapter(
+                    cost_port=self.cost_port, **provider_config
+                )
             elif provider == "anthropic":
                 from .claude import ClaudeAdapter
 
-                self._adapters[provider] = ClaudeAdapter(cost_port=self.cost_port, **provider_config)
+                self._adapters[provider] = ClaudeAdapter(
+                    cost_port=self.cost_port, **provider_config
+                )
             elif provider == "azure-openai":
                 from .azure import AzureOpenAIAdapter
 
-                self._adapters[provider] = AzureOpenAIAdapter(cost_port=self.cost_port, **provider_config)
+                self._adapters[provider] = AzureOpenAIAdapter(
+                    cost_port=self.cost_port, **provider_config
+                )
             elif provider == "bedrock":
                 from .bedrock import BedrockAdapter
 
-                self._adapters[provider] = BedrockAdapter(cost_port=self.cost_port, **provider_config)
+                self._adapters[provider] = BedrockAdapter(
+                    cost_port=self.cost_port, **provider_config
+                )
             else:
                 raise ValueError(f"Unknown provider: {provider}")
         return self._adapters[provider]
@@ -115,9 +126,28 @@ class LLMRouter(LLMPort):
         adapter = self._get_adapter(self.default_provider)
         # Note: The actual adapters have refine_content method, not refine_tests
         # This might need to be updated based on the actual adapter interface
-        if hasattr(adapter, 'refine_content'):
+        if hasattr(adapter, "refine_content"):
             result = adapter.refine_content(tests, feedback)
-            return result.get('refined_content', tests)
+            return result.get("refined_content", tests)
         else:
             # Fallback for adapters that don't support refinement
             return tests
+    
+    def refine_content(
+        self, original_content: str, refinement_instructions: str, **kwargs: Any
+    ) -> dict[str, Any]:
+        """Refine existing content based on specific instructions."""
+        adapter = self._get_adapter(self.default_provider)
+        if hasattr(adapter, "refine_content"):
+            return adapter.refine_content(original_content, refinement_instructions, **kwargs)
+        else:
+            # Fallback for adapters that don't support refinement
+            logger.warning(
+                f"Provider {self.default_provider} adapter does not support refine_content method"
+            )
+            return {
+                "refined_content": original_content,
+                "changes_made": "No refinement available",
+                "confidence": 0.0,
+                "metadata": {"error": "refine_content not supported"}
+            }

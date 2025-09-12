@@ -13,11 +13,8 @@ from unittest.mock import Mock, patch
 
 import pytest
 
-from testcraft.adapters.telemetry import (
-    CostManager,
-    NoOpTelemetryAdapter,
-    OpenTelemetryAdapter,
-)
+from testcraft.adapters.telemetry import (CostManager, NoOpTelemetryAdapter,
+                                          OpenTelemetryAdapter)
 from testcraft.ports.telemetry_port import MetricValue
 
 
@@ -133,9 +130,8 @@ class TestOpenTelemetryAdapter:
 
     def test_span_context_manager_sanitization(self):
         """Test span context manager value sanitization."""
-        from testcraft.adapters.telemetry.opentelemetry_adapter import (
-            OtelSpanContextManager,
-        )
+        from testcraft.adapters.telemetry.opentelemetry_adapter import \
+            OtelSpanContextManager
         from testcraft.ports.telemetry_port import SpanContext
 
         mock_span = Mock()

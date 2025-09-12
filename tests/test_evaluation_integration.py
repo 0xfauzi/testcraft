@@ -15,15 +15,11 @@ from unittest.mock import patch
 import pytest
 
 from testcraft.adapters.io.artifact_store import ArtifactType
-from testcraft.evaluation.harness import (
-    create_evaluation_harness,
-)
-from testcraft.ports.evaluation_port import (
-    AcceptanceResult,
-    EvaluationConfig,
-    EvaluationResult,
-    LLMJudgeResult,
-)
+from testcraft.evaluation.harness import (TestEvaluationHarness,
+                                          create_evaluation_harness)
+from testcraft.ports.evaluation_port import (AcceptanceResult,
+                                             EvaluationConfig,
+                                             EvaluationResult, LLMJudgeResult)
 from testcraft.prompts.registry import PromptRegistry
 
 
@@ -32,18 +28,22 @@ class TestPromptFooIntegrationPatterns:
 
     def setup_method(self) -> None:
         """Set up test fixtures following PromptFoo patterns."""
-        self.temp_dir = Path(tempfile.mkdtemp())
+        # Create temp directory in tests folder to satisfy safety policies
+        test_temp_base = Path(__file__).parent / "test_temp"
+        test_temp_base.mkdir(exist_ok=True)
+        self.temp_dir = Path(tempfile.mkdtemp(dir=test_temp_base))
 
         # Create evaluation harness with artifact storage
-        self.harness = create_evaluation_harness(
+        eval_config = EvaluationConfig(
+            acceptance_checks=True,
+            llm_judge_enabled=True,
+            statistical_testing=True,
+            human_review_enabled=False,
+            rubric_dimensions=["correctness", "coverage", "clarity", "safety"],
+        )
+        self.harness = TestEvaluationHarness(
+            config=eval_config,
             project_root=self.temp_dir,
-            config=EvaluationConfig(
-                acceptance_checks=True,
-                llm_judge_enabled=True,
-                statistical_testing=True,
-                human_review_enabled=False,
-                rubric_dimensions=["correctness", "coverage", "clarity", "safety"],
-            ),
         )
 
         # Sample prompt variants (PromptFoo pattern)
@@ -681,7 +681,10 @@ class TestEvaluationErrorHandling:
 
     def setup_method(self) -> None:
         """Set up test fixtures."""
-        self.temp_dir = Path(tempfile.mkdtemp())
+        # Create temp directory in tests folder to satisfy safety policies
+        test_temp_base = Path(__file__).parent / "test_temp"
+        test_temp_base.mkdir(exist_ok=True)
+        self.temp_dir = Path(tempfile.mkdtemp(dir=test_temp_base))
         self.harness = create_evaluation_harness(project_root=self.temp_dir)
 
     def test_invalid_prompt_variant_handling(self):

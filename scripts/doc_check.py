@@ -23,7 +23,9 @@ try:
     MARKDOWN_AVAILABLE = True
 except ImportError:
     MARKDOWN_AVAILABLE = False
-    print("⚠️  Warning: markdown package not available, skipping advanced syntax checks")
+    print(
+        "⚠️  Warning: markdown package not available, skipping advanced syntax checks"
+    )
 
 
 class DocumentationChecker:

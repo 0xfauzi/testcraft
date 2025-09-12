@@ -70,7 +70,12 @@ class LLMPort(Protocol):
         ...
 
     def refine_content(
-        self, original_content: str, refinement_instructions: str, **kwargs: Any
+        self,
+        original_content: str,
+        refinement_instructions: str,
+        *,
+        system_prompt: str | None = None,
+        **kwargs: Any,
     ) -> dict[str, Any]:
         """
         Refine existing content based on specific instructions.

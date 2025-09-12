@@ -7,9 +7,9 @@ centralizes file discovery logic that was previously duplicated across
 multiple use cases.
 """
 
+import fnmatch
 import logging
 import os
-import fnmatch
 from pathlib import Path
 
 from ...config.models import TestPatternConfig
@@ -98,33 +98,50 @@ class FileDiscoveryService:
             total_found = 0
             for root, dirs, files in os.walk(project_path):
                 # Filter directories in-place to avoid scanning excluded directories
-                dirs[:] = [d for d in dirs if not self._should_exclude_directory(Path(root) / d)]
-                
+                dirs[:] = [
+                    d
+                    for d in dirs
+                    if not self._should_exclude_directory(Path(root) / d)
+                ]
+
                 # Check each file against patterns
                 for filename in files:
                     file_path = Path(root) / filename
-                    
+
                     # Quick check: must match at least one pattern
-                    matches_pattern = any(fnmatch.fnmatch(filename, pattern) for pattern in patterns)
+                    # Match against both filename and project-relative path to support patterns like "tests/**/test_*.py"
+                    rel_path = None
+                    try:
+                        rel_path = str(
+                            file_path.resolve().relative_to(project_path.resolve())
+                        )
+                    except Exception:
+                        rel_path = str(file_path.name)
+
+                    matches_pattern = any(
+                        fnmatch.fnmatch(filename, pattern)
+                        or fnmatch.fnmatch(rel_path, pattern)
+                        for pattern in patterns
+                    )
                     if not matches_pattern:
                         continue
-                    
+
                     total_found += 1
                     should_include = self._should_include_file(
                         file_path, project_path, include_test_files=include_test_files
                     )
-                    
-                    logger.debug(
-                        f"File {filename}: should_include={should_include}"
-                    )
-                    
+
+                    logger.debug(f"File {filename}: should_include={should_include}")
+
                     if should_include:
                         resolved_path = str(file_path.resolve())
                         source_files.append(resolved_path)
                         logger.debug(f"Added file: {resolved_path}")
 
-            logger.debug(f"Total files scanned: {total_found}, included: {len(source_files)}")
-            logger.info(f"Discovered {len(source_files)} source files")
+            logger.debug(
+                f"Total files scanned: {total_found}, included: {len(source_files)}"
+            )
+            logger.info(f"Discovered {len(source_files)} source files in {project_path} (patterns: {patterns})")
             return source_files
 
         except Exception as e:
@@ -134,7 +151,7 @@ class FileDiscoveryService:
             raise FileDiscoveryError(f"Source file discovery failed: {e}", cause=e)
 
     def discover_test_files(
-        self, project_path: str | Path, test_patterns: list[str] | None = None
+        self, project_path: str | Path, test_patterns: list[str] | None = None, quiet: bool = False
     ) -> list[str]:
         """
         Discover test files in a project using test-specific patterns.
@@ -142,6 +159,7 @@ class FileDiscoveryService:
         Args:
             project_path: Root path of the project to search
             test_patterns: Custom test patterns (defaults to config.test_patterns)
+            quiet: If True, reduces logging verbosity for repeated calls
 
         Returns:
             List of discovered test file paths (absolute paths)
@@ -164,24 +182,37 @@ class FileDiscoveryService:
             # Use os.walk for efficient directory traversal with exclusion
             total_found = 0
             for root, dirs, files in os.walk(project_path):
-                # Filter directories in-place to avoid scanning excluded directories
-                dirs[:] = [d for d in dirs if not self._should_exclude_directory(Path(root) / d)]
-                
+                # Filter directories but keep test directories when discovering tests
+                dirs[:] = [
+                    d
+                    for d in dirs
+                    if not self._should_exclude_directory(
+                        Path(root) / d, for_tests=True
+                    )
+                ]
+
                 # Check each file against patterns
                 for filename in files:
                     file_path = Path(root) / filename
-                    
+
                     # Quick check: must match at least one pattern
-                    matches_pattern = any(fnmatch.fnmatch(filename, pattern) for pattern in patterns)
+                    matches_pattern = any(
+                        fnmatch.fnmatch(filename, pattern) for pattern in patterns
+                    )
                     if not matches_pattern:
                         continue
-                    
+
                     total_found += 1
                     if self._should_include_test_file(file_path):
                         test_files.append(str(file_path.resolve()))
 
-            logger.debug(f"Total test files scanned: {total_found}, included: {len(test_files)}")
-            logger.info(f"Discovered {len(test_files)} test files")
+            logger.debug(
+                f"Total test files scanned: {total_found}, included: {len(test_files)}"
+            )
+            if quiet:
+                logger.debug(f"Discovered {len(test_files)} test files in {project_path} (patterns: {patterns})")
+            else:
+                logger.info(f"Discovered {len(test_files)} test files in {project_path} (patterns: {patterns})")
             return test_files
 
         except Exception as e:
@@ -254,14 +285,17 @@ class FileDiscoveryService:
         return filtered_files
 
     def _should_include_file(
-        self, file_path: Path, project_path: Path | None = None, include_test_files: bool = False
+        self,
+        file_path: Path,
+        project_path: Path | None = None,
+        include_test_files: bool = False,
     ) -> bool:
         """
         Determine if a file should be included based on exclusion rules.
 
         Args:
             file_path: Path to the file to check
-            project_path: Root path of the project (for relative path checking). 
+            project_path: Root path of the project (for relative path checking).
                          If None, only basic file extension and pattern checks are performed.
             include_test_files: Whether to include test files
 
@@ -289,7 +323,9 @@ class FileDiscoveryService:
         if project_path is not None:
             try:
                 relative_path = file_path.relative_to(project_path)
-                if any(part in self.exclude_dirs_set for part in relative_path.parts[:-1]):  # Exclude filename part
+                if any(
+                    part in self.exclude_dirs_set for part in relative_path.parts[:-1]
+                ):  # Exclude filename part
                     return False
             except ValueError:
                 # File is not under project path, exclude it
@@ -302,46 +338,54 @@ class FileDiscoveryService:
 
         return True
 
-    def _should_exclude_directory(self, dir_path: Path) -> bool:
+    def _should_exclude_directory(
+        self, dir_path: Path, for_tests: bool = False
+    ) -> bool:
         """
         Determine if a directory should be excluded during traversal.
-        
+
         This is more efficient than checking after scanning all files.
-        
+
         Args:
             dir_path: Path to the directory to check
-        
+
         Returns:
             True if the directory should be excluded (skip traversing it)
         """
         # Check if any part of the path is in exclude_dirs
         dir_name = dir_path.name
         if dir_name in self.exclude_dirs_set:
-            return True
-        
+            # Do not exclude standard test directories during test discovery
+            if for_tests and dir_name in {"tests", "test"}:
+                pass
+            else:
+                return True
+
         # Check for patterns that might match directories
         dir_str = str(dir_path)
         for pattern in self.exclude_patterns_set:
             if self._matches_pattern(dir_str, pattern):
                 return True
-        
+
         # Specific checks for common virtual environment patterns
-        if (dir_name.startswith('.venv') or 
-            dir_name.endswith('.egg-info') or
-            dir_name.endswith('.dist-info') or
-            dir_name == 'site-packages' or
-            dir_name in {'lib', 'lib64', 'bin', 'Scripts', 'include', 'share'}):
+        if (
+            dir_name.startswith(".venv")
+            or dir_name.endswith(".egg-info")
+            or dir_name.endswith(".dist-info")
+            or dir_name == "site-packages"
+            or dir_name in {"lib", "lib64", "bin", "Scripts", "include", "share"}
+        ):
             return True
-        
+
         # Check if this looks like a virtual environment based on structure
         # Look for pyvenv.cfg which indicates a virtual environment
-        if (dir_path / 'pyvenv.cfg').exists():
+        if (dir_path / "pyvenv.cfg").exists():
             return True
-        
+
         # Check for Conda environment structure
-        if (dir_path / 'conda-meta').exists():
+        if (dir_path / "conda-meta").exists():
             return True
-            
+
         return False
 
     def _should_include_test_file(self, file_path: Path) -> bool:
@@ -359,8 +403,11 @@ class FileDiscoveryService:
         if file_path.suffix not in source_extensions:
             return False
 
-        # Check exclude directories (test files can still be excluded by directory)
-        if any(part in self.exclude_dirs_set for part in file_path.parts):
+        # Check exclude directories (but allow common test directories)
+        if any(
+            part in self.exclude_dirs_set and part not in {"tests", "test"}
+            for part in file_path.parts
+        ):
             return False
 
         # Check specific exclude patterns (but be more lenient for test files)

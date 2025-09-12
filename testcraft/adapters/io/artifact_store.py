@@ -153,7 +153,7 @@ class ArtifactStoreAdapter:
         try:
             # Generate artifact ID if not provided
             if artifact_id is None:
-                timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+                timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S_%f")
                 artifact_id = f"{artifact_type.value}_{timestamp}"
 
             # Determine file extension based on content type
@@ -461,9 +461,9 @@ class ArtifactStoreAdapter:
                     }
 
                 stats["artifacts_by_type"][type_name]["count"] += 1
-                stats["artifacts_by_type"][type_name]["size_bytes"] += (
-                    metadata.size_bytes
-                )
+                stats["artifacts_by_type"][type_name][
+                    "size_bytes"
+                ] += metadata.size_bytes
 
                 # Count expired
                 if metadata.expires_at and current_time > metadata.expires_at:

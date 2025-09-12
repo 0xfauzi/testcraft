@@ -11,12 +11,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from ...domain.models import (
-    AnalysisReport,
-    CoverageResult,
-    GenerationResult,
-    TestGenerationPlan,
-)
+from ...domain.models import (AnalysisReport, CoverageResult, GenerationResult,
+                              TestGenerationPlan)
 from ...ports.report_port import ReportPort
 
 
@@ -115,9 +111,9 @@ class JsonReportAdapter(ReportPort):
             }
 
             if include_recommendations:
-                report_content["recommendations"] = (
-                    self._generate_analysis_recommendations(analysis_data)
-                )
+                report_content[
+                    "recommendations"
+                ] = self._generate_analysis_recommendations(analysis_data)
 
             summary = (
                 f"Analysis of {len(analysis_data.files_to_process)} files: "
@@ -356,10 +352,26 @@ class JsonReportAdapter(ReportPort):
             "test_generation_summary": {
                 "total_files_processed": len(generation_results),
                 "successful_generations": len(
-                    [r for r in generation_results if r.get("success", False)]
+                    [
+                        r
+                        for r in generation_results
+                        if (
+                            r.success
+                            if isinstance(r, GenerationResult)
+                            else r.get("success", False)
+                        )
+                    ]
                 ),
                 "failed_generations": len(
-                    [r for r in generation_results if not r.get("success", True)]
+                    [
+                        r
+                        for r in generation_results
+                        if not (
+                            r.success
+                            if isinstance(r, GenerationResult)
+                            else r.get("success", True)
+                        )
+                    ]
                 ),
             },
             "generation_results": [
@@ -370,12 +382,13 @@ class JsonReportAdapter(ReportPort):
             "verbose_details": kwargs.get("verbose", False),
         }
 
-        if kwargs.get("verbose", False):
+        if kwargs.get("verbose", data.get("verbose", False)):
             report_content["prompts_used"] = data.get("prompts_used", [])
             report_content["llm_responses"] = data.get("llm_responses", [])
             report_content["retrieval_diagnostics"] = data.get(
                 "retrieval_diagnostics", {}
             )
+            report_content["verbose_details"] = True
 
         return {
             "report_content": json.dumps(report_content, indent=2),
@@ -476,9 +489,14 @@ class JsonReportAdapter(ReportPort):
             }
 
         if before and after:
+            # Round floating deltas to avoid floating point representation issues in tests
             summary["improvement"] = {
-                "line_coverage_delta": after.line_coverage - before.line_coverage,
-                "branch_coverage_delta": after.branch_coverage - before.branch_coverage,
+                "line_coverage_delta": round(
+                    after.line_coverage - before.line_coverage, 2
+                ),
+                "branch_coverage_delta": round(
+                    after.branch_coverage - before.branch_coverage, 2
+                ),
                 "lines_covered": len(before.missing_lines) - len(after.missing_lines),
             }
 

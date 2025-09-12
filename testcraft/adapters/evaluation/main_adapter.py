@@ -17,14 +17,9 @@ from pathlib import Path
 from typing import Any
 
 from ...ports.coverage_port import CoveragePort
-from ...ports.evaluation_port import (
-    AcceptanceResult,
-    ComparisonMode,
-    EvaluationConfig,
-    EvaluationPort,
-    EvaluationResult,
-    LLMJudgeResult,
-)
+from ...ports.evaluation_port import (AcceptanceResult, ComparisonMode,
+                                      EvaluationConfig, EvaluationPort,
+                                      EvaluationResult, LLMJudgeResult)
 from ...ports.llm_port import LLMPort
 from ...ports.state_port import StatePort
 from ...prompts.registry import PromptRegistry
@@ -531,9 +526,9 @@ class TestcraftEvaluationAdapter(EvaluationPort):
                         overall_stats["acceptance_pass_rate"] += 1
 
                     if evaluation_result.llm_judge:
-                        overall_stats["average_llm_score"] += (
-                            evaluation_result.llm_judge.overall_score
-                        )
+                        overall_stats[
+                            "average_llm_score"
+                        ] += evaluation_result.llm_judge.overall_score
 
                     if evaluation_result.acceptance.coverage_improvement:
                         overall_stats["coverage_improvements"].append(
@@ -956,12 +951,12 @@ class TestcraftEvaluationAdapter(EvaluationPort):
                             }
                         )
 
-                pipeline_results["statistical_analysis"] = (
-                    self.run_statistical_significance_analysis(
-                        evaluation_data=evaluation_data,
-                        analysis_type="ab_testing_pipeline",
-                        **kwargs,
-                    )
+                pipeline_results[
+                    "statistical_analysis"
+                ] = self.run_statistical_significance_analysis(
+                    evaluation_data=evaluation_data,
+                    analysis_type="ab_testing_pipeline",
+                    **kwargs,
                 )
 
             # Step 4: Bias detection and mitigation
@@ -982,9 +977,9 @@ class TestcraftEvaluationAdapter(EvaluationPort):
 
             # Step 5: Generate recommendations
             logger.info("Step 5: Generating recommendations")
-            pipeline_results["recommendations"] = (
-                self._generate_ab_testing_recommendations(pipeline_results)
-            )
+            pipeline_results[
+                "recommendations"
+            ] = self._generate_ab_testing_recommendations(pipeline_results)
 
             # Store comprehensive A/B testing results
             self.artifact_store.store_artifact(
@@ -1876,7 +1871,8 @@ def test_{Path(source_file).stem}():
         """Convert dictionary back to EvaluationResult object."""
         # Simplified conversion - you might want to implement a proper deserialization
         try:
-            from testcraft.ports.evaluation_port import AcceptanceResult, LLMJudgeResult
+            from testcraft.ports.evaluation_port import (AcceptanceResult,
+                                                         LLMJudgeResult)
 
             acceptance_data = result_dict.get("acceptance", {})
             acceptance = AcceptanceResult(

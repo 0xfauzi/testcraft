@@ -3,7 +3,6 @@
 from typing import Any
 
 from ..adapters.context.main_adapter import TestcraftContextAdapter
-
 # Import adapters
 from ..adapters.io.file_discovery import FileDiscoveryService
 from ..adapters.io.state_json import StateJsonAdapter
@@ -54,17 +53,16 @@ def create_dependency_container(config: TestCraftConfig) -> dict[str, Any]:
 
             # Telemetry adapter (using noop for now)
             container["telemetry_adapter"] = NoOpTelemetryAdapter()
-            
+
             # Cost adapter - now using real implementation
             container["cost_adapter"] = CostManager(
                 config=config.model_dump().get("cost", {}),
-                telemetry=container["telemetry_adapter"]
+                telemetry=container["telemetry_adapter"],
             )
 
             # LLM adapter with cost tracking
             container["llm_adapter"] = LLMRouter(
-                config.llm.model_dump(), 
-                cost_port=container["cost_adapter"]
+                config.llm.model_dump(), cost_port=container["cost_adapter"]
             )
 
             # Writer adapter
@@ -80,7 +78,22 @@ def create_dependency_container(config: TestCraftConfig) -> dict[str, Any]:
             container["parser_adapter"] = CodebaseParser()
 
             # Refine adapter
-            container["refine_adapter"] = RefineAdapter(config.generation.refine)
+            from ..config.models import RefineConfig
+            refine_config = RefineConfig(
+                refinement_guardrails={
+                    "reject_empty": True,
+                    "reject_literal_none": True,
+                    "reject_identical": True,
+                    "validate_syntax": True,
+                    "format_on_refine": True
+                }
+            )
+            container["refine_adapter"] = RefineAdapter(
+                llm=container["llm_adapter"],
+                config=refine_config,
+                writer_port=container["writer_adapter"],
+                telemetry_port=container["telemetry_adapter"]
+            )
 
         except Exception as e:
             raise DependencyError(f"Failed to create adapters: {e}")

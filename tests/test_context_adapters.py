@@ -1,11 +1,9 @@
 from pathlib import Path
 
-from testcraft.adapters.context import (
-    ContextSummarizer,
-    InMemoryHybridIndexer,
-    SimpleContextRetriever,
-    TestcraftContextAdapter,
-)
+from testcraft.adapters.context import (ContextSummarizer,
+                                        InMemoryHybridIndexer,
+                                        SimpleContextRetriever,
+                                        TestcraftContextAdapter)
 
 
 def test_indexer_and_retriever_basic(tmp_path: Path) -> None:

@@ -1,0 +1,35 @@
+[
+  {
+    "id": "55824567-a9bb-4e06-9f7e-6696ddf93679",
+    "timestamp": "2025-09-09T22:37:21.963342",
+    "service": "openai",
+    "operation": "chat_completion",
+    "cost": 0.0,
+    "tokens_used": 0,
+    "api_calls": 1,
+    "duration": null,
+    "metadata": {}
+  },
+  {
+    "id": "cbf56342-b39c-474b-920e-6bb2ecf32644",
+    "timestamp": "2025-09-10T00:09:18.764433",
+    "service": "openai",
+    "operation": "chat_completion",
+    "cost": 0.0,
+    "tokens_used": 0,
+    "api_calls": 1,
+    "duration": null,
+    "metadata": {}
+  },
+  {
+    "id": "40855dd5-8a9d-4d29-a54e-250387262d17",
+    "timestamp": "2025-09-10T00:13:15.863664",
+    "service": "openai",
+    "operation": "chat_completion",
+    "cost": 0.0,
+    "tokens_used": 0,
+    "api_calls": 1,
+    "duration": null,
+    "metadata": {}
+  }
+]

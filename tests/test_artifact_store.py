@@ -10,14 +10,11 @@ import tempfile
 from datetime import datetime, timedelta
 from pathlib import Path
 
-from testcraft.adapters.io.artifact_store import (
-    ArtifactStoreAdapter,
-    ArtifactType,
-    CleanupPolicy,
-    store_coverage_report,
-    store_generated_test,
-    store_llm_response,
-)
+from testcraft.adapters.io.artifact_store import (ArtifactStoreAdapter,
+                                                  ArtifactType, CleanupPolicy,
+                                                  store_coverage_report,
+                                                  store_generated_test,
+                                                  store_llm_response)
 
 
 class TestArtifactStoreAdapter:

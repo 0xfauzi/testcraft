@@ -175,24 +175,29 @@ class TestRichCliComponents:
 
     def test_format_coverage_percentage(self) -> None:
         """Test coverage percentage formatting."""
-        # Test high coverage (>= 0.9)
+        # Test high coverage (>= 0.85)
         high_coverage = self.cli._format_coverage_percentage(0.95)
         assert "coverage_high" in high_coverage
         assert "95.0%" in high_coverage
 
-        # Test medium coverage (>= 0.7, < 0.9)
-        medium_coverage = self.cli._format_coverage_percentage(0.75)
-        assert "coverage_medium" in medium_coverage
-        assert "75.0%" in medium_coverage
+        # Test good coverage (>= 0.70, < 0.85)
+        good_coverage = self.cli._format_coverage_percentage(0.75)
+        assert "coverage_good" in good_coverage
+        assert "75.0%" in good_coverage
 
-        # Test low coverage (< 0.7)
+        # Test medium coverage (>= 0.50, < 0.70)
+        medium_coverage = self.cli._format_coverage_percentage(0.55)
+        assert "coverage_medium" in medium_coverage
+        assert "55.0%" in medium_coverage
+
+        # Test low coverage (< 0.50)
         low_coverage = self.cli._format_coverage_percentage(0.45)
         assert "coverage_low" in low_coverage
         assert "45.0%" in low_coverage
 
-        # Test bold formatting
+        # Test bold formatting with high coverage
         bold_coverage = self.cli._format_coverage_percentage(0.85, bold=True)
-        assert "bold coverage_medium" in bold_coverage
+        assert "bold coverage_high" in bold_coverage
 
     def test_progress_tracker_creation(self) -> None:
         """Test progress tracker creation."""

@@ -16,9 +16,7 @@ from pathlib import Path
 from typing import Any
 
 from ...adapters.io.artifact_store import ArtifactStoreAdapter, ArtifactType
-from ...ports.evaluation_port import (
-    EvaluationConfig,
-)
+from ...ports.evaluation_port import EvaluationConfig
 
 
 class PromptVersionStatus(Enum):
@@ -537,9 +535,11 @@ class PromptFooIntegrationAdapter:
         promptfoo_config = self.load_promptfoo_config(config_path)
 
         # Convert to TestCraft format
-        prompt_variants, test_dataset, eval_config = (
-            promptfoo_config.to_testcraft_format()
-        )
+        (
+            prompt_variants,
+            test_dataset,
+            eval_config,
+        ) = promptfoo_config.to_testcraft_format()
 
         # Register prompt variants
         for variant in prompt_variants:

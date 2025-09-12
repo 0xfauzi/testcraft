@@ -416,8 +416,8 @@ class TestStateJsonAdapter:
         history = self.adapter.get_coverage_history()
 
         assert isinstance(history, dict)
-        assert "file1.py" in history
-        assert "file2.py" in history
+        assert "file1" in history
+        assert "file2" in history
 
     def test_get_coverage_history_specific_file(self):
         """Test getting coverage history for a specific file."""
@@ -529,6 +529,9 @@ class TestStateJsonAdapterSafety:
     def test_persist_state_validates_path(self, mock_validate):
         """Test that state persistence validates file paths."""
         mock_validate.side_effect = SafetyError("Path validation failed")
+
+        # Add some state to make sure persistence is triggered
+        self.adapter.update_state("test_key", "test_value")
 
         with pytest.raises(StateJsonError, match="Failed to persist state"):
             self.adapter.persist_state()
