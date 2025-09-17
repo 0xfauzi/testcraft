@@ -1,0 +1,18 @@
+version = "0.1"
+
+[[models]]
+provider = "openai"
+model_id = "gpt-4o"
+aliases = ["gpt4o", "gpt-4o-latest"]
+
+[models.limits]
+max_context = "not_an_integer"  # Invalid: should be int
+default_max_output = 4096
+
+[[models]]
+provider = "test-provider"
+model_id = "test-model"
+
+[models.limits]
+max_context = -1000  # Invalid: must be >= 1
+default_max_output = -4096  # Invalid: must be >= 1

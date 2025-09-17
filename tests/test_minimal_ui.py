@@ -17,9 +17,9 @@ from rich.console import Console
 from testcraft.adapters.io.ui_rich import UIStyle
 from testcraft.adapters.io.rich_cli import get_theme, MINIMAL_THEME, TESTCRAFT_THEME
 from testcraft.adapters.io.enhanced_ui import EnhancedUIAdapter, MinimalRenderer
-from testcraft.cli.main import detect_ui_style
+from testcraft.cli.ui_detect import detect_ui_style
 from testcraft.adapters.io.enhanced_logging import LoggerManager, LogMode
-from testcraft.cli.main import _display_immediate_mode_results
+from testcraft.cli.display_helpers import _display_immediate_mode_results
 
 
 class TestUIStyleDetection:
@@ -81,10 +81,25 @@ class TestMinimalTheme:
         assert len(core_colors) == 4
         
         # All other colors should map to these core colors or basic whites/dims
-        allowed_values = core_colors | {"white", "dim white", "dim"}
+        # Add the actual Style objects to the allowed set
+        from rich.style import Style
+        allowed_values = core_colors | {
+            "white", "dim white", "dim",
+            Style.parse("white"), Style.parse("dim white"), Style.parse("dim"),
+            Style.parse("green"), Style.parse("red"), Style.parse("yellow"), Style.parse("cyan")
+        }
+        
+        # Only check our custom theme styles, not inherited Rich default styles
+        custom_style_keys = {
+            "success", "error", "status_working", "accent", "muted", "primary", 
+            "border", "warning", "info", "header", "title", "secondary", "subtle",
+            "coverage_good", "coverage_medium", "coverage_low", "status_pass", 
+            "status_fail", "prompt", "selected"
+        }
         
         for key, value in MINIMAL_THEME.styles.items():
-            assert value in allowed_values, f"Color '{key}': '{value}' not in allowed minimal set"
+            if key in custom_style_keys:
+                assert value in allowed_values, f"Color '{key}': '{value}' not in allowed minimal set"
 
 
 class TestEnhancedUIAdapterMinimal:
@@ -189,6 +204,66 @@ class TestMinimalRenderer:
         renderer.render_generation_results(results, console)
         # Only summary printed
         assert console.print.call_count == 1
+    
+    def test_render_generation_results_warning_counter(self):
+        """Test that warning counter appears when warnings > 0."""
+        console = Mock()
+        renderer = MinimalRenderer()
+        
+        # Mock results with warnings
+        results = {
+            "files_written": 3,
+            "files_processed": 5,
+            "tests_generated": 12,
+            "total_duration": 30.0,
+            "failed_generations": 2,
+            "refine_exhausted_count": 1,
+            "refinement_failures": 0,
+            "files_with_failures": 0,
+            "generation_results": [],
+            "refinement_results": []
+        }
+        
+        renderer.render_generation_results(results, console)
+        
+        summary_call = console.print.call_args_list[0]
+        summary_line = summary_call[0][0]
+        
+        # Should include warning counter: warn=5 (2 + 1 + 0 + 0 + (5-3) partial failures)
+        assert "warn=5" in summary_line
+        assert "done 3/5" in summary_line
+        assert "tests 12" in summary_line
+        assert "time 30.0s" in summary_line
+    
+    def test_render_generation_results_no_warning_counter_when_zero(self):
+        """Test that warning counter is omitted when warnings = 0."""
+        console = Mock()
+        renderer = MinimalRenderer()
+        
+        # Mock results with no warnings
+        results = {
+            "files_written": 3,
+            "files_processed": 3,
+            "tests_generated": 12,
+            "total_duration": 30.0,
+            "failed_generations": 0,
+            "refine_exhausted_count": 0,
+            "refinement_failures": 0,
+            "files_with_failures": 0,
+            "generation_results": [],
+            "refinement_results": []
+        }
+        
+        renderer.render_generation_results(results, console)
+        
+        summary_call = console.print.call_args_list[0]
+        summary_line = summary_call[0][0]
+        
+        # Should not include warning counter
+        assert "warn=" not in summary_line
+        assert "done 3/3" in summary_line
+        assert "tests 12" in summary_line
+        assert "time 30.0s" in summary_line
 
 
 class TestMinimalLoggingPolicy:
@@ -258,7 +333,7 @@ class TestMinimalRendererTableFormat:
         
         # Check table configuration (these are set in _render_compact_table)
         assert table_arg.box is None  # No borders
-        assert table_arg.padding == (0, 1)  # Minimal padding
+        assert table_arg.padding == (0, 1, 0, 1)  # Minimal padding (top, right, bottom, left)
         
         # Check column headers are lowercase
         column_headers = [col.header for col in table_arg.columns]

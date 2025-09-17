@@ -261,7 +261,7 @@ def test_another():
         formatted = self.adapter._format_content(content)
 
         # Should call the format_python_content function from python_formatters
-        mock_format.assert_called_once_with(content, timeout=30)
+        mock_format.assert_called_once_with(content, timeout=15, disable_ruff=False)
         assert formatted == "formatted content"
 
     @patch("subprocess.run")
@@ -529,7 +529,7 @@ def helper_function():  # Should not be included in test functions
         formatted = self.adapter._format_content(content)
 
         # Should call the format_python_content function from python_formatters
-        mock_format.assert_called_once_with(content, timeout=30)
+        mock_format.assert_called_once_with(content, timeout=15, disable_ruff=False)
         assert formatted == "formatted content"
 
     @patch("subprocess.run")

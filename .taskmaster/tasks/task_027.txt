@@ -1,0 +1,116 @@
+# Task ID: 27
+# Title: Always include recursive directory tree and exact module_path in LLM context
+# Status: done
+# Dependencies: None
+# Priority: high
+# Description: Ensure generated tests always receive a recursive project directory structure and an authoritative import module_path for the target file, eliminating wrong import guesses.
+# Details:
+Goals:
+- Always provide a recursive (bounded) directory tree in generation/refinement context
+- Derive the precise dotted module_path for each target source file and surface it to the LLM
+- Inject explicit import hints (e.g., `from {module_path} import {Symbol}`) into the prompt/context
+- Reduce import-related failures and mis-guesses (e.g., `weatherscheduler` vs `src.weather_collector`)
+
+Design/Plan:
+1) Directory structure (recursive, budgeted)
+- Extend `DirectoryTreeBuilder` with `build_tree_recursive(project_root, max_depth, max_entries_per_dir, include_py_only=True)`
+- Defaults: depth=4, entries=200, include only `.py` files unless configured
+- Wire into `ContextAssembler.gather_project_context` so the structure is always present in additional_context JSON
+
+2) Module path derivation (authoritative)
+- Implement a utility `derive_module_path(file_path: Path, project_root: Path) -> str` (new module, or extend parsing adapter):
+  - Find `project_root` via nearest `pyproject.toml`/git root
+  - If `src/` exists and file is under it, include `src` in dotted path (as requested), e.g., `src/weather_collector.py` -> `src.weather_collector`
+  - Else, compute dotted path from the first ancestor directory that is clearly a package (has `__init__.py`) or treat PEP 420 namespace directories as packages (best-effort)
+  - Replace separators with dots, drop `.py`
+  - Validate by attempting import with a temporary `sys.path` that includes `project_root` and `project_root/src`; record validation status
+- Add small fallback heuristics (try both with and without `src.` prefix) and surface both if only one validates is unclear
+
+3) Prompt/context injection
+- In `GenerateUseCase._generate_tests_for_plan`, include in `additional_context`:
+  - `module_path`: derived path
+  - `import_suggestion`: `from {module_path} import {Name}` for the primary element
+  - `target_file`: relative path from `project_root`
+- Update `PromptRegistry` usage (no template changes needed) to pass these keys; the LLM will see them in the Additional Context JSON
+
+4) Smarter usage examples and neighbor context
+- In `ContextAssembler._get_usage_examples`, build queries using the derived `module_path` (e.g., `from {module_path} import {Name}`)
+- Keep existing heuristics but prioritize module-qualified patterns
+
+5) Test execution and imports
+- In evaluation/pytest execution paths, ensure `PYTHONPATH` includes `project_root` and `project_root/src` (configurable via `TestEnvironmentConfig.append_pythonpath`); respect existing config if already set
+- Optionally add a fast precheck that tries `importlib.import_module(module_path)` with the temp sys.path augmentation and logs a hint if it fails
+
+6) Configuration & budgets
+- Expose recursion depth/width and include_py_only in config under a new `context_budgets.directory_tree` section (or reuse `prompt_budgets`)
+- Default `append_pythonpath` to include `src` if it exists at `project_root`
+
+7) Telemetry & docs
+- Add telemetry counters for: module_path derived, validated, fallback used
+- Update docs: generation context now includes `module_path`, import hint, and recursive tree
+
+8) Tests
+- Unit tests for module_path derivation across patterns: `src/` layout, flat package with `__init__`, nested packages, namespace packages
+- Integration test: generating tests for `src/weather_collector.py` produces import `from src.weather_collector import WeatherScheduler`
+- Acceptance: import success rate increases (mocked LLM output) and pytest runs with PYTHONPATH including `src`
+
+
+# Test Strategy:
+- Unit: module path derivation utility across directory layouts
+- Unit: recursive DirectoryTreeBuilder respects depth/width and include_py_only
+- Integration: context includes module_path + import_suggestion; usage examples prefer module-qualified queries
+- Acceptance: generated test imports succeed with `PYTHONPATH` including `src` and pass import check/pytest
+
+
+# Subtasks:
+## 1. Extend DirectoryTreeBuilder for Recursive Tree Generation [done]
+### Dependencies: None
+### Description: Modify the DirectoryTreeBuilder to support recursive traversal with configurable depth, entry limits, and file type filtering, ensuring only relevant files (e.g., .py) are included.
+### Details:
+Implement a method such as build_tree_recursive(project_root, max_depth, max_entries_per_dir, include_py_only=True). Use os.walk or pathlib.Path.iterdir for traversal, applying depth and entry limits. Filter files by extension as needed. Return a structured representation suitable for LLM context injection.
+
+## 2. Integrate Recursive Directory Tree into Context Gathering [done]
+### Dependencies: 27.1
+### Description: Ensure the recursive directory tree is always included in the context assembled for LLM test generation and refinement.
+### Details:
+Update ContextAssembler.gather_project_context to invoke the extended DirectoryTreeBuilder and inject the resulting tree into the additional_context JSON. Ensure the tree is present for all relevant generation/refinement flows.
+
+## 3. Implement Authoritative Module Path Derivation Utility [done]
+### Dependencies: None
+### Description: Create a utility to derive the exact dotted module_path for any target source file, handling src/ layouts, package boundaries, and namespace packages.
+### Details:
+Implement derive_module_path(file_path: Path, project_root: Path) -> str. Locate project_root via pyproject.toml or git root. For files under src/, include src in the path. Traverse ancestor directories to identify packages (via __init__.py or PEP 420 rules). Replace path separators with dots and strip .py. Validate by attempting import with sys.path augmented to include project_root and project_root/src.
+
+## 4. Inject Module Path and Import Suggestions into Prompt Context [done]
+### Dependencies: 27.2, 27.3
+### Description: Surface the derived module_path and explicit import hints in the LLM prompt/context for test generation.
+### Details:
+Update GenerateUseCase._generate_tests_for_plan to include module_path, import_suggestion (e.g., from {module_path} import {Symbol}), and target_file in additional_context. Ensure PromptRegistry passes these keys to the LLM without template changes.
+<info added on 2025-09-10T17:00:02.888Z>
+Removed redundant keyword arguments from the generate_tests call to resolve the LLM API error. Now, module_path, import_suggestion, and target_file are injected solely via the enhanced context string, ensuring these details are available to the LLM without being passed as separate parameters. This maintains correct context propagation and prevents parameter-related invocation errors.
+</info added on 2025-09-10T17:00:02.888Z>
+
+## 5. Prioritize Module-Qualified Usage Examples in Context [done]
+### Dependencies: 27.4
+### Description: Adjust usage example retrieval to prefer module-qualified import patterns using the authoritative module_path.
+### Details:
+Update ContextAssembler._get_usage_examples to build queries and examples using the derived module_path (e.g., from {module_path} import {Name}). Retain fallback heuristics but prioritize examples matching the exact module path.
+
+## 6. Ensure Test Execution Environment Supports Reliable Imports [done]
+### Dependencies: 27.3
+### Description: Configure the test execution environment (e.g., pytest) to include project_root and src/ in PYTHONPATH, and validate imports using the derived module_path.
+### Details:
+Update TestEnvironmentConfig.append_pythonpath to ensure PYTHONPATH includes project_root and project_root/src if src exists. Optionally, add a precheck using importlib.import_module(module_path) with temporary sys.path augmentation, logging hints on failure.
+
+## 7. Expose Directory Tree and Import Budgets in Configuration [done]
+### Dependencies: 27.1, 27.6
+### Description: Add configuration options for directory tree recursion depth, width, and file type filtering, as well as PYTHONPATH defaults.
+### Details:
+Extend the configuration system to include context_budgets.directory_tree (depth, width, include_py_only) and default append_pythonpath behavior. Ensure these options are validated and respected throughout context assembly and test execution.
+
+## 8. Add Telemetry, Documentation, and Comprehensive Tests [done]
+### Dependencies: 27.3, 27.4, 27.5, 27.6, 27.7
+### Description: Instrument telemetry for module_path derivation and validation, update documentation, and implement unit/integration/acceptance tests for the full workflow.
+### Details:
+Add telemetry counters for module_path derived, validated, and fallback usage. Update docs to describe new context keys and directory tree inclusion. Implement unit tests for module_path derivation, integration tests for context assembly, and acceptance tests for import success rate and test execution.
+

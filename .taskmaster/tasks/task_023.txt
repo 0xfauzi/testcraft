@@ -1,0 +1,85 @@
+# Task ID: 23
+# Title: Implement Individual and Smart-Batched Element Processing for LLM Test Generation
+# Status: deferred
+# Dependencies: 2, 11, 12, 13, 17, 19
+# Priority: high
+# Description: Refactor the test generation workflow to process each code element (function, class, method) individually, with support for both granular and smart-batched LLM requests, enabling improved focus, quality, and context control.
+# Details:
+1. Refactor the core test generation pipeline to support processing each testable element (function, class, method) as a discrete unit. Update the orchestration logic to allow both single-element and batch processing modes, configurable via CLI or configuration.
+
+2. Implement a batching strategy that groups related elements (e.g., methods of the same class, tightly coupled functions) for joint processing when beneficial. Use code structure analysis (AST) and semantic similarity (optionally leveraging embeddings) to inform batching decisions. Ensure that context sharing is optimized within batches without exceeding LLM context window limits.
+
+3. Integrate with the existing context pipeline to retrieve and inject relevant code context for each element or batch, ensuring that prompts remain focused and within token budgets. Use prompt engineering best practices: break complex requests into smaller steps, set explicit output expectations, and leverage LLM parameters (temperature, max tokens) for deterministic results[5].
+
+4. Update the LLM adapter invocation logic to handle both single and batched requests, ensuring robust error handling, retries, and response validation. Maintain compatibility with all supported LLM providers.
+
+5. Provide configuration options for users to select processing mode (individual, batch, smart-batch) and batch size, with sensible defaults. Expose these options via CLI and configuration files.
+
+6. Ensure that the orchestration layer collects and merges results from individual/batched LLM calls, preserving correct mapping to source elements and supporting downstream refinement and writing workflows.
+
+7. Document the new processing modes, configuration options, and their trade-offs in the user and developer documentation.
+
+Best practices to follow include: chunking code at semantic boundaries, using embeddings for grouping related elements[3][4], and prompt iteration for quality control[5]. Design for extensibility to support future batching strategies and LLM capabilities.
+
+# Test Strategy:
+1. Unit tests: Verify that the pipeline correctly identifies and processes individual elements and forms appropriate batches based on code structure and semantic similarity. Test with files containing diverse code structures (nested classes, overloaded methods, etc.).
+
+2. Integration tests: Mock LLM adapters to ensure correct prompt construction, batching logic, and response handling for both individual and batched modes. Validate that context is correctly retrieved and injected for each element or batch.
+
+3. CLI/config tests: Ensure that processing mode and batch size options are correctly parsed and respected. Test switching between modes and edge cases (e.g., batch size 1, maximum batch size).
+
+4. End-to-end tests: Run the full generation workflow on representative repositories, comparing output quality, coverage, and correctness between individual and batched modes. Verify that results are mapped to the correct source elements and that downstream refinement and writing steps function as expected.
+
+5. Performance tests: Measure and compare LLM call efficiency, token usage, and overall runtime for different processing strategies. Ensure batching does not exceed LLM context limits.
+
+6. Documentation review: Confirm that user and developer documentation accurately describes the new modes and configuration.
+
+# Subtasks:
+## 1. Design and Implement Configuration System for Processing Strategies [pending]
+### Dependencies: None
+### Description: Develop a configuration system that allows users to select between individual, batch, and smart-batch processing modes, including batch size and related parameters, accessible via CLI and configuration files.
+### Details:
+The configuration system must support dynamic switching between processing strategies and expose all relevant options to both CLI and config files. Ensure sensible defaults and validation of user input.
+
+## 2. Refactor Test Generation Pipeline for Element-Level Processing [pending]
+### Dependencies: 23.1
+### Description: Refactor the core test generation workflow to process each code element (function, class, method) as a discrete unit, updating orchestration logic to support both single-element and batch processing.
+### Details:
+The pipeline must identify and process each testable element individually, maintaining compatibility with existing workflows. Ensure orchestration logic can switch between modes based on configuration.
+
+## 3. Implement Smart Batching Logic for Related Elements [pending]
+### Dependencies: 23.2
+### Description: Develop batching logic that groups related elements (e.g., methods of the same class, tightly coupled functions) for joint processing, using AST analysis and semantic similarity (optionally embeddings).
+### Details:
+Batching must optimize context sharing within LLM context window limits. Use code structure analysis and, where available, embeddings to inform grouping. Design for extensibility to support future strategies.
+
+## 4. Enhance Context Gathering for Individual and Batched Elements [pending]
+### Dependencies: 23.2, 23.3
+### Description: Integrate with the context pipeline to retrieve and inject relevant code context for each element or batch, ensuring prompts remain focused and within token budgets.
+### Details:
+Leverage prompt engineering best practices: break complex requests into smaller steps, set explicit output expectations, and tune LLM parameters for deterministic results.
+
+## 5. Enable Parallel Processing of Individual Elements [pending]
+### Dependencies: 23.2
+### Description: Implement parallel processing capabilities for individual element test generation to improve throughput and resource utilization.
+### Details:
+Design the orchestration layer to support concurrent LLM requests, ensuring thread/process safety and efficient resource management.
+
+## 6. Improve Error Handling and Recovery at Element Level [pending]
+### Dependencies: 23.2, 23.3
+### Description: Update LLM adapter invocation logic to robustly handle errors, retries, and response validation for both single and batched requests, maintaining compatibility with all supported LLM providers.
+### Details:
+Implement granular error tracking, retry logic with backoff, and clear reporting for failures at the element or batch level.
+
+## 7. Optimize Performance and Token Management [pending]
+### Dependencies: 23.3, 23.4, 23.5
+### Description: Optimize the orchestration and batching logic for performance, ensuring efficient token usage and adherence to LLM context window constraints.
+### Details:
+Monitor and log token usage, batch sizes, and response times. Implement safeguards to prevent exceeding context limits and optimize for cost and speed.
+
+## 8. Test, Validate, and Document New Processing Modes [pending]
+### Dependencies: 23.1, 23.2, 23.3, 23.4, 23.5, 23.6, 23.7
+### Description: Develop comprehensive unit and integration tests for all new workflows, and document processing modes, configuration options, and trade-offs in user and developer documentation.
+### Details:
+Ensure all features are covered by automated tests and documentation is clear, up-to-date, and accessible to both users and developers.
+

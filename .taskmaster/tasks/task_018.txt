@@ -1,22 +1,53 @@
 # Task ID: 18
 # Title: Implement Status and Utility Use Cases
-# Status: pending
+# Status: done
 # Dependencies: 4, 8, 9
 # Priority: low
-# Description: Create application layer use cases for viewing generation state/history and utility functions.
+# Description: Create application layer use cases for viewing generation state/history and utility functions. StatusUseCase is implemented with comprehensive status, filtering, sorting, statistics, and proper error handling. Next, implement UtilityUseCases for debug-state, sync-state, reset-state, env, and cost utilities following the same patterns.
 # Details:
-1. Create application/status_usecase.py:
-   - Implement view generation state/history
-   - Support filtering and sorting options
-   - Generate summary statistics
-2. Create application/utility_usecases.py for:
-   - debug-state: dump internal state for debugging
-   - sync-state: force state synchronization
-   - reset-state: clear state and start fresh
-   - env: show environment information
-   - cost: display cost summary and projections
-3. Use dependency injection for all ports
-4. Keep business logic pure (no direct adapter calls)
+1. application/status_usecase.py:
+   - StatusUseCase implemented using established patterns (constructor, exception handling, telemetry, logging).
+   - get_generation_status(): Returns comprehensive status including current state, history, statistics, and file-level status.
+   - get_filtered_history(): Supports filtering/sorting by date, status, and other options.
+   - Integrates with StatePort, TelemetryPort, FileDiscoveryService via dependency injection.
+   - Uses StatusUseCaseError for error handling and telemetry span tracking.
+   - Configurable defaults (max_history_entries, time windows, etc.).
+2. application/utility_usecases.py:
+   - Implement utility use cases: debug-state (dump internal state), sync-state (force state sync), reset-state (clear state), env (show environment info), cost (display cost summary/projections).
+   - Follow same patterns as StatusUseCase: dependency injection, error handling, telemetry, logging, and configuration.
+3. All business logic remains pure (no direct adapter calls).
 
 # Test Strategy:
-Unit tests with mocked ports to verify correct status reporting and utility functions. Test with various repository states and history records. Verify correct handling of state operations and environment information.
+Unit tests with mocked ports to verify correct status reporting and utility functions. Test StatusUseCase with various repository states, history records, and configuration options. For UtilityUseCases, test each utility (debug-state, sync-state, reset-state, env, cost) with different internal states and error scenarios. Verify correct handling of state operations, environment info, and cost projections. Ensure all use cases are isolated and testable via dependency injection.
+
+# Subtasks:
+## 1. Analyze existing use case patterns and identify abstractions [done]
+### Dependencies: None
+### Description: 
+### Details:
+
+
+## 2. Implement StatusUseCase in application/status_usecase.py [done]
+### Dependencies: None
+### Description: 
+### Details:
+
+
+## 3. Implement UtilityUseCases in application/utility_usecases.py for debug-state, sync-state, reset-state, env, and cost utilities following established patterns [done]
+### Dependencies: None
+### Description: 
+### Details:
+
+
+## 4. Write unit tests for StatusUseCase covering status, filtering, sorting, statistics, and error handling [done]
+### Dependencies: None
+### Description: 
+### Details:
+
+
+## 5. Write unit tests for UtilityUseCases covering all utility functions and error scenarios [done]
+### Dependencies: None
+### Description: 
+### Details:
+
+

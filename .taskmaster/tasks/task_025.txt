@@ -1,0 +1,28 @@
+# Task ID: 25
+# Title: Implement Smart Formatter Selection System with Ruff Support
+# Status: done
+# Dependencies: 7, 19
+# Priority: medium
+# Description: Production-ready: Replaced the Black+isort formatting approach with an intelligent system that prioritizes Ruff, detects available formatters at runtime, and gracefully falls back as needed. The new system is robust, performant, and fully tested.
+# Details:
+Implementation complete as of 2025-09-09:
+
+1. Introduced FormatterDetector class for runtime detection of Ruff, Black, and isort using subprocess with caching for performance.
+2. Integrated Ruff as the preferred formatter: uses 'ruff format' for code formatting and 'ruff check --select I --fix' for import sorting, with safe wrappers for both operations.
+3. Updated format_python_content to prioritize Ruff, then Black+isort, then Black only, and finally return unformatted code with clear user messaging if no formatters are available.
+4. Added optional dependencies for Ruff, Black, and isort in pyproject.toml under [project.optional-dependencies], supporting flexible installation and clear documentation.
+5. Centralized Ruff configuration in pyproject.toml ([tool.ruff], [tool.ruff.format], [tool.ruff.lint]), ensuring 'I' is included in both 'select' and 'fixable' for import sorting.
+6. Comprehensive test suite: 17 new tests covering all detection, selection, fallback, and error handling scenarios. All tests passing; coverage for python_formatters.py improved from 43% to 50%.
+7. Logging provides explicit feedback about which formatter is used and actionable installation suggestions if missing. Detection results are cached for efficiency.
+8. Existing Black+isort workflows remain backward compatible and unchanged if Ruff is not available.
+9. CI workflows updated to use Ruff for both formatting and import sorting, enforcing standards with --check flags.
+10. Documentation updated: formatter selection logic, known differences between Ruff and legacy tools, and Ruff editor integration recommendations for contributors.
+
+# Test Strategy:
+- 17 new unit and integration tests for python_formatters.py covering all formatter selection paths: Ruff available, Black+isort available, Black only, neither available.
+- Subprocess checks are mocked to simulate all formatter installation scenarios.
+- Integration tests verify correct formatting and import sorting for representative Python files using Ruff and legacy tools.
+- Logging output is tested for clarity and helpfulness in all fallback scenarios.
+- pyproject.toml updates validated by installing optional dependencies and verifying formatter detection.
+- Regression tests ensure existing formatting behavior is preserved when Ruff is not available.
+- All tests passing; coverage for python_formatters.py increased to 50%.

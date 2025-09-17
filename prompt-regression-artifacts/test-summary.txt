@@ -1,0 +1,18 @@
+TESTCRAFT PROMPT REGRESSION TEST SUMMARY
+==================================================
+
+Test Run: 2025-09-17T00:45:19.744714
+Registry Version: v1
+
+TEST RESULTS:
+--------------------
+✅ Basic Prompt Generation: PASSED
+✅ Prompt Validation: PASSED
+✅ Evaluation Prompt Integration: PASSED
+✅ Schema Generation: PASSED
+✅ Safety Constraints: PASSED
+✅ Version Consistency: PASSED
+
+OVERALL: 6/6 tests passed
+
+🎉 ALL REGRESSION TESTS PASSED! 🎉

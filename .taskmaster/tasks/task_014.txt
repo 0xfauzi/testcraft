@@ -1,26 +1,28 @@
 # Task ID: 14
 # Title: Implement Refinement System
-# Status: pending
+# Status: done
 # Dependencies: 6, 7, 13
 # Priority: medium
-# Description: Create adapters for refining generated tests based on pytest failures and other issues.
+# Description: Create a single adapter for refining generated tests based on pytest failures and other issues, leveraging LLM analysis of failure output and code context.
 # Details:
-1. Create refine/manager.py:
-   - Categorize failures (import errors, assertion mismatches, fixture/mocks)
-   - Select appropriate refinement strategy
-   - Cap iterations and total time
-   - Stop on no-change
-   - Safely apply updates
+1. Create refine/adapter.py:
+   - Accept pytest failure output and current test code
+   - Send both, along with relevant codebase context, to the LLM
+   - Receive refined test code from the LLM
+   - Safely apply changes to the test file
    - Rerun pytest to verify fixes
-2. Implement refinement strategies:
-   - refine/strategies/import_fix.py
-   - refine/strategies/assertion_fix.py
-   - refine/strategies/fixture_fix.py
-3. Create payload builder in application layer:
-   - Include failures, artifacts, repo context
-   - Add last run command, tests written, git metadata
-   - Analyze and include pattern information
-4. Implement safe apply closure and rerun closure
+2. Implement iteration management:
+   - Cap the number of refinement attempts (e.g., max 3)
+   - Detect and stop on no-change between iterations
+   - Enforce time limits for safety
+   - Gracefully degrade if refinement fails (e.g., log and exit)
+3. Build payloads for LLM:
+   - Include failure output (stdout/stderr)
+   - Provide current test file content
+   - Add relevant source code context
+   - Track previous refinement attempts to avoid infinite loops
+
+This approach eliminates explicit failure categorization and separate strategy classes, relying on the LLM's ability to analyze and fix diverse test failures directly.
 
 # Test Strategy:
-Unit tests for failure categorization with sample pytest outputs. Test each refinement strategy with specific failure types. Verify iteration caps and time limits work correctly. Test safe apply with various test files.
+Unit tests for adapter with sample pytest outputs and test files. Verify that the adapter sends correct payloads to the LLM and applies changes safely. Test iteration caps, no-change detection, and time limits. Simulate refinement failures and verify graceful handling.

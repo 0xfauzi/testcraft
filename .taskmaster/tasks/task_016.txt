@@ -1,6 +1,6 @@
 # Task ID: 16
 # Title: Implement Coverage Use Case
-# Status: pending
+# Status: done
 # Dependencies: 4, 6, 8
 # Priority: medium
 # Description: Create the application layer use case for measuring and reporting code coverage.

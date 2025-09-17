@@ -267,8 +267,10 @@ class WriterASTMergeAdapter:
             else:
                 merged_content = content
 
+            # Allow callers to disable Ruff formatting via kwargs
+            disable_ruff = bool(kwargs.get("disable_ruff_format", False))
             # Format the merged content
-            formatted_content = self._format_content(merged_content)
+            formatted_content = self._format_content(merged_content, disable_ruff=disable_ruff)
 
             if self.dry_run:
                 # Generate diff for dry-run
@@ -539,7 +541,7 @@ class WriterASTMergeAdapter:
             # Fallback to simple concatenation if AST parsing fails
             return existing_content + "\n\n" + new_content
 
-    def _format_content(self, content: str) -> str:
+    def _format_content(self, content: str, *, disable_ruff: bool = False) -> str:
         """
         Format Python content using Black and isort with robust process management.
 
@@ -555,7 +557,7 @@ class WriterASTMergeAdapter:
         Raises:
             WriterASTMergeError: If formatting fails
         """
-        return format_python_content(content, timeout=15, disable_ruff=False)
+        return format_python_content(content, timeout=15, disable_ruff=disable_ruff)
 
     def _generate_diff(self, original: str, modified: str, filename: str) -> str:
         """Generate unified diff between original and modified content."""

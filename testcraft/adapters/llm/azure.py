@@ -10,9 +10,13 @@ from openai import AzureOpenAI
 from openai.types.chat import ChatCompletion
 
 from ...config.credentials import CredentialError, CredentialManager
+from ...config.model_catalog_loader import resolve_model
 from ...ports.cost_port import CostPort
+from ...ports.llm_error import LLMError
+from ...prompts.registry import PromptRegistry
 from ...ports.llm_port import LLMPort
 from .common import parse_json_response, with_retries
+from .base import BaseLLMAdapter
 
 logger = logging.getLogger(__name__)
 
@@ -23,7 +27,7 @@ class AzureOpenAIError(Exception):
     pass
 
 
-class AzureOpenAIAdapter(LLMPort):
+class AzureOpenAIAdapter(BaseLLMAdapter, LLMPort):
     """
     Production Azure OpenAI adapter using the latest v1.2.0 SDK.
 
@@ -38,13 +42,14 @@ class AzureOpenAIAdapter(LLMPort):
 
     def __init__(
         self,
-        deployment: str = "claude-sonnet-4",
+        deployment: str = "gpt-4o",
         api_version: str = "2024-02-15-preview",
         timeout: float = 180.0,
         max_tokens: int = 4000,
         temperature: float = 0.1,
         max_retries: int = 3,
         credential_manager: CredentialManager | None = None,
+        prompt_registry: PromptRegistry | None = None,
         cost_port: CostPort | None = None,
         **kwargs: Any,
     ):
@@ -61,6 +66,7 @@ class AzureOpenAIAdapter(LLMPort):
             cost_port: Optional cost tracking port (optional)
             **kwargs: Additional Azure OpenAI client parameters
         """
+        # Azure-specific attributes
         self.deployment = deployment
         self.api_version = api_version
         self.timeout = timeout
@@ -68,15 +74,101 @@ class AzureOpenAIAdapter(LLMPort):
         self.temperature = temperature
         self.max_retries = max_retries
 
-        # Initialize credential manager
-        self.credential_manager = credential_manager or CredentialManager()
-
-        # Initialize cost tracking
-        self.cost_port = cost_port
+        # Initialize base adapter (provides token_calculator and helpers)
+        # Use canonical OpenAI model for token calculations to ensure correct limits
+        canonical_model = self._map_deployment_to_canonical_model_static(self.deployment)
+        BaseLLMAdapter.__init__(
+            self,
+            provider="openai",  # Use "openai" provider for catalog lookup
+            model=canonical_model,  # Use canonical model for proper limits
+            prompt_registry=prompt_registry,
+            credential_manager=credential_manager,
+            cost_port=cost_port,
+        )
 
         # Initialize Azure OpenAI client
         self._client: AzureOpenAI | None = None
         self._initialize_client(**kwargs)
+
+    @staticmethod
+    def _map_deployment_to_canonical_model_static(deployment: str) -> str:
+        """Static version of deployment mapping for use during initialization."""
+        # Common Azure deployment name patterns to canonical model mapping
+        deployment_lower = deployment.lower()
+        
+        # GPT-4o variants
+        if "gpt-4o-mini" in deployment_lower or "4o-mini" in deployment_lower:
+            return "gpt-4o-mini"
+        elif "gpt-4o" in deployment_lower or "4o" in deployment_lower:
+            return "gpt-4o"
+        
+        # o1-series reasoning models
+        elif "o1-mini" in deployment_lower:
+            return "o1-mini"
+        elif "o1-preview" in deployment_lower or "o1" in deployment_lower:
+            return "o1-mini"  # Fallback to o1-mini for now
+            
+        # GPT-4 variants  
+        elif "gpt-4-turbo" in deployment_lower or "gpt4-turbo" in deployment_lower:
+            return "gpt-4o"  # Map older turbo to gpt-4o
+        elif "gpt-4" in deployment_lower or "gpt4" in deployment_lower:
+            return "gpt-4o"  # Map gpt-4 variants to gpt-4o
+            
+        # Default fallback
+        else:
+            return "gpt-4o"
+
+    def _map_deployment_to_canonical_model(self) -> str:
+        """Map Azure deployment name to canonical OpenAI model ID.
+        
+        This ensures that Azure deployments use the same limits and capabilities
+        as their underlying OpenAI models for parameter compliance.
+        
+        Returns:
+            Canonical OpenAI model ID for catalog lookup
+        """
+        canonical = self._map_deployment_to_canonical_model_static(self.deployment)
+        if canonical == "gpt-4o" and self.deployment.lower() != "gpt-4o":
+            logger.warning(f"Unknown Azure deployment '{self.deployment}', using gpt-4o defaults")
+        return canonical
+
+    def _supports_reasoning_features(self) -> bool:
+        """Check if the underlying model supports reasoning features."""
+        canonical_model = self._map_deployment_to_canonical_model()
+        catalog_entry = resolve_model("openai", canonical_model)
+        if catalog_entry and catalog_entry.flags:
+            return bool(catalog_entry.flags.reasoning_capable)
+        return False
+
+    def _requires_completion_tokens_param(self) -> bool:
+        """Check if the deployment requires max_completion_tokens parameter."""
+        return self._supports_reasoning_features()
+
+    def _enforce_catalog_limits(self, requested_tokens: int, use_case: str = "general") -> int:
+        """Enforce catalog-defined token limits based on the canonical model.
+        
+        Args:
+            requested_tokens: Number of tokens requested
+            use_case: Use case context for logging
+            
+        Returns:
+            Token count clamped to catalog limits
+        """
+        canonical_model = self._map_deployment_to_canonical_model()
+        catalog_entry = resolve_model("openai", canonical_model)  # Use OpenAI provider for canonical lookup
+        
+        if catalog_entry and catalog_entry.limits:
+            max_allowed = catalog_entry.limits.default_max_output
+            if requested_tokens > max_allowed:
+                logger.warning(
+                    f"Requested {requested_tokens} tokens for {use_case} but deployment '{self.deployment}' "
+                    f"(canonical model '{canonical_model}') limit is {max_allowed} tokens, clamping to catalog limit"
+                )
+                return max_allowed
+        else:
+            logger.debug(f"No catalog limits found for deployment '{self.deployment}' (canonical: {canonical_model}), using requested value")
+        
+        return requested_tokens
 
     def _initialize_client(self, **kwargs: Any) -> None:
         """Initialize the Azure OpenAI client with credentials."""
@@ -185,39 +277,27 @@ class AzureOpenAIAdapter(LLMPort):
         Returns:
             The calculated cost in USD
         """
-        # Azure OpenAI pricing tiers (prices per 1000 tokens in USD)
-        # These are example rates - update based on your actual Azure pricing
-        pricing_tiers = {
-            # GPT-4 models
-            "gpt-4": {"prompt": 0.03, "completion": 0.06},
-            "gpt-4-32k": {"prompt": 0.06, "completion": 0.12},
-            "gpt-4-turbo": {"prompt": 0.01, "completion": 0.03},
-            "gpt-4o": {"prompt": 0.005, "completion": 0.015},
-            "gpt-4o-mini": {"prompt": 0.00015, "completion": 0.0006},
-            # GPT-3.5 models
-            "gpt-35-turbo": {"prompt": 0.0005, "completion": 0.0015},
-            "gpt-35-turbo-16k": {"prompt": 0.003, "completion": 0.004},
-            # Default/fallback pricing
-            "default": {"prompt": 0.001, "completion": 0.002},
-        }
-
-        # Find matching pricing tier
-        tier_pricing = pricing_tiers.get("default")
-        deployment_lower = deployment.lower()
-
-        for tier_name, prices in pricing_tiers.items():
-            if tier_name in deployment_lower:
-                tier_pricing = prices
-                break
-
-        # Calculate cost
-        prompt_tokens = usage_info.get("prompt_tokens", 0)
-        completion_tokens = usage_info.get("completion_tokens", 0)
-
-        prompt_cost = (prompt_tokens / 1000) * tier_pricing["prompt"]
-        completion_cost = (completion_tokens / 1000) * tier_pricing["completion"]
-
-        total_cost = prompt_cost + completion_cost
+        # MIGRATION: Use catalog-driven pricing per Task 31.10
+        # Hardcoded pricing tiers removed - now uses model catalog
+        from .pricing import calculate_cost
+        
+        try:
+            # Try to use catalog-driven pricing
+            total_cost = calculate_cost(
+                deployment, "openai",  # Azure uses OpenAI models
+                usage_info.get("prompt_tokens", 0),
+                usage_info.get("completion_tokens", 0)
+            )
+        except Exception as e:
+            logger.warning(f"Could not calculate cost from catalog for Azure deployment '{deployment}': {e}")
+            # Conservative fallback pricing (per 1000 tokens)
+            prompt_tokens = usage_info.get("prompt_tokens", 0)
+            completion_tokens = usage_info.get("completion_tokens", 0)
+            
+            # Use conservative estimates when catalog is unavailable
+            prompt_cost = (prompt_tokens / 1000) * 0.01  # $10 per million
+            completion_cost = (completion_tokens / 1000) * 0.03  # $30 per million
+            total_cost = prompt_cost + completion_cost
 
         return total_cost
 
@@ -237,32 +317,30 @@ class AzureOpenAIAdapter(LLMPort):
     ) -> dict[str, Any]:
         """Generate test cases for the provided code content."""
 
-        # Construct the prompt for test generation
-        system_prompt = f"""You are an expert Python test generator. Generate comprehensive {test_framework} tests for the provided code.
+        # Prompts from registry
+        additional_context = {"context": context} if context else {}
+        system_prompt, user_prompt = self._prompts(
+            "llm_test_generation",
+            code_content=code_content,
+            additional_context=additional_context,
+            test_framework=test_framework,
+        )
 
-Requirements:
-- Use {test_framework} testing framework
-- Generate tests that cover edge cases, error conditions, and normal usage
-- Include appropriate fixtures, mocks, and test data
-- Focus on achieving high code coverage
-- Return results as valid JSON with the following structure:
-{{
-  "tests": "# Generated test code here",
-  "coverage_focus": ["list", "of", "areas", "to", "focus", "testing"],
-  "confidence": 0.85,
-  "reasoning": "Brief explanation of test strategy"
-}}
-
-Generate clean, production-ready test code."""
-
-        user_prompt = f"Code to test:\n```python\n{code_content}\n```"
-
-        if context:
-            user_prompt += f"\n\nAdditional context:\n{context}"
+        budgets = self._calc_budgets(
+            use_case="test_generation",
+            input_text=code_content + (context or ""),
+        )
+        # Allow per-request override for max_tokens
+        effective_max_tokens = int(
+            (kwargs.pop("max_tokens") if "max_tokens" in kwargs else budgets["max_tokens"])  # type: ignore[arg-type]
+        )
 
         def call() -> dict[str, Any]:
             return self._chat_completion(
-                system_prompt=system_prompt, user_prompt=user_prompt, **kwargs
+                system_prompt=system_prompt,
+                user_prompt=user_prompt,
+                max_tokens=effective_max_tokens,
+                **kwargs,
             )
 
         try:
@@ -273,70 +351,77 @@ Generate clean, production-ready test code."""
             parsed = parse_json_response(content)
 
             if parsed.success and parsed.data:
+                metadata = self._unify_metadata(
+                    provider="azure-openai",
+                    model=self.deployment,
+                    usage=result.get("usage"),
+                    parsed_info={"parsed": True},
+                    extra={
+                        "api_version": self.api_version,
+                        "reasoning": parsed.data.get("reasoning", ""),
+                    },
+                    raw_provider_fields={"deployment": self.deployment},
+                )
                 return {
                     "tests": parsed.data.get("tests", content),
                     "coverage_focus": parsed.data.get("coverage_focus", []),
                     "confidence": parsed.data.get("confidence", 0.5),
-                    "metadata": {
-                        "deployment": self.deployment,
-                        "api_version": self.api_version,
-                        "parsed": True,
-                        "reasoning": parsed.data.get("reasoning", ""),
-                        **result.get("usage", {}),
-                    },
+                    "metadata": metadata,
                 }
             else:
                 # Fallback if JSON parsing fails
                 logger.warning(f"Failed to parse JSON response: {parsed.error}")
+                metadata = self._unify_metadata(
+                    provider="azure-openai",
+                    model=self.deployment,
+                    usage=result.get("usage"),
+                    parsed_info={"parsed": False},
+                    extra={"api_version": self.api_version, "parse_error": parsed.error},
+                    raw_provider_fields={"deployment": self.deployment, "raw_content": content},
+                )
                 return {
                     "tests": content,
                     "coverage_focus": ["functions", "edge_cases", "error_handling"],
                     "confidence": 0.3,
-                    "metadata": {
-                        "deployment": self.deployment,
-                        "api_version": self.api_version,
-                        "parsed": False,
-                        "parse_error": parsed.error,
-                        **result.get("usage", {}),
-                    },
+                    "metadata": metadata,
                 }
 
         except Exception as e:
             logger.error(f"Azure OpenAI test generation failed: {e}")
-            raise AzureOpenAIError(f"Test generation failed: {e}") from e
+            raise LLMError(
+                message=f"Test generation failed: {e}",
+                provider="azure-openai",
+                operation="generate_tests",
+                model=self.deployment,
+            ) from e
 
     def analyze_code(
         self, code_content: str, analysis_type: str = "comprehensive", **kwargs: Any
     ) -> dict[str, Any]:
         """Analyze code for testability, complexity, and potential issues."""
 
-        system_prompt = f"""You are an expert Python code analyst. Perform a {analysis_type} analysis of the provided code.
+        # Prompts from registry
+        system_prompt, user_prompt = self._prompts(
+            "llm_code_analysis",
+            code_content=code_content,
+            analysis_type=analysis_type,
+        )
 
-Analyze the code for:
-- Testability score (0-10, where 10 is most testable)
-- Complexity metrics (cyclomatic complexity, nesting depth, etc.)
-- Recommendations for improving testability
-- Potential issues or code smells
-- Dependencies and coupling analysis
-
-Return results as valid JSON with this structure:
-{{
-  "testability_score": 8.5,
-  "complexity_metrics": {{
-    "cyclomatic_complexity": 5,
-    "nesting_depth": 3,
-    "function_count": 10
-  }},
-  "recommendations": ["suggestion1", "suggestion2"],
-  "potential_issues": ["issue1", "issue2"],
-  "analysis_summary": "Brief summary of findings"
-}}"""
-
-        user_prompt = f"Code to analyze:\n```python\n{code_content}\n```"
+        budgets = self._calc_budgets(
+            use_case="code_analysis",
+            input_text=code_content,
+        )
+        # Allow per-request override for max_tokens
+        effective_max_tokens = int(
+            (kwargs.pop("max_tokens") if "max_tokens" in kwargs else budgets["max_tokens"])  # type: ignore[arg-type]
+        )
 
         def call() -> dict[str, Any]:
             return self._chat_completion(
-                system_prompt=system_prompt, user_prompt=user_prompt, **kwargs
+                system_prompt=system_prompt,
+                user_prompt=user_prompt,
+                max_tokens=effective_max_tokens,
+                **kwargs,
             )
 
         try:
@@ -347,41 +432,56 @@ Return results as valid JSON with this structure:
             parsed = parse_json_response(content)
 
             if parsed.success and parsed.data:
+                metadata = self._unify_metadata(
+                    provider="azure-openai",
+                    model=self.deployment,
+                    usage=result.get("usage"),
+                    parsed_info={"parsed": True},
+                    extra={
+                        "api_version": self.api_version,
+                        "analysis_type": analysis_type,
+                        "summary": parsed.data.get("analysis_summary", ""),
+                    },
+                    raw_provider_fields={"deployment": self.deployment},
+                )
                 return {
                     "testability_score": parsed.data.get("testability_score", 5.0),
                     "complexity_metrics": parsed.data.get("complexity_metrics", {}),
                     "recommendations": parsed.data.get("recommendations", []),
                     "potential_issues": parsed.data.get("potential_issues", []),
-                    "metadata": {
-                        "deployment": self.deployment,
-                        "api_version": self.api_version,
-                        "analysis_type": analysis_type,
-                        "parsed": True,
-                        "summary": parsed.data.get("analysis_summary", ""),
-                        **result.get("usage", {}),
-                    },
+                    "metadata": metadata,
                 }
             else:
                 # Fallback if JSON parsing fails
+                metadata = self._unify_metadata(
+                    provider="azure-openai",
+                    model=self.deployment,
+                    usage=result.get("usage"),
+                    parsed_info={"parsed": False},
+                    extra={
+                        "api_version": self.api_version,
+                        "analysis_type": analysis_type,
+                        "raw_content": content,
+                        "parse_error": parsed.error,
+                    },
+                    raw_provider_fields={"deployment": self.deployment},
+                )
                 return {
                     "testability_score": 5.0,
                     "complexity_metrics": {},
                     "recommendations": [],
                     "potential_issues": [],
-                    "metadata": {
-                        "deployment": self.deployment,
-                        "api_version": self.api_version,
-                        "analysis_type": analysis_type,
-                        "parsed": False,
-                        "raw_content": content,
-                        "parse_error": parsed.error,
-                        **result.get("usage", {}),
-                    },
+                    "metadata": metadata,
                 }
 
         except Exception as e:
             logger.error(f"Azure OpenAI code analysis failed: {e}")
-            raise AzureOpenAIError(f"Code analysis failed: {e}") from e
+            raise LLMError(
+                message=f"Code analysis failed: {e}",
+                provider="azure-openai",
+                operation="analyze_code",
+                model=self.deployment,
+            ) from e
 
     def refine_content(
         self,
@@ -395,118 +495,82 @@ Return results as valid JSON with this structure:
 
         # Use pre-rendered instructions built by the caller (RefineAdapter)
         if system_prompt is None:
-            system_prompt = ""
+            system_prompt, _ = self._prompts("llm_content_refinement")
         user_prompt = refinement_instructions
+
+        budgets = self._calc_budgets(
+            use_case="refinement",
+            input_text=original_content + refinement_instructions,
+        )
+        # Allow per-request override for max_tokens
+        effective_max_tokens = int(
+            (kwargs.pop("max_tokens") if "max_tokens" in kwargs else budgets["max_tokens"])  # type: ignore[arg-type]
+        )
 
         def call() -> dict[str, Any]:
             return self._chat_completion(
-                system_prompt=system_prompt, user_prompt=user_prompt, **kwargs
+                system_prompt=system_prompt,
+                user_prompt=user_prompt,
+                max_tokens=effective_max_tokens,
+                **kwargs,
             )
 
         try:
             result = with_retries(call, retries=self.max_retries)
             content = result.get("content", "")
 
-            # Parse JSON response
-            parsed = parse_json_response(content)
+            # Parse and normalize refinement response using base helper
+            refined_data, parsed_info = self._parse_and_normalize_refinement(content)
 
-            if parsed.success and parsed.data:
-                # Use common schema validation and repair
-                from .common import normalize_refinement_response, create_repair_prompt
-                
-                validation_result = normalize_refinement_response(parsed.data)
-                
-                if not validation_result.is_valid:
-                    logger.warning(
-                        "Azure OpenAI returned invalid schema: %s. Attempting repair...",
-                        validation_result.error
-                    )
-                    
-                    # Attempt single-shot repair with minimal prompt
-                    repair_prompt = create_repair_prompt(
-                        validation_result.error,
-                        ["refined_content", "changes_made", "confidence", "improvement_areas"]
-                    )
-                    
-                    try:
-                        repair_result = self._chat_completion(
-                            system_prompt=system_prompt,
-                            user_prompt=f"{user_prompt}\n\n{repair_prompt}",
-                            temperature=0.0,  # Deterministic repair
-                            **kwargs
-                        )
-                        
-                        repair_content = repair_result.get("content", "")
-                        repair_parsed = parse_json_response(repair_content)
-                        
-                        if repair_parsed.success and repair_parsed.data:
-                            repair_validation = normalize_refinement_response(repair_parsed.data)
-                            if repair_validation.is_valid:
-                                logger.info("Azure OpenAI schema repair successful.")
-                                validation_result = repair_validation
-                            else:
-                                logger.error(f"Azure OpenAI repair failed: {repair_validation.error}")
-                        
-                    except Exception as repair_e:
-                        logger.error(f"Azure OpenAI repair attempt failed: {repair_e}")
-                
-                # Return consistent response structure
-                if validation_result.is_valid and validation_result.data:
-                    response_data = validation_result.data
-                    return {
-                        "refined_content": response_data["refined_content"],
-                        "changes_made": response_data["changes_made"],
-                        "confidence": response_data["confidence"],
-                        "improvement_areas": response_data["improvement_areas"],
-                        "suspected_prod_bug": response_data.get("suspected_prod_bug"),
-                        "metadata": {
-                            "deployment": self.deployment,
-                            "api_version": self.api_version,
-                            "parsed": True,
-                            "repaired": validation_result.repaired,
-                            "repair_type": validation_result.repair_type,
-                            **result.get("usage", {}),
-                        },
-                    }
-                else:
-                    # Schema validation failed even after repair
-                    logger.error(f"Azure OpenAI schema validation failed: {validation_result.error}")
-                    return {
-                        "refined_content": original_content,  # Safe fallback
-                        "changes_made": f"Schema validation failed: {validation_result.error}",
-                        "confidence": 0.0,
-                        "improvement_areas": ["schema_error"],
-                        "suspected_prod_bug": None,
-                        "metadata": {
-                            "deployment": self.deployment,
-                            "api_version": self.api_version,
-                            "parsed": False,
-                            "schema_error": validation_result.error,
-                            **result.get("usage", {}),
-                        },
-                    }
-            else:
-                # Fallback if JSON parsing fails
+            if refined_data:
+                metadata = self._unify_metadata(
+                    provider="azure-openai",
+                    model=self.deployment,
+                    usage=result.get("usage"),
+                    parsed_info=parsed_info,
+                    extra={"api_version": self.api_version},
+                    raw_provider_fields={"deployment": self.deployment},
+                )
                 return {
-                    "refined_content": content or original_content,
-                    "changes_made": "Refinement applied (JSON parse failed)",
-                    "confidence": 0.3,
-                    "metadata": {
-                        "deployment": self.deployment,
-                        "api_version": self.api_version,
-                        "parsed": False,
-                        "raw_content": content,
-                        "parse_error": parsed.error,
-                        **result.get("usage", {}),
-                    },
+                    "refined_content": refined_data["refined_content"],
+                    "changes_made": refined_data["changes_made"],
+                    "confidence": refined_data["confidence"],
+                    "improvement_areas": refined_data["improvement_areas"],
+                    "suspected_prod_bug": refined_data.get("suspected_prod_bug"),
+                    "metadata": metadata,
+                }
+            else:
+                # Schema validation failed
+                error_msg = parsed_info.get("error", "Unknown parsing error")
+                logger.error(f"Azure OpenAI schema validation failed: {error_msg}")
+                metadata = self._unify_metadata(
+                    provider="azure-openai",
+                    model=self.deployment,
+                    usage=result.get("usage"),
+                    parsed_info=parsed_info,
+                    extra={"api_version": self.api_version, "schema_error": error_msg},
+                    raw_provider_fields={"deployment": self.deployment},
+                )
+                return {
+                    "refined_content": original_content,  # Safe fallback
+                    "changes_made": f"Schema validation failed: {error_msg}",
+                    "confidence": 0.0,
+                    "improvement_areas": ["schema_error"],
+                    "suspected_prod_bug": None,
+                    "metadata": metadata,
                 }
 
         except Exception as e:
             logger.error(f"Azure OpenAI content refinement failed: {e}")
-            raise AzureOpenAIError(f"Content refinement failed: {e}") from e
+            raise LLMError(
+                message=f"Content refinement failed: {e}",
+                provider="azure-openai",
+                operation="refine_content",
+                model=self.deployment,
+            ) from e
 
     def _chat_completion(
-        self, system_prompt: str, user_prompt: str, **kwargs: Any
+        self, system_prompt: str, user_prompt: str, *, max_tokens: int | None = None, **kwargs: Any
     ) -> dict[str, Any]:
         """Make a chat completion request to Azure OpenAI."""
 
@@ -518,10 +582,23 @@ Return results as valid JSON with this structure:
         request_kwargs = {
             "model": self.deployment,  # Use deployment name as model for Azure
             "messages": messages,
-            "max_tokens": self.max_tokens,
-            "temperature": self.temperature,
             **kwargs,
         }
+
+        # Use proper parameter name based on underlying model capabilities and enforce catalog limits
+        requested_tokens = max_tokens if max_tokens is not None else self.max_tokens
+        tokens_to_use = self._enforce_catalog_limits(requested_tokens, "chat_completion")
+        
+        if self._requires_completion_tokens_param():
+            request_kwargs["max_completion_tokens"] = tokens_to_use
+            # Don't set temperature for reasoning models (they use fixed temperature)
+            if not self._supports_reasoning_features():
+                request_kwargs["temperature"] = self.temperature
+            else:
+                logger.debug(f"Skipping temperature for reasoning deployment {self.deployment} (uses fixed temperature)")
+        else:
+            request_kwargs["max_tokens"] = tokens_to_use
+            request_kwargs["temperature"] = self.temperature
 
         try:
             response: ChatCompletion = self.client.chat.completions.create(
@@ -543,28 +620,21 @@ Return results as valid JSON with this structure:
                     "total_tokens": response.usage.total_tokens,
                 }
 
-                # Track costs if cost_port is available
-                if self.cost_port and usage_info:
+                # Track costs using unified Base helper
+                if usage_info:
                     try:
-                        # Calculate cost based on deployment
                         cost = self._calculate_api_cost(usage_info, self.deployment)
-
-                        # Track usage
-                        self.cost_port.track_usage(
-                            service="azure-openai",
+                        self._track_cost(
                             operation="chat_completion",
-                            cost_data={
-                                "cost": cost,
-                                "tokens_used": usage_info["total_tokens"],
-                                "api_calls": 1,
-                            },
+                            tokens_used=usage_info["total_tokens"],
+                            cost=cost,
                             deployment=self.deployment,
                             api_version=self.api_version,
                             prompt_tokens=usage_info["prompt_tokens"],
                             completion_tokens=usage_info["completion_tokens"],
                         )
                     except Exception as e:
-                        logger.warning(f"Failed to track cost: {e}")
+                        logger.debug(f"Cost tracking failed: {e}")
 
             return {
                 "content": content,
@@ -577,7 +647,141 @@ Return results as valid JSON with this structure:
 
         except openai.APIError as e:
             logger.error(f"Azure OpenAI API error: {e}")
-            raise AzureOpenAIError(f"Azure OpenAI API error: {e}") from e
+            status_code = getattr(e, "status_code", None)
+            raise LLMError(
+                message=f"Azure OpenAI API error: {e}",
+                provider="azure-openai",
+                operation="chat_completion",
+                model=self.deployment,
+                status_code=status_code,
+            ) from e
         except Exception as e:
             logger.error(f"Unexpected error in chat completion: {e}")
-            raise AzureOpenAIError(f"Chat completion failed: {e}") from e
+            raise LLMError(
+                message=f"Chat completion failed: {e}",
+                provider="azure-openai",
+                operation="chat_completion",
+                model=self.deployment,
+            ) from e
+
+    def generate_test_plan(
+        self,
+        code_content: str,
+        context: str | None = None,
+        **kwargs: Any,
+    ) -> dict[str, Any]:
+        """Generate a test plan for the provided code content."""
+        import time
+        
+        # Add simple telemetry tracking for planning operations
+        planning_start_time = time.time()
+
+        # Calculate optimal max_tokens for this specific request
+        input_length = self.token_calculator.estimate_input_tokens(
+            code_content + (context or "")
+        )
+        max_tokens = self.token_calculator.calculate_max_tokens(
+            use_case="test_planning", input_length=input_length
+        )
+
+        # Get prompts from registry via _prompts helper
+        additional_context = {"context": context} if context else {}
+        system_prompt, user_prompt = self._prompts(
+            "llm_test_planning_v1",
+            code_content=code_content,
+            additional_context=additional_context,
+        )
+
+        # If caller provided multiple elements, request per-element plans in one response
+        elements = kwargs.pop("elements", None)
+        if isinstance(elements, list) and elements:
+            try:
+                import json as _json
+                elements_json = _json.dumps(elements, ensure_ascii=False)
+            except Exception:
+                elements_json = str(elements)
+            user_prompt += (
+                "\n\n"
+                "You are planning tests for multiple elements in this file.\n"
+                "Elements (name, type, optional line_range):\n" + elements_json + "\n\n"
+                "Return valid JSON including the standard fields (plan_summary, detailed_plan, confidence, scenarios, mocks, fixtures, data_matrix, edge_cases, error_paths, dependencies, notes) "
+                "AND an additional field 'element_plans' as an array, where each item has: {name, type, plan_summary, detailed_plan, confidence?, scenarios?}."
+            )
+
+        def call() -> dict[str, Any]:
+            return self._chat_completion(
+                system_prompt=system_prompt,
+                user_prompt=user_prompt,
+                max_tokens=max_tokens,
+                **kwargs,
+            )
+
+        try:
+            result = with_retries(call, retries=self.max_retries)
+            content = result.get("content", "")
+
+            # Parse JSON response
+            parsed = parse_json_response(content)
+
+            if parsed.success and parsed.data:
+                metadata = self._unify_metadata(
+                    provider="azure-openai",
+                    model=self.deployment,
+                    usage=result.get("usage"),
+                    parsed_info={"parsed": True},
+                    extra={"api_version": self.api_version},
+                    raw_provider_fields={"deployment": self.deployment},
+                )
+                response = {
+                    "plan_summary": parsed.data.get("plan_summary", ""),
+                    "detailed_plan": parsed.data.get("detailed_plan", ""),
+                    "confidence": parsed.data.get("confidence", 0.5),
+                    "scenarios": parsed.data.get("scenarios", []),
+                    "mocks": parsed.data.get("mocks", ""),
+                    "fixtures": parsed.data.get("fixtures", ""),
+                    "data_matrix": parsed.data.get("data_matrix", []),
+                    "edge_cases": parsed.data.get("edge_cases", []),
+                    "error_paths": parsed.data.get("error_paths", []),
+                    "dependencies": parsed.data.get("dependencies", []),
+                    "notes": parsed.data.get("notes", ""),
+                    "metadata": metadata,
+                }
+                # Preserve per-element plans if provided
+                if isinstance(parsed.data.get("element_plans"), list):
+                    response["element_plans"] = parsed.data.get("element_plans")
+                
+                # Log planning operation completion
+                planning_duration = time.time() - planning_start_time
+                logger.debug(f"Azure test plan generation completed in {planning_duration:.2f}s with confidence {response['confidence']}")
+                
+                return response
+            else:
+                # Fallback if JSON parsing fails
+                logger.warning(f"Failed to parse JSON response: {parsed.error}")
+                metadata = self._unify_metadata(
+                    provider="azure-openai",
+                    model=self.deployment,
+                    usage=result.get("usage"),
+                    parsed_info={"parsed": False},
+                    extra={"api_version": self.api_version, "parse_error": parsed.error},
+                    raw_provider_fields={"deployment": self.deployment},
+                )
+                response = {
+                    "plan_summary": "Test planning completed (JSON parse failed)",
+                    "detailed_plan": content,
+                    "confidence": 0.3,
+                    "notes": f"JSON parsing failed: {parsed.error}",
+                    "metadata": metadata,
+                }
+                
+                return response
+
+        except Exception as e:
+            planning_duration = time.time() - planning_start_time
+            logger.error(f"Azure test plan generation failed after {planning_duration:.2f}s: {e}")
+            raise LLMError(
+                message=f"Test plan generation failed: {e}",
+                provider="azure-openai",
+                operation="generate_test_plan",
+                model=self.deployment,
+            ) from e

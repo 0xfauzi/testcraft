@@ -346,6 +346,33 @@ class JsonReportAdapter(ReportPort):
         generation_results = data.get("generation_results", [])
         test_plan = data.get("test_plan")
 
+        # Calculate warnings summary
+        warnings_summary = {
+            "failed_generations": len(
+                [
+                    r
+                    for r in generation_results
+                    if not (
+                        r.success
+                        if isinstance(r, GenerationResult)
+                        else r.get("success", True)
+                    )
+                ]
+            ),
+            "refine_exhausted_count": data.get("refine_exhausted_count", 0),
+            "refinement_failures": data.get("refinement_failures", 0),
+            "files_with_failures": data.get("files_with_failures", 0),
+            "total_warnings": 0,  # Will be calculated below
+        }
+        
+        # Calculate total warnings
+        warnings_summary["total_warnings"] = sum([
+            warnings_summary["failed_generations"],
+            warnings_summary["refine_exhausted_count"],
+            warnings_summary["refinement_failures"],
+            warnings_summary["files_with_failures"],
+        ])
+        
         report_content = {
             "report_type": "test_generation",
             "timestamp": datetime.utcnow().isoformat(),
@@ -362,18 +389,9 @@ class JsonReportAdapter(ReportPort):
                         )
                     ]
                 ),
-                "failed_generations": len(
-                    [
-                        r
-                        for r in generation_results
-                        if not (
-                            r.success
-                            if isinstance(r, GenerationResult)
-                            else r.get("success", True)
-                        )
-                    ]
-                ),
+                "failed_generations": warnings_summary["failed_generations"],
             },
+            "warnings_summary": warnings_summary,
             "generation_results": [
                 self._serialize_generation_result(result)
                 for result in generation_results
@@ -393,6 +411,7 @@ class JsonReportAdapter(ReportPort):
         return {
             "report_content": json.dumps(report_content, indent=2),
             "generation_summary": report_content["test_generation_summary"],
+            "warnings_summary": warnings_summary,
             "generation_metadata": {
                 "verbose_mode": kwargs.get("verbose", False),
                 "generation_timestamp": report_content["timestamp"],

@@ -1,0 +1,160 @@
+# Task ID: 29
+# Title: Unify LLM adapters for interchangeable providers while preserving provider-specific capabilities (2025 parity)
+# Status: pending
+# Dependencies: None
+# Priority: high
+# Description: Make all LLM providers (OpenAI, Anthropic Claude, Azure OpenAI, AWS Bedrock) interchangeable with a uniform API, consistent token budgeting, prompt sourcing, response schemas, and metadata, while preserving provider-specific capabilities like reasoning/thinking modes and model-specific limits.
+# Details:
+Objectives:
+- Uniform `LLMPort` contract across providers; consistent return schemas and metadata
+- Centralized token budgeting and prompt sourcing
+- Provider-specific features preserved (Claude extended thinking, OpenAI o-series Responses API, model-specific token limits)
+- Router conforms 1:1 to `LLMPort`
+
+Acceptance criteria:
+- Any provider can be swapped in `LLMRouter(default_provider=...)` with no call-site changes
+- All four operations (`generate_tests`, `analyze_code`, `refine_content`, `generate_test_plan`) succeed on all providers and return the same top-level structure
+- Per-request token budgeting works for all providers
+- Claude thinking budgets applied when supported; OpenAI o-series uses Responses API and ignores custom temperature
+- Router method signatures match `LLMPort` exactly
+- Parity tests pass across providers (with and without credentials/stub mode)
+
+# Test Strategy:
+- Add parameterized provider tests for all operations; verify consistent schemas and metadata
+- Add budgeting tests to assert per-request max_tokens/thinking tokens computed
+- Add OpenAI o-series branch test (Responses API path taken) and temperature behavior
+- Add router signature and pass-through tests
+- Add metadata normalization tests (model mapping for Azure/Bedrock)
+- Ensure cost tracking doesn’t fail operations
+
+# Subtasks:
+## 1. Introduce BaseLLMAdapter and capabilities layer [pending]
+### Dependencies: None
+### Description: Create `BaseLLMAdapter` with shared helpers (credentials, prompt_registry, cost_port, token_calculator, budgeting, prompts, refinement parsing/repair, metadata unifier, cost tracking, optional artifact logging). Add `capabilities.py` with `ProviderCapabilities` and `get_capabilities()` using `TokenCalculator.get_model_info()`.
+### Details:
+- New file `testcraft/adapters/llm/base.py`: BaseLLMAdapter with:
+  - __init__: init credential_manager, prompt_registry, cost_port, token_calculator (provider, model)
+  - _calc_budgets(use_case, input_text|len): TokenCalculator for max_tokens; calculate thinking_tokens when supported
+  - _prompts(prompt_type, ...): wraps PromptRegistry for `llm_test_generation`, `llm_code_analysis`, `llm_content_refinement`, `llm_test_planning_v1`
+  - _parse_and_normalize_refinement(text): parse_json_response + normalize_refinement_response + one-shot minimal repair
+  - _unify_metadata(provider, model, usage_dict, parsed, repaired?, repair_type?, extra?): returns metadata with provider, model (unified), tokens{}, parsed, repaired?, raw_provider_fields
+  - _track_cost(service, operation, usage_like, model): guard and call CostPort.track_usage
+  - _artifact_request/_artifact_response: optional verbose artifacts
+- New file `testcraft/adapters/llm/capabilities.py`: ProviderCapabilities dataclass and `get_capabilities(provider, model, token_calculator)`.
+- Export helpers in `__init__.py` if needed.
+<info added on 2025-09-14T14:31:38.665Z>
+Planned implementation for 29.1:
+
+- Add `testcraft/adapters/llm/base.py` with `BaseLLMAdapter` class, implementing shared initialization and helper methods for credential management, prompt registry, cost tracking, and token budgeting using `TokenCalculator`.
+- Add `testcraft/adapters/llm/capabilities.py` with the `ProviderCapabilities` dataclass and `get_capabilities()` function, mapping model info from `TokenCalculator` to structured capability fields.
+- Reuse existing components: `TokenCalculator` for budgeting and model limits, `PromptRegistry` for prompt management, common parsing/repair utilities for response normalization, `CostPort` for usage tracking, and `CredentialManager` for provider credentials.
+- Ensure provider adapters inherit from `BaseLLMAdapter` and replace local logic with unified helpers for budgeting, prompt retrieval, refinement parsing, metadata unification, and cost tracking.
+- Export `ProviderCapabilities` and `get_capabilities` in `testcraft/adapters/llm/__init__.py`.
+- Avoid circular imports by only importing `TokenCalculator` in the capabilities layer.
+- Preserve provider-specific metadata fields under `raw_provider_fields` in unified metadata.
+- Note: Router methods remain async for now; alignment to LLMPort will occur in a later subtask.
+</info added on 2025-09-14T14:31:38.665Z>
+
+## 2. Unify token budgeting using TokenCalculator across all adapters [done]
+### Dependencies: 29.1
+### Description: Ensure every provider uses per-request token budgeting via TokenCalculator; compute thinking_tokens only where supported.
+### Details:
+- Add token_calculator to Azure and Bedrock adapters; remove fixed max_tokens paths in methods
+- OpenAI: keep o-series Responses API path and `max_output_tokens` vs `max_tokens` logic; suppress temperature on o-series
+- Claude and Bedrock Claude: pass thinking budget where available (or embed guidance where param not exposed)
+- Add budgeting helpers to BaseLLMAdapter and use them in all provider methods
+
+## 3. Standardize PromptRegistry usage for all operations [done]
+### Dependencies: 29.1
+### Description: Use PromptRegistry in all adapters for test generation, code analysis, content refinement, and test planning.
+### Details:
+- Replace inline prompts in Azure/Bedrock with registry calls for `llm_test_generation`, `llm_code_analysis`, `llm_content_refinement`, `llm_test_planning_v1`
+- Keep `refine_content(system_prompt=...)` override behavior as in LLMPort
+- Add BaseLLMAdapter._prompts helper for consistency
+
+## 4. Normalize response schemas and metadata across providers [done]
+### Dependencies: 29.1,29.2,29.3
+### Description: Return the same top-level fields for each operation and unify metadata fields, while preserving raw provider fields under `raw_provider_fields`.
+### Details:
+- Add BaseLLMAdapter._unify_metadata(provider, model, usage_dict, parsed, repaired?, repair_type?, extra?) and call it everywhere
+- Map Azure `deployment` and Bedrock `model_id` to unified `metadata.model`; keep raw provider fields in `metadata.raw_provider_fields`
+- Normalize tokens into `metadata.tokens` with prompt/input/completion/output/total fields as available
+- Include `metadata.provider`, `metadata.parsed`, optional `metadata.repaired`, `metadata.repair_type`, and optional `metadata.cost`
+
+## 5. Refactor OpenAI adapter to BaseLLMAdapter and keep o-series behaviors [done]
+### Dependencies: 29.1,29.2,29.3,29.4
+### Description: Inherit from BaseLLMAdapter; keep Responses API path and temperature handling for o-series; use registry and budgeting helpers; normalize metadata and cost tracking.
+### Details:
+- Replace local debug/artifact helpers with Base where feasible (preserve richer logs if desired)
+- Use Base _calc_budgets and _prompts
+- Keep `_is_o_series_reasoning_model`, `_requires_completion_tokens_param`, `_supports_temperature_adjustment` (or derive via capabilities)
+- Ensure unified metadata keys and tokens
+
+## 6. Refactor Claude adapter to BaseLLMAdapter; apply thinking budgets [done]
+### Dependencies: None
+### Description: Inherit from BaseLLMAdapter; use PromptRegistry for all operations; compute and pass thinking tokens for supported models; normalize metadata and cost tracking.
+### Details:
+- Use Base _calc_budgets and _prompts across operations
+- Ensure schema repair path for refinement uses Base helper; keep `_is_invalid_refined_content` logic if needed
+- Apply thinking budgets where provider supports; otherwise no-op
+- Ensure unified metadata keys and tokens
+
+## 7. Refactor Azure OpenAI adapter: add TokenCalculator/PromptRegistry and fix planning [done]
+### Dependencies: None
+### Description: Inherit from BaseLLMAdapter; add token_calculator/prompt_registry; replace inline prompts with registry; fix `generate_test_plan` to use budgeting and prompts; unify metadata and cost.
+### Details:
+- Initialize token_calculator and prompt_registry in __init__
+- Switch all operations to Base budgeting and prompts
+- Fix planning references and remove dead code; ensure no runtime errors
+- Unify deployment/model mapping and tokens in metadata; keep raw provider fields
+
+## 8. Refactor Bedrock adapter: add TokenCalculator/PromptRegistry and fix `_invoke_model` bug [done]
+### Dependencies: None
+### Description: Inherit from BaseLLMAdapter; add token_calculator/prompt_registry; replace inline prompts with registry; fix `generate_test_plan` to call `_invoke_chat`; apply thinking budgets for Claude models if possible; unify metadata and cost.
+### Details:
+- Initialize token_calculator and prompt_registry in __init__
+- Switch all operations to Base budgeting and prompts
+- Fix `_invoke_model` typo to `_invoke_chat` in planning
+- Attempt to pass thinking tokens when Bedrock exposes such fields; otherwise embed guidance
+- Unify model_id/model mapping and tokens in metadata; keep raw provider fields
+<info added on 2025-09-14T21:27:29.263Z>
+Confirmed Bedrock adapter already inherits from BaseLLMAdapter, initializes TokenCalculator and PromptRegistry, uses PromptRegistry for all prompt operations, calls _invoke_chat correctly in generate_test_plan, embeds thinking guidance when thinking_tokens is provided, and unifies metadata and cost tracking via self._unify_metadata. The _invoke_model typo does not exist in the codebase. Bedrock adapter is fully refactored and aligned with unified LLM adapter architecture; all requirements for this subtask are implemented. Next step: verify implementation with tests and check for edge cases or further improvements.
+</info added on 2025-09-14T21:27:29.263Z>
+
+## 9. Align LLMRouter with LLMPort and add capabilities passthrough [done]
+### Dependencies: 29.5,29.6,29.7,29.8
+### Description: Make router methods synchronous and match LLMPort signatures; remove incorrect argument types; add `get_capabilities()` passthrough.
+### Details:
+- Update method signatures to: generate_tests(...), analyze_code(code_content, analysis_type="comprehensive", **kwargs), refine_content(...), generate_test_plan(...)
+- Remove async; remove passing list as analysis_type; pass kwargs through
+- Add `get_capabilities()` delegating to current adapter
+- Simplify provider config mapping keys; remove misleading defaults
+
+## 10. Unify error handling and cost tracking [pending]
+### Dependencies: 29.9
+### Description: Introduce LLMError boundary and ensure all adapters raise it for provider failures; centralize cost tracking via Base helpers.
+### Details:
+- Add `testcraft/ports/llm_error.py` with LLMError
+- Update adapters to raise LLMError while preserving original exception as __cause__
+- Route all cost tracking via Base helper and include normalized tokens in metadata
+- Keep adapter-specific error classes optionally for granularity but ensure LLMError at the boundary
+
+## 11. Parity and provider-specific tests [done]
+### Dependencies: None
+### Description: Add comprehensive tests ensuring interchangeable behavior and preserved specialties across all providers.
+### Details:
+- Parameterized parity tests for all providers and all operations; assert schema + metadata
+- Budgeting tests for per-request max_tokens and thinking tokens where supported
+- OpenAI o-series branch test (Responses API path and temperature behavior)
+- Router tests for signature alignment and pass-through; no list for analysis_type
+- Metadata normalization tests (Azure deployment, Bedrock model_id mapping)
+- Cost tracking non-fatal behavior tests
+
+## 12. Docs and examples update [done]
+### Dependencies: None
+### Description: Document the unified behavior, configuration, and capabilities; update examples to use PromptRegistry and Router consistently.
+### Details:
+- Update `docs/configuration.md` and any provider docs to reflect unified behavior
+- Update examples to remove inline prompts where applicable and use PromptRegistry
+- Add a short Capabilities section explaining thinking/reasoning differences and limits per provider/model
+

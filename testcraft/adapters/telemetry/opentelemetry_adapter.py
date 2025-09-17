@@ -219,6 +219,7 @@ class OpenTelemetryAdapter:
         if not OPENTELEMETRY_AVAILABLE:
             self.tracer = MockTracer()
             return
+        from opentelemetry.sdk.trace import TracerProvider
         tracer_provider = TracerProvider(
             resource=resource, sampler=self._create_sampler()
         )

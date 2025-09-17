@@ -38,6 +38,10 @@ class TestGenerateUseCaseEnrichment:
         telemetry_port.create_span.return_value.__enter__.return_value = mock_span
         telemetry_port.create_child_span.return_value.__enter__.return_value = mock_span
 
+        # Setup file discovery service
+        file_discovery_service = MagicMock()
+        file_discovery_service.discover_test_files.return_value = []
+
         return {
             "llm_port": llm_port,
             "writer_port": writer_port,
@@ -47,6 +51,7 @@ class TestGenerateUseCaseEnrichment:
             "parser_port": parser_port,
             "state_port": state_port,
             "telemetry_port": telemetry_port,
+            "file_discovery_service": file_discovery_service,
         }
 
     @pytest.fixture
@@ -395,7 +400,7 @@ class TestContextEnrichmentConfig:
     def test_context_enrichment_config_defaults(self):
         """Test ContextEnrichmentConfig default values."""
         config = TestCraftConfig()
-        enrichment = config.context_enrichment
+        enrichment = config.generation.context_enrichment
 
         assert enrichment.enable_env_detection is True
         assert enrichment.enable_db_boundary_detection is True

@@ -405,7 +405,9 @@ for rec in campaign_results['final_recommendations']:
 # Development configuration
 [llm]
 default_provider = "openai"
-openai_model = "gpt-3.5-turbo"  # Cheaper for development
+openai_model = "gpt-4"  # Balance of quality and cost
+temperature = 0.1
+max_retries = 3
 
 [evaluation]
 enabled = false  # Disable for faster development
@@ -413,11 +415,17 @@ enabled = false  # Disable for faster development
 # Production configuration  
 [llm]
 default_provider = "anthropic"
-anthropic_model = "claude-3-sonnet-20240229"
+anthropic_model = "claude-3-5-sonnet-20241022"  # Latest stable model
+temperature = 0.1
+max_retries = 3
+
+# Alternative: Use Azure OpenAI for enterprise
+# default_provider = "azure-openai"
+# azure_openai_deployment = "gpt-4-deployment"
 
 [evaluation] 
 enabled = true
-llm_judge_enabled = true
+llm_judge_enabled = true  # Enable LLM-as-judge for production
 statistical_testing = true
 ```
 

@@ -642,21 +642,23 @@ class TestCoverageUseCase:
         mock_coverage_port.measure_coverage.assert_called_once()
 
     def test_default_file_discovery_service_creation(self):
-        """Test that a default file discovery service is created when none provided."""
+        """Test that file discovery service is properly stored when provided."""
         mock_coverage_port = Mock(spec=CoveragePort)
         mock_state_port = Mock(spec=StatePort)
         mock_telemetry_port = Mock(spec=TelemetryPort)
+        mock_file_discovery = Mock(spec=FileDiscoveryService)
 
-        # Act - don't provide file_discovery_service
+        # Act - provide file_discovery_service as required
         coverage_usecase = CoverageUseCase(
             coverage_port=mock_coverage_port,
             state_port=mock_state_port,
             telemetry_port=mock_telemetry_port,
+            file_discovery_service=mock_file_discovery,
         )
 
-        # Assert - should have created a default file discovery service
+        # Assert - should have stored the provided file discovery service
         assert coverage_usecase._file_discovery is not None
-        assert isinstance(coverage_usecase._file_discovery, FileDiscoveryService)
+        assert coverage_usecase._file_discovery is mock_file_discovery
 
     @pytest.mark.asyncio
     async def test_coverage_measurement_with_no_files_found(

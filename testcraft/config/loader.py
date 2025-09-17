@@ -145,6 +145,12 @@ class ConfigLoader:
                 logger.warning(f"Configuration file {config_file} is empty")
                 return None
 
+            # Check for deprecated sections and emit warnings
+            self._check_deprecated_sections(content, config_file)
+            
+            # Clean deprecated sections for compatibility
+            content = self._migrate_deprecated_sections(content)
+
             return content
 
         except tomllib.TOMLDecodeError as e:
@@ -257,6 +263,72 @@ class ConfigLoader:
                 result[key] = value
 
         return result
+    
+    def _check_deprecated_sections(self, content: dict[str, Any], config_file: Path) -> None:
+        """Check for deprecated configuration sections and emit warnings."""
+        deprecated_sections = {
+            'style': "Use generation.test_framework instead of style.framework",
+            'coverage': "Coverage configuration is no longer used (built-in coverage logic)",
+            'quality': "Quality configuration has no runtime implementation",
+            'context_enrichment': "Move to generation.context_enrichment"
+        }
+        
+        deprecated_found = []
+        
+        for section_name, migration_msg in deprecated_sections.items():
+            if section_name in content:
+                deprecated_found.append(f"[{section_name}] - {migration_msg}")
+                
+        if deprecated_found:
+            logger.warning(
+                f"\n{'='*60}\n"
+                f"DEPRECATED CONFIGURATION DETECTED in {config_file}\n"
+                f"{'='*60}\n"
+                f"The following sections are deprecated and will be ignored:\n\n"
+                + '\n'.join(f"  • {item}" for item in deprecated_found) +
+                f"\n\n"
+                f"To remove these warnings:\n"
+                f"  • Update your configuration to use the new schema\n"
+                f"  • See docs/configuration.md for migration guide\n"
+                f"  • Run 'testcraft config migrate' for automatic migration\n"
+                f"{'='*60}"
+            )
+    
+    def _migrate_deprecated_sections(self, content: dict[str, Any]) -> dict[str, Any]:
+        """Migrate deprecated sections to new structure and remove deprecated ones."""
+        migrated_content = content.copy()
+        
+        # Handle style.framework -> generation.test_framework migration
+        style_section = migrated_content.get('style', {})
+        if style_section and 'framework' in style_section:
+            # Ensure generation section exists
+            if 'generation' not in migrated_content:
+                migrated_content['generation'] = {}
+            # Only migrate if generation.test_framework is not already set
+            if 'test_framework' not in migrated_content['generation']:
+                migrated_content['generation']['test_framework'] = style_section['framework']
+                logger.info(f"Migrated style.framework='{style_section['framework']}' to generation.test_framework")
+        
+        # Handle root-level context_enrichment -> generation.context_enrichment migration
+        context_enrichment = migrated_content.get('context_enrichment')
+        if context_enrichment:
+            # Ensure generation section exists
+            if 'generation' not in migrated_content:
+                migrated_content['generation'] = {}
+            # Only migrate if generation.context_enrichment is not already set
+            if 'context_enrichment' not in migrated_content['generation']:
+                migrated_content['generation']['context_enrichment'] = context_enrichment
+                logger.info("Migrated root-level context_enrichment to generation.context_enrichment")
+        
+        # Remove deprecated sections to prevent validation errors
+        # Delete them completely so TestCraftConfig uses default_factory values
+        deprecated_sections = {'style', 'coverage', 'quality', 'context_enrichment'}
+        for section in deprecated_sections:
+            if section in migrated_content:
+                # Delete deprecated sections so defaults are used
+                del migrated_content[section]
+                
+        return migrated_content
 
     def create_sample_config(self, filepath: str | Path | None = None) -> Path:
         """Create a comprehensive sample configuration file.

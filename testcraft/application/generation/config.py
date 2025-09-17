@@ -8,7 +8,10 @@ generation workflow. Handles context enrichment mapping and prompt budgets.
 from __future__ import annotations
 
 import logging
-from typing import Any
+from typing import Any, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from ...config.models import RefineConfig
 
 logger = logging.getLogger(__name__)
 
@@ -386,3 +389,86 @@ class GenerationConfig:
                         "Invalid directory_tree.include_py_only %s (must be boolean), using default True", include_py_only
                     )
                     directory_tree["include_py_only"] = True
+
+    @staticmethod
+    def map_testcraft_config_to_overrides(config) -> dict[str, Any]:
+        """Map TestCraftConfig to GenerationConfig overrides.
+        
+        Args:
+            config: TestCraftConfig instance or dict
+            
+        Returns:
+            Dictionary of overrides that merge_config understands
+        """
+        if hasattr(config, 'model_dump'):
+            config_dict = config.model_dump()
+        else:
+            config_dict = config
+            
+        overrides = {}
+        
+        # Map generation section directly
+        generation = config_dict.get('generation', {})
+        if generation:
+            # Core generation settings (excluding test_framework which we handle specially)
+            for key in ['batch_size', 'coverage_threshold', 'disable_ruff_format', 
+                       'immediate_refinement', 'enable_refinement', 'max_refinement_iterations',
+                       'max_refine_workers', 'keep_failed_writes', 'refinement_backoff_sec']:
+                if key in generation:
+                    overrides[key] = generation[key]
+            
+            # Handle test_framework with special logic for deprecated style.framework
+            if 'test_framework' in generation:
+                overrides['test_framework'] = generation['test_framework']
+                    
+            # Map budget configurations
+            if 'prompt_budgets' in generation:
+                overrides['prompt_budgets'] = generation['prompt_budgets']
+            if 'context_budgets' in generation:
+                overrides['context_budgets'] = generation['context_budgets']
+            if 'context_categories' in generation:
+                overrides['context_categories'] = generation['context_categories']
+            if 'context_enrichment' in generation:
+                overrides['context_enrichment'] = generation['context_enrichment']
+                
+        # Map LLM streaming setting
+        llm = config_dict.get('llm', {})
+        if 'enable_streaming' in llm:
+            overrides['enable_streaming'] = llm['enable_streaming']
+            
+        # Handle deprecated style.framework -> test_framework mapping
+        # If style.framework is explicitly set, it should override generation.test_framework
+        style = config_dict.get('style')
+        if style and 'framework' in style:
+            # Check if this is an explicit override (not just the default)
+            # We can detect this by checking if the style section was explicitly provided
+            overrides['test_framework'] = style['framework']
+            
+        # Handle deprecated root-level context_enrichment
+        root_context_enrichment = config_dict.get('context_enrichment')
+        if root_context_enrichment and 'context_enrichment' not in overrides:
+            overrides['context_enrichment'] = root_context_enrichment
+            
+        return overrides
+        
+    @staticmethod
+    def build_refine_config_from_toml(config) -> 'RefineConfig':
+        """Build RefineConfig from TestCraftConfig.
+        
+        Args:
+            config: TestCraftConfig instance or dict
+            
+        Returns:
+            RefineConfig instance built from TOML configuration
+        """
+        from ...config.models import RefineConfig
+        
+        if hasattr(config, 'model_dump'):
+            config_dict = config.model_dump()
+        else:
+            config_dict = config
+            
+        generation = config_dict.get('generation', {})
+        refine_config_data = generation.get('refine', {})
+        
+        return RefineConfig(**refine_config_data)

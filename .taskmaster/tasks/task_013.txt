@@ -1,6 +1,6 @@
 # Task ID: 13
 # Title: Implement LLM Adapters
-# Status: pending
+# Status: done
 # Dependencies: 4, 11
 # Priority: high
 # Description: Create adapters for different LLM providers with common helpers for response parsing, validation, and error handling.

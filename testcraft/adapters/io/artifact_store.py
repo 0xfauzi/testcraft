@@ -100,7 +100,7 @@ class ArtifactStoreAdapter:
 
     def __init__(
         self,
-        base_path: str | Path = ".testcraft/artifacts",
+        base_path: str | Path = ".artifacts",
         cleanup_policy: CleanupPolicy | None = None,
     ) -> None:
         """

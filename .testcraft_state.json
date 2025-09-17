@@ -108,9 +108,662 @@
       "total_files_refined": 1
     }
   },
+  "last_planning_session": {
+    "created_at": 1757807734.782302,
+    "items": [
+      {
+        "confidence": 0.0,
+        "detailed_plan": "Comprehensive plan for TestElementType:\n1. Test happy paths\n2. Test edge cases\n3. Test error handling\n4. Mock external dependencies as needed",
+        "element": {
+          "docstring": "Enumeration of test element types.",
+          "line_range": [
+            15,
+            21
+          ],
+          "name": "TestElementType",
+          "type": "class"
+        },
+        "eligibility_reason": "no_existing_tests",
+        "plan_summary": "Test plan for TestElementType (class)",
+        "tags": [
+          "source_file:/Users/wumpinihussein/Documents/code/ai/testcraft/testcraft/testcraft/domain/models.py"
+        ]
+      },
+      {
+        "confidence": 0.0,
+        "detailed_plan": "Comprehensive plan for TestElement:\n1. Test happy paths\n2. Test edge cases\n3. Test error handling\n4. Mock external dependencies as needed",
+        "element": {
+          "docstring": "Represents a single element that can be tested.\n\nThis model captures information about code elements that need test coverage,\nincluding their location, type, and documentation.",
+          "line_range": [
+            24,
+            57
+          ],
+          "name": "TestElement",
+          "type": "class"
+        },
+        "eligibility_reason": "no_existing_tests",
+        "plan_summary": "Test plan for TestElement (class)",
+        "tags": [
+          "source_file:/Users/wumpinihussein/Documents/code/ai/testcraft/testcraft/testcraft/domain/models.py"
+        ]
+      },
+      {
+        "confidence": 0.0,
+        "detailed_plan": "Comprehensive plan for TestElement.validate_line_range:\n1. Test happy paths\n2. Test edge cases\n3. Test error handling\n4. Mock external dependencies as needed",
+        "element": {
+          "docstring": "Validate that line range is valid (start <= end).",
+          "line_range": [
+            44,
+            51
+          ],
+          "name": "TestElement.validate_line_range",
+          "type": "method"
+        },
+        "eligibility_reason": "no_existing_tests",
+        "plan_summary": "Test plan for TestElement.validate_line_range (method)",
+        "tags": [
+          "source_file:/Users/wumpinihussein/Documents/code/ai/testcraft/testcraft/testcraft/domain/models.py"
+        ]
+      },
+      {
+        "confidence": 0.0,
+        "detailed_plan": "Comprehensive plan for CoverageResult:\n1. Test happy paths\n2. Test edge cases\n3. Test error handling\n4. Mock external dependencies as needed",
+        "element": {
+          "docstring": "Represents code coverage information for a file or module.\n\nThis model captures coverage metrics including line coverage, branch coverage,\nand specific lines that are missing coverage.",
+          "line_range": [
+            60,
+            89
+          ],
+          "name": "CoverageResult",
+          "type": "class"
+        },
+        "eligibility_reason": "no_existing_tests",
+        "plan_summary": "Test plan for CoverageResult (class)",
+        "tags": [
+          "source_file:/Users/wumpinihussein/Documents/code/ai/testcraft/testcraft/testcraft/domain/models.py"
+        ]
+      },
+      {
+        "confidence": 0.0,
+        "detailed_plan": "Comprehensive plan for CoverageResult.validate_missing_lines:\n1. Test happy paths\n2. Test edge cases\n3. Test error handling\n4. Mock external dependencies as needed",
+        "element": {
+          "docstring": "Validate that missing lines are positive integers.",
+          "line_range": [
+            79,
+            84
+          ],
+          "name": "CoverageResult.validate_missing_lines",
+          "type": "method"
+        },
+        "eligibility_reason": "no_existing_tests",
+        "plan_summary": "Test plan for CoverageResult.validate_missing_lines (method)",
+        "tags": [
+          "source_file:/Users/wumpinihussein/Documents/code/ai/testcraft/testcraft/testcraft/domain/models.py"
+        ]
+      },
+      {
+        "confidence": 0.0,
+        "detailed_plan": "Comprehensive plan for GenerationResult:\n1. Test happy paths\n2. Test edge cases\n3. Test error handling\n4. Mock external dependencies as needed",
+        "element": {
+          "docstring": "Represents the result of test generation for a specific file.\n\nThis model captures whether test generation was successful, the generated\ncontent, and any error messages if generation failed.",
+          "line_range": [
+            92,
+            117
+          ],
+          "name": "GenerationResult",
+          "type": "class"
+        },
+        "eligibility_reason": "no_existing_tests",
+        "plan_summary": "Test plan for GenerationResult (class)",
+        "tags": [
+          "source_file:/Users/wumpinihussein/Documents/code/ai/testcraft/testcraft/testcraft/domain/models.py"
+        ]
+      },
+      {
+        "confidence": 0.0,
+        "detailed_plan": "Comprehensive plan for GenerationResult.validate_error_message:\n1. Test happy paths\n2. Test edge cases\n3. Test error handling\n4. Mock external dependencies as needed",
+        "element": {
+          "docstring": "Validate that error message is provided when success is False.",
+          "line_range": [
+            108,
+            112
+          ],
+          "name": "GenerationResult.validate_error_message",
+          "type": "method"
+        },
+        "eligibility_reason": "no_existing_tests",
+        "plan_summary": "Test plan for GenerationResult.validate_error_message (method)",
+        "tags": [
+          "source_file:/Users/wumpinihussein/Documents/code/ai/testcraft/testcraft/testcraft/domain/models.py"
+        ]
+      },
+      {
+        "confidence": 0.0,
+        "detailed_plan": "Comprehensive plan for TestGenerationPlan:\n1. Test happy paths\n2. Test edge cases\n3. Test error handling\n4. Mock external dependencies as needed",
+        "element": {
+          "docstring": "Represents a plan for generating tests for specific elements.\n\nThis model captures the elements to be tested, existing test information,\nand coverage metrics before test generation.",
+          "line_range": [
+            120,
+            148
+          ],
+          "name": "TestGenerationPlan",
+          "type": "class"
+        },
+        "eligibility_reason": "no_existing_tests",
+        "plan_summary": "Test plan for TestGenerationPlan (class)",
+        "tags": [
+          "source_file:/Users/wumpinihussein/Documents/code/ai/testcraft/testcraft/testcraft/domain/models.py"
+        ]
+      },
+      {
+        "confidence": 0.0,
+        "detailed_plan": "Comprehensive plan for TestGenerationPlan.validate_elements_not_empty:\n1. Test happy paths\n2. Test edge cases\n3. Test error handling\n4. Mock external dependencies as needed",
+        "element": {
+          "docstring": "Validate that at least one element is provided.",
+          "line_range": [
+            139,
+            143
+          ],
+          "name": "TestGenerationPlan.validate_elements_not_empty",
+          "type": "method"
+        },
+        "eligibility_reason": "no_existing_tests",
+        "plan_summary": "Test plan for TestGenerationPlan.validate_elements_not_empty (method)",
+        "tags": [
+          "source_file:/Users/wumpinihussein/Documents/code/ai/testcraft/testcraft/testcraft/domain/models.py"
+        ]
+      },
+      {
+        "confidence": 0.0,
+        "detailed_plan": "Comprehensive plan for RefineOutcome:\n1. Test happy paths\n2. Test edge cases\n3. Test error handling\n4. Mock external dependencies as needed",
+        "element": {
+          "docstring": "Represents the outcome of refining existing tests.\n\nThis model captures information about files that were updated during\ntest refinement, the rationale for changes, and the refinement plan.",
+          "line_range": [
+            151,
+            175
+          ],
+          "name": "RefineOutcome",
+          "type": "class"
+        },
+        "eligibility_reason": "no_existing_tests",
+        "plan_summary": "Test plan for RefineOutcome (class)",
+        "tags": [
+          "source_file:/Users/wumpinihussein/Documents/code/ai/testcraft/testcraft/testcraft/domain/models.py"
+        ]
+      },
+      {
+        "confidence": 0.0,
+        "detailed_plan": "Comprehensive plan for RefineOutcome.validate_updated_files_not_empty:\n1. Test happy paths\n2. Test edge cases\n3. Test error handling\n4. Mock external dependencies as needed",
+        "element": {
+          "docstring": "Validate that at least one file was updated.",
+          "line_range": [
+            166,
+            170
+          ],
+          "name": "RefineOutcome.validate_updated_files_not_empty",
+          "type": "method"
+        },
+        "eligibility_reason": "no_existing_tests",
+        "plan_summary": "Test plan for RefineOutcome.validate_updated_files_not_empty (method)",
+        "tags": [
+          "source_file:/Users/wumpinihussein/Documents/code/ai/testcraft/testcraft/testcraft/domain/models.py"
+        ]
+      },
+      {
+        "confidence": 0.0,
+        "detailed_plan": "Comprehensive plan for AnalysisReport:\n1. Test happy paths\n2. Test edge cases\n3. Test error handling\n4. Mock external dependencies as needed",
+        "element": {
+          "docstring": "Represents the analysis report for files that need test processing.\n\nThis model captures information about files that require test generation\nor refinement, reasons for processing, and existing test presence.",
+          "line_range": [
+            178,
+            227
+          ],
+          "name": "AnalysisReport",
+          "type": "class"
+        },
+        "eligibility_reason": "no_existing_tests",
+        "plan_summary": "Test plan for AnalysisReport (class)",
+        "tags": [
+          "source_file:/Users/wumpinihussein/Documents/code/ai/testcraft/testcraft/testcraft/domain/models.py"
+        ]
+      },
+      {
+        "confidence": 0.0,
+        "detailed_plan": "Comprehensive plan for AnalysisReport.validate_files_not_empty:\n1. Test happy paths\n2. Test edge cases\n3. Test error handling\n4. Mock external dependencies as needed",
+        "element": {
+          "docstring": "Validate that files_to_process is a valid list.",
+          "line_range": [
+            197,
+            202
+          ],
+          "name": "AnalysisReport.validate_files_not_empty",
+          "type": "method"
+        },
+        "eligibility_reason": "no_existing_tests",
+        "plan_summary": "Test plan for AnalysisReport.validate_files_not_empty (method)",
+        "tags": [
+          "source_file:/Users/wumpinihussein/Documents/code/ai/testcraft/testcraft/testcraft/domain/models.py"
+        ]
+      },
+      {
+        "confidence": 0.0,
+        "detailed_plan": "Comprehensive plan for AnalysisReport.validate_reasons_match_files:\n1. Test happy paths\n2. Test edge cases\n3. Test error handling\n4. Mock external dependencies as needed",
+        "element": {
+          "docstring": "Validate that reasons are provided for all files.",
+          "line_range": [
+            205,
+            211
+          ],
+          "name": "AnalysisReport.validate_reasons_match_files",
+          "type": "method"
+        },
+        "eligibility_reason": "no_existing_tests",
+        "plan_summary": "Test plan for AnalysisReport.validate_reasons_match_files (method)",
+        "tags": [
+          "source_file:/Users/wumpinihussein/Documents/code/ai/testcraft/testcraft/testcraft/domain/models.py"
+        ]
+      },
+      {
+        "confidence": 0.0,
+        "detailed_plan": "Comprehensive plan for AnalysisReport.validate_test_presence_match_files:\n1. Test happy paths\n2. Test edge cases\n3. Test error handling\n4. Mock external dependencies as needed",
+        "element": {
+          "docstring": "Validate that test presence info is provided for all files.",
+          "line_range": [
+            214,
+            222
+          ],
+          "name": "AnalysisReport.validate_test_presence_match_files",
+          "type": "method"
+        },
+        "eligibility_reason": "no_existing_tests",
+        "plan_summary": "Test plan for AnalysisReport.validate_test_presence_match_files (method)",
+        "tags": [
+          "source_file:/Users/wumpinihussein/Documents/code/ai/testcraft/testcraft/testcraft/domain/models.py"
+        ]
+      },
+      {
+        "confidence": 0.0,
+        "detailed_plan": "Comprehensive plan for PlannableElementKey:\n1. Test happy paths\n2. Test edge cases\n3. Test error handling\n4. Mock external dependencies as needed",
+        "element": {
+          "docstring": "Deterministic key for uniquely identifying a testable element.\n\nFormat: \"{abs_source_path}::{element.type}::{element.name}::{line_start}-{line_end}\"",
+          "line_range": [
+            230,
+            264
+          ],
+          "name": "PlannableElementKey",
+          "type": "class"
+        },
+        "eligibility_reason": "no_existing_tests",
+        "plan_summary": "Test plan for PlannableElementKey (class)",
+        "tags": [
+          "source_file:/Users/wumpinihussein/Documents/code/ai/testcraft/testcraft/testcraft/domain/models.py"
+        ]
+      },
+      {
+        "confidence": 0.0,
+        "detailed_plan": "Comprehensive plan for PlannableElementKey.from_element:\n1. Test happy paths\n2. Test edge cases\n3. Test error handling\n4. Mock external dependencies as needed",
+        "element": {
+          "docstring": "Create a key from a source file path and test element.",
+          "line_range": [
+            238,
+            242
+          ],
+          "name": "PlannableElementKey.from_element",
+          "type": "method"
+        },
+        "eligibility_reason": "no_existing_tests",
+        "plan_summary": "Test plan for PlannableElementKey.from_element (method)",
+        "tags": [
+          "source_file:/Users/wumpinihussein/Documents/code/ai/testcraft/testcraft/testcraft/domain/models.py"
+        ]
+      },
+      {
+        "confidence": 0.0,
+        "detailed_plan": "Comprehensive plan for PlannableElementKey.source_path:\n1. Test happy paths\n2. Test edge cases\n3. Test error handling\n4. Mock external dependencies as needed",
+        "element": {
+          "docstring": "Extract source path from the key.",
+          "line_range": [
+            245,
+            247
+          ],
+          "name": "PlannableElementKey.source_path",
+          "type": "method"
+        },
+        "eligibility_reason": "no_existing_tests",
+        "plan_summary": "Test plan for PlannableElementKey.source_path (method)",
+        "tags": [
+          "source_file:/Users/wumpinihussein/Documents/code/ai/testcraft/testcraft/testcraft/domain/models.py"
+        ]
+      },
+      {
+        "confidence": 0.0,
+        "detailed_plan": "Comprehensive plan for PlannableElementKey.element_type:\n1. Test happy paths\n2. Test edge cases\n3. Test error handling\n4. Mock external dependencies as needed",
+        "element": {
+          "docstring": "Extract element type from the key.",
+          "line_range": [
+            250,
+            252
+          ],
+          "name": "PlannableElementKey.element_type",
+          "type": "method"
+        },
+        "eligibility_reason": "no_existing_tests",
+        "plan_summary": "Test plan for PlannableElementKey.element_type (method)",
+        "tags": [
+          "source_file:/Users/wumpinihussein/Documents/code/ai/testcraft/testcraft/testcraft/domain/models.py"
+        ]
+      },
+      {
+        "confidence": 0.0,
+        "detailed_plan": "Comprehensive plan for PlannableElementKey.element_name:\n1. Test happy paths\n2. Test edge cases\n3. Test error handling\n4. Mock external dependencies as needed",
+        "element": {
+          "docstring": "Extract element name from the key.",
+          "line_range": [
+            255,
+            257
+          ],
+          "name": "PlannableElementKey.element_name",
+          "type": "method"
+        },
+        "eligibility_reason": "no_existing_tests",
+        "plan_summary": "Test plan for PlannableElementKey.element_name (method)",
+        "tags": [
+          "source_file:/Users/wumpinihussein/Documents/code/ai/testcraft/testcraft/testcraft/domain/models.py"
+        ]
+      },
+      {
+        "confidence": 0.0,
+        "detailed_plan": "Comprehensive plan for PlannableElementKey.line_range:\n1. Test happy paths\n2. Test edge cases\n3. Test error handling\n4. Mock external dependencies as needed",
+        "element": {
+          "docstring": "Extract line range from the key.",
+          "line_range": [
+            260,
+            264
+          ],
+          "name": "PlannableElementKey.line_range",
+          "type": "method"
+        },
+        "eligibility_reason": "no_existing_tests",
+        "plan_summary": "Test plan for PlannableElementKey.line_range (method)",
+        "tags": [
+          "source_file:/Users/wumpinihussein/Documents/code/ai/testcraft/testcraft/testcraft/domain/models.py"
+        ]
+      },
+      {
+        "confidence": 0.0,
+        "detailed_plan": "Comprehensive plan for TestElementPlan:\n1. Test happy paths\n2. Test edge cases\n3. Test error handling\n4. Mock external dependencies as needed",
+        "element": {
+          "docstring": "Represents a test plan for a single element.\n\nContains the element information, eligibility reasoning, and detailed\nplanning information generated by the LLM.",
+          "line_range": [
+            267,
+            301
+          ],
+          "name": "TestElementPlan",
+          "type": "class"
+        },
+        "eligibility_reason": "no_existing_tests",
+        "plan_summary": "Test plan for TestElementPlan (class)",
+        "tags": [
+          "source_file:/Users/wumpinihussein/Documents/code/ai/testcraft/testcraft/testcraft/domain/models.py"
+        ]
+      },
+      {
+        "confidence": 0.0,
+        "detailed_plan": "Comprehensive plan for TestElementPlan.validate_plan_summary_not_empty:\n1. Test happy paths\n2. Test edge cases\n3. Test error handling\n4. Mock external dependencies as needed",
+        "element": {
+          "docstring": "Validate that plan summary is not empty.",
+          "line_range": [
+            285,
+            289
+          ],
+          "name": "TestElementPlan.validate_plan_summary_not_empty",
+          "type": "method"
+        },
+        "eligibility_reason": "no_existing_tests",
+        "plan_summary": "Test plan for TestElementPlan.validate_plan_summary_not_empty (method)",
+        "tags": [
+          "source_file:/Users/wumpinihussein/Documents/code/ai/testcraft/testcraft/testcraft/domain/models.py"
+        ]
+      },
+      {
+        "confidence": 0.0,
+        "detailed_plan": "Comprehensive plan for TestElementPlan.validate_detailed_plan_not_empty:\n1. Test happy paths\n2. Test edge cases\n3. Test error handling\n4. Mock external dependencies as needed",
+        "element": {
+          "docstring": "Validate that detailed plan is not empty.",
+          "line_range": [
+            292,
+            296
+          ],
+          "name": "TestElementPlan.validate_detailed_plan_not_empty",
+          "type": "method"
+        },
+        "eligibility_reason": "no_existing_tests",
+        "plan_summary": "Test plan for TestElementPlan.validate_detailed_plan_not_empty (method)",
+        "tags": [
+          "source_file:/Users/wumpinihussein/Documents/code/ai/testcraft/testcraft/testcraft/domain/models.py"
+        ]
+      },
+      {
+        "confidence": 0.0,
+        "detailed_plan": "Comprehensive plan for PlanningSession:\n1. Test happy paths\n2. Test edge cases\n3. Test error handling\n4. Mock external dependencies as needed",
+        "element": {
+          "docstring": "Represents a complete planning session with multiple test elements.\n\nContains all planning artifacts, user selections, and session metadata.",
+          "line_range": [
+            304,
+            362
+          ],
+          "name": "PlanningSession",
+          "type": "class"
+        },
+        "eligibility_reason": "no_existing_tests",
+        "plan_summary": "Test plan for PlanningSession (class)",
+        "tags": [
+          "source_file:/Users/wumpinihussein/Documents/code/ai/testcraft/testcraft/testcraft/domain/models.py"
+        ]
+      },
+      {
+        "confidence": 0.0,
+        "detailed_plan": "Comprehensive plan for PlanningSession.validate_session_id_not_empty:\n1. Test happy paths\n2. Test edge cases\n3. Test error handling\n4. Mock external dependencies as needed",
+        "element": {
+          "docstring": "Validate that session ID is not empty.",
+          "line_range": [
+            325,
+            329
+          ],
+          "name": "PlanningSession.validate_session_id_not_empty",
+          "type": "method"
+        },
+        "eligibility_reason": "no_existing_tests",
+        "plan_summary": "Test plan for PlanningSession.validate_session_id_not_empty (method)",
+        "tags": [
+          "source_file:/Users/wumpinihussein/Documents/code/ai/testcraft/testcraft/testcraft/domain/models.py"
+        ]
+      },
+      {
+        "confidence": 0.0,
+        "detailed_plan": "Comprehensive plan for PlanningSession.validate_project_path_not_empty:\n1. Test happy paths\n2. Test edge cases\n3. Test error handling\n4. Mock external dependencies as needed",
+        "element": {
+          "docstring": "Validate that project path is not empty.",
+          "line_range": [
+            332,
+            336
+          ],
+          "name": "PlanningSession.validate_project_path_not_empty",
+          "type": "method"
+        },
+        "eligibility_reason": "no_existing_tests",
+        "plan_summary": "Test plan for PlanningSession.validate_project_path_not_empty (method)",
+        "tags": [
+          "source_file:/Users/wumpinihussein/Documents/code/ai/testcraft/testcraft/testcraft/domain/models.py"
+        ]
+      },
+      {
+        "confidence": 0.0,
+        "detailed_plan": "Comprehensive plan for PlanningSession.validate_created_at_positive:\n1. Test happy paths\n2. Test edge cases\n3. Test error handling\n4. Mock external dependencies as needed",
+        "element": {
+          "docstring": "Validate that created_at is a positive timestamp.",
+          "line_range": [
+            339,
+            343
+          ],
+          "name": "PlanningSession.validate_created_at_positive",
+          "type": "method"
+        },
+        "eligibility_reason": "no_existing_tests",
+        "plan_summary": "Test plan for PlanningSession.validate_created_at_positive (method)",
+        "tags": [
+          "source_file:/Users/wumpinihussein/Documents/code/ai/testcraft/testcraft/testcraft/domain/models.py"
+        ]
+      },
+      {
+        "confidence": 0.0,
+        "detailed_plan": "Comprehensive plan for PlanningSession.get_element_plan:\n1. Test happy paths\n2. Test edge cases\n3. Test error handling\n4. Mock external dependencies as needed",
+        "element": {
+          "docstring": "Get element plan by key.",
+          "line_range": [
+            345,
+            351
+          ],
+          "name": "PlanningSession.get_element_plan",
+          "type": "method"
+        },
+        "eligibility_reason": "no_existing_tests",
+        "plan_summary": "Test plan for PlanningSession.get_element_plan (method)",
+        "tags": [
+          "source_file:/Users/wumpinihussein/Documents/code/ai/testcraft/testcraft/testcraft/domain/models.py"
+        ]
+      },
+      {
+        "confidence": 0.0,
+        "detailed_plan": "Comprehensive plan for PlanningSession.get_selected_plans:\n1. Test happy paths\n2. Test edge cases\n3. Test error handling\n4. Mock external dependencies as needed",
+        "element": {
+          "docstring": "Get all plans for selected elements.",
+          "line_range": [
+            353,
+            357
+          ],
+          "name": "PlanningSession.get_selected_plans",
+          "type": "method"
+        },
+        "eligibility_reason": "no_existing_tests",
+        "plan_summary": "Test plan for PlanningSession.get_selected_plans (method)",
+        "tags": [
+          "source_file:/Users/wumpinihussein/Documents/code/ai/testcraft/testcraft/testcraft/domain/models.py"
+        ]
+      }
+    ],
+    "project_path": "/Users/wumpinihussein/Documents/code/ai/testcraft/testcraft",
+    "selected_keys": [],
+    "session_id": "5e36c20f-0cb9-4d2d-9958-22b23e0a2f2d",
+    "stats": {
+      "eligible_elements": 30,
+      "files_processed": 1,
+      "generation_time": 0.23935914039611816,
+      "planning_cost": 0.0,
+      "plans_generated": 30
+    }
+  },
   "metadata": {
     "created_at": "2025-09-08T19:53:13.374412",
     "last_updated": "2025-09-08T19:53:13.374529",
     "version": "1.0.0"
-  }
+  },
+  "planning_history": [
+    {
+      "created_at": 1757807734.782302,
+      "project_path": "/Users/wumpinihussein/Documents/code/ai/testcraft/testcraft",
+      "session_id": "5e36c20f-0cb9-4d2d-9958-22b23e0a2f2d",
+      "stats": {
+        "eligible_elements": 30,
+        "files_processed": 1,
+        "generation_time": 0.23935914039611816,
+        "planning_cost": 0.0,
+        "plans_generated": 30
+      }
+    },
+    {
+      "created_at": 1757807673.103324,
+      "project_path": "/Users/wumpinihussein/Documents/code/ai/testcraft/testcraft",
+      "session_id": "8cb48c87-3490-4c83-af0b-0443d878db69",
+      "stats": {
+        "eligible_elements": 30,
+        "files_processed": 1,
+        "generation_time": 0.28407907485961914,
+        "planning_cost": 0.0,
+        "plans_generated": 30
+      }
+    },
+    {
+      "created_at": 1757806731.301822,
+      "project_path": "/Users/wumpinihussein/Documents/code/ai/testcraft/testcraft",
+      "session_id": "88e72ae7-9f24-4072-85ff-82f5a0382f71",
+      "stats": {
+        "eligible_elements": 30,
+        "files_processed": 1,
+        "generation_time": 0.5867919921875,
+        "planning_cost": 0.0,
+        "plans_generated": 30
+      }
+    },
+    {
+      "created_at": 1757806699.679768,
+      "project_path": "/Users/wumpinihussein/Documents/code/ai/testcraft/testcraft",
+      "session_id": "d623fde3-f17c-43e2-b9fc-f3adb3b12b75",
+      "stats": {
+        "eligible_elements": 30,
+        "files_processed": 1,
+        "generation_time": 0.5988829135894775,
+        "planning_cost": 0.0,
+        "plans_generated": 30
+      }
+    },
+    {
+      "created_at": 1757805432.217303,
+      "project_path": "/Users/wumpinihussein/Documents/code/ai/testcraft/testcraft",
+      "session_id": "091d8bd0-5850-43c5-99eb-dc6978e6d67c",
+      "stats": {
+        "eligible_elements": 30,
+        "files_processed": 1,
+        "generation_time": 0.5671529769897461,
+        "planning_cost": 0.0,
+        "plans_generated": 30
+      }
+    },
+    {
+      "created_at": 1757805406.399581,
+      "project_path": "/Users/wumpinihussein/Documents/code/ai/testcraft/testcraft",
+      "session_id": "11cee38a-428a-4b6a-8db3-a3c5ada8e075",
+      "stats": {
+        "eligible_elements": 30,
+        "files_processed": 1,
+        "generation_time": 0.568594217300415,
+        "planning_cost": 0.0,
+        "plans_generated": 30
+      }
+    },
+    {
+      "created_at": 1757803463.846952,
+      "project_path": "/Users/wumpinihussein/Documents/code/ai/testcraft/testcraft",
+      "session_id": "b4dc6c1a-6ae2-44cc-b3f2-ebe5e585f874",
+      "stats": {
+        "eligible_elements": 36,
+        "files_processed": 1,
+        "generation_time": 1.074280023574829,
+        "planning_cost": 0.0,
+        "plans_generated": 36
+      }
+    },
+    {
+      "created_at": 1757803463.846952,
+      "project_path": "/Users/wumpinihussein/Documents/code/ai/testcraft/testcraft",
+      "session_id": "b4dc6c1a-6ae2-44cc-b3f2-ebe5e585f874",
+      "stats": {
+        "eligible_elements": 36,
+        "files_processed": 1,
+        "generation_time": 1.074280023574829,
+        "planning_cost": 0.0,
+        "plans_generated": 36
+      }
+    }
+  ]
 }

@@ -9,6 +9,7 @@ from .context_port import ContextPort
 from .cost_port import CostPort
 from .coverage_port import CoveragePort
 from .llm_port import LLMPort
+from .llm_error import LLMError
 from .parser_port import ParserPort
 from .prompt_port import PromptPort
 from .refine_port import RefinePort
@@ -20,6 +21,7 @@ from .writer_port import WriterPort
 
 __all__ = [
     "LLMPort",
+    "LLMError",
     "CoveragePort",
     "WriterPort",
     "ParserPort",

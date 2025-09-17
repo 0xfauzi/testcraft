@@ -1,0 +1,672 @@
+{
+  "session_id": "b4dc6c1a-6ae2-44cc-b3f2-ebe5e585f874",
+  "project_path": "/Users/wumpinihussein/Documents/code/ai/testcraft/testcraft",
+  "created_at": 1757803463.846952,
+  "items": [
+    {
+      "element": {
+        "name": "TestDiscoveryConfig",
+        "type": "class",
+        "line_range": [
+          8,
+          57
+        ],
+        "docstring": "Configuration for hybrid test discovery system."
+      },
+      "eligibility_reason": "no_existing_tests",
+      "plan_summary": "Test plan for TestDiscoveryConfig (class)",
+      "detailed_plan": "Comprehensive testing plan for TestDiscoveryConfig:\n1. Test happy path scenarios\n2. Test edge cases and boundary conditions\n3. Test error handling and exceptions\n4. Mock external dependencies as needed",
+      "confidence": 0.0,
+      "tags": [
+        "source_file:/Users/wumpinihussein/Documents/code/ai/testcraft/testcraft/testcraft/config/models.py"
+      ]
+    },
+    {
+      "element": {
+        "name": "TestPatternConfig",
+        "type": "class",
+        "line_range": [
+          60,
+          197
+        ],
+        "docstring": "Configuration for test file discovery patterns."
+      },
+      "eligibility_reason": "no_existing_tests",
+      "plan_summary": "Test plan for TestPatternConfig (class)",
+      "detailed_plan": "Comprehensive testing plan for TestPatternConfig:\n1. Test happy path scenarios\n2. Test edge cases and boundary conditions\n3. Test error handling and exceptions\n4. Mock external dependencies as needed",
+      "confidence": 0.0,
+      "tags": [
+        "source_file:/Users/wumpinihussein/Documents/code/ai/testcraft/testcraft/testcraft/config/models.py"
+      ]
+    },
+    {
+      "element": {
+        "name": "TestEnvironmentConfig",
+        "type": "class",
+        "line_range": [
+          202,
+          215
+        ],
+        "docstring": "Configuration for test execution environment."
+      },
+      "eligibility_reason": "no_existing_tests",
+      "plan_summary": "Test plan for TestEnvironmentConfig (class)",
+      "detailed_plan": "Comprehensive testing plan for TestEnvironmentConfig:\n1. Test happy path scenarios\n2. Test edge cases and boundary conditions\n3. Test error handling and exceptions\n4. Mock external dependencies as needed",
+      "confidence": 0.0,
+      "tags": [
+        "source_file:/Users/wumpinihussein/Documents/code/ai/testcraft/testcraft/testcraft/config/models.py"
+      ]
+    },
+    {
+      "element": {
+        "name": "RefineConfig",
+        "type": "class",
+        "line_range": [
+          222,
+          393
+        ],
+        "docstring": "Configuration for AI-powered test refinement."
+      },
+      "eligibility_reason": "no_existing_tests",
+      "plan_summary": "Test plan for RefineConfig (class)",
+      "detailed_plan": "Comprehensive testing plan for RefineConfig:\n1. Test happy path scenarios\n2. Test edge cases and boundary conditions\n3. Test error handling and exceptions\n4. Mock external dependencies as needed",
+      "confidence": 0.0,
+      "tags": [
+        "source_file:/Users/wumpinihussein/Documents/code/ai/testcraft/testcraft/testcraft/config/models.py"
+      ]
+    },
+    {
+      "element": {
+        "name": "PromptBudgetConfig",
+        "type": "class",
+        "line_range": [
+          396,
+          425
+        ],
+        "docstring": "Configuration for prompt budget limits."
+      },
+      "eligibility_reason": "no_existing_tests",
+      "plan_summary": "Test plan for PromptBudgetConfig (class)",
+      "detailed_plan": "Comprehensive testing plan for PromptBudgetConfig:\n1. Test happy path scenarios\n2. Test edge cases and boundary conditions\n3. Test error handling and exceptions\n4. Mock external dependencies as needed",
+      "confidence": 0.0,
+      "tags": [
+        "source_file:/Users/wumpinihussein/Documents/code/ai/testcraft/testcraft/testcraft/config/models.py"
+      ]
+    },
+    {
+      "element": {
+        "name": "DirectoryTreeBudgetConfig",
+        "type": "class",
+        "line_range": [
+          428,
+          444
+        ],
+        "docstring": "Configuration for directory tree traversal limits."
+      },
+      "eligibility_reason": "no_existing_tests",
+      "plan_summary": "Test plan for DirectoryTreeBudgetConfig (class)",
+      "detailed_plan": "Comprehensive testing plan for DirectoryTreeBudgetConfig:\n1. Test happy path scenarios\n2. Test edge cases and boundary conditions\n3. Test error handling and exceptions\n4. Mock external dependencies as needed",
+      "confidence": 0.0,
+      "tags": [
+        "source_file:/Users/wumpinihussein/Documents/code/ai/testcraft/testcraft/testcraft/config/models.py"
+      ]
+    },
+    {
+      "element": {
+        "name": "ContextBudgetConfig",
+        "type": "class",
+        "line_range": [
+          447,
+          453
+        ],
+        "docstring": "Configuration for context budget limits."
+      },
+      "eligibility_reason": "no_existing_tests",
+      "plan_summary": "Test plan for ContextBudgetConfig (class)",
+      "detailed_plan": "Comprehensive testing plan for ContextBudgetConfig:\n1. Test happy path scenarios\n2. Test edge cases and boundary conditions\n3. Test error handling and exceptions\n4. Mock external dependencies as needed",
+      "confidence": 0.0,
+      "tags": [
+        "source_file:/Users/wumpinihussein/Documents/code/ai/testcraft/testcraft/testcraft/config/models.py"
+      ]
+    },
+    {
+      "element": {
+        "name": "ContextCategoriesConfig",
+        "type": "class",
+        "line_range": [
+          456,
+          470
+        ],
+        "docstring": "Configuration for context categories to include."
+      },
+      "eligibility_reason": "no_existing_tests",
+      "plan_summary": "Test plan for ContextCategoriesConfig (class)",
+      "detailed_plan": "Comprehensive testing plan for ContextCategoriesConfig:\n1. Test happy path scenarios\n2. Test edge cases and boundary conditions\n3. Test error handling and exceptions\n4. Mock external dependencies as needed",
+      "confidence": 0.0,
+      "tags": [
+        "source_file:/Users/wumpinihussein/Documents/code/ai/testcraft/testcraft/testcraft/config/models.py"
+      ]
+    },
+    {
+      "element": {
+        "name": "MergeConfig",
+        "type": "class",
+        "line_range": [
+          473,
+          478
+        ],
+        "docstring": "DEPRECATED: Test merging configuration (AST merge is always used)."
+      },
+      "eligibility_reason": "no_existing_tests",
+      "plan_summary": "Test plan for MergeConfig (class)",
+      "detailed_plan": "Comprehensive testing plan for MergeConfig:\n1. Test happy path scenarios\n2. Test edge cases and boundary conditions\n3. Test error handling and exceptions\n4. Mock external dependencies as needed",
+      "confidence": 0.0,
+      "tags": [
+        "source_file:/Users/wumpinihussein/Documents/code/ai/testcraft/testcraft/testcraft/config/models.py"
+      ]
+    },
+    {
+      "element": {
+        "name": "PostGenerationTestRunnerConfig",
+        "type": "class",
+        "line_range": [
+          481,
+          487
+        ],
+        "docstring": "DEPRECATED: Post-generation test runner configuration (no longer used)."
+      },
+      "eligibility_reason": "no_existing_tests",
+      "plan_summary": "Test plan for PostGenerationTestRunnerConfig (class)",
+      "detailed_plan": "Comprehensive testing plan for PostGenerationTestRunnerConfig:\n1. Test happy path scenarios\n2. Test edge cases and boundary conditions\n3. Test error handling and exceptions\n4. Mock external dependencies as needed",
+      "confidence": 0.0,
+      "tags": [
+        "source_file:/Users/wumpinihussein/Documents/code/ai/testcraft/testcraft/testcraft/config/models.py"
+      ]
+    },
+    {
+      "element": {
+        "name": "ContextEnrichmentConfig",
+        "type": "class",
+        "line_range": [
+          490,
+          519
+        ],
+        "docstring": "Configuration for context enrichment during test generation."
+      },
+      "eligibility_reason": "no_existing_tests",
+      "plan_summary": "Test plan for ContextEnrichmentConfig (class)",
+      "detailed_plan": "Comprehensive testing plan for ContextEnrichmentConfig:\n1. Test happy path scenarios\n2. Test edge cases and boundary conditions\n3. Test error handling and exceptions\n4. Mock external dependencies as needed",
+      "confidence": 0.0,
+      "tags": [
+        "source_file:/Users/wumpinihussein/Documents/code/ai/testcraft/testcraft/testcraft/config/models.py"
+      ]
+    },
+    {
+      "element": {
+        "name": "TestGenerationConfig",
+        "type": "class",
+        "line_range": [
+          522,
+          632
+        ],
+        "docstring": "Configuration for test generation behavior."
+      },
+      "eligibility_reason": "no_existing_tests",
+      "plan_summary": "Test plan for TestGenerationConfig (class)",
+      "detailed_plan": "Comprehensive testing plan for TestGenerationConfig:\n1. Test happy path scenarios\n2. Test edge cases and boundary conditions\n3. Test error handling and exceptions\n4. Mock external dependencies as needed",
+      "confidence": 0.0,
+      "tags": [
+        "source_file:/Users/wumpinihussein/Documents/code/ai/testcraft/testcraft/testcraft/config/models.py"
+      ]
+    },
+    {
+      "element": {
+        "name": "EnvironmentOverrideConfig",
+        "type": "class",
+        "line_range": [
+          635,
+          653
+        ],
+        "docstring": "Configuration for environment-specific overrides."
+      },
+      "eligibility_reason": "no_existing_tests",
+      "plan_summary": "Test plan for EnvironmentOverrideConfig (class)",
+      "detailed_plan": "Comprehensive testing plan for EnvironmentOverrideConfig:\n1. Test happy path scenarios\n2. Test edge cases and boundary conditions\n3. Test error handling and exceptions\n4. Mock external dependencies as needed",
+      "confidence": 0.0,
+      "tags": [
+        "source_file:/Users/wumpinihussein/Documents/code/ai/testcraft/testcraft/testcraft/config/models.py"
+      ]
+    },
+    {
+      "element": {
+        "name": "EnvironmentConfig",
+        "type": "class",
+        "line_range": [
+          656,
+          678
+        ],
+        "docstring": "Configuration for environment detection and management."
+      },
+      "eligibility_reason": "no_existing_tests",
+      "plan_summary": "Test plan for EnvironmentConfig (class)",
+      "detailed_plan": "Comprehensive testing plan for EnvironmentConfig:\n1. Test happy path scenarios\n2. Test edge cases and boundary conditions\n3. Test error handling and exceptions\n4. Mock external dependencies as needed",
+      "confidence": 0.0,
+      "tags": [
+        "source_file:/Users/wumpinihussein/Documents/code/ai/testcraft/testcraft/testcraft/config/models.py"
+      ]
+    },
+    {
+      "element": {
+        "name": "CostThresholdConfig",
+        "type": "class",
+        "line_range": [
+          681,
+          694
+        ],
+        "docstring": "Configuration for cost thresholds and limits."
+      },
+      "eligibility_reason": "no_existing_tests",
+      "plan_summary": "Test plan for CostThresholdConfig (class)",
+      "detailed_plan": "Comprehensive testing plan for CostThresholdConfig:\n1. Test happy path scenarios\n2. Test edge cases and boundary conditions\n3. Test error handling and exceptions\n4. Mock external dependencies as needed",
+      "confidence": 0.0,
+      "tags": [
+        "source_file:/Users/wumpinihussein/Documents/code/ai/testcraft/testcraft/testcraft/config/models.py"
+      ]
+    },
+    {
+      "element": {
+        "name": "CostConfig",
+        "type": "class",
+        "line_range": [
+          697,
+          730
+        ],
+        "docstring": "Configuration for cost management and optimization."
+      },
+      "eligibility_reason": "no_existing_tests",
+      "plan_summary": "Test plan for CostConfig (class)",
+      "detailed_plan": "Comprehensive testing plan for CostConfig:\n1. Test happy path scenarios\n2. Test edge cases and boundary conditions\n3. Test error handling and exceptions\n4. Mock external dependencies as needed",
+      "confidence": 0.0,
+      "tags": [
+        "source_file:/Users/wumpinihussein/Documents/code/ai/testcraft/testcraft/testcraft/config/models.py"
+      ]
+    },
+    {
+      "element": {
+        "name": "TestStyleConfig",
+        "type": "class",
+        "line_range": [
+          739,
+          750
+        ],
+        "docstring": "DEPRECATED: Test generation style configuration (moved to generation.test_framework)."
+      },
+      "eligibility_reason": "no_existing_tests",
+      "plan_summary": "Test plan for TestStyleConfig (class)",
+      "detailed_plan": "Comprehensive testing plan for TestStyleConfig:\n1. Test happy path scenarios\n2. Test edge cases and boundary conditions\n3. Test error handling and exceptions\n4. Mock external dependencies as needed",
+      "confidence": 0.0,
+      "tags": [
+        "source_file:/Users/wumpinihussein/Documents/code/ai/testcraft/testcraft/testcraft/config/models.py"
+      ]
+    },
+    {
+      "element": {
+        "name": "CoverageConfig",
+        "type": "class",
+        "line_range": [
+          753,
+          760
+        ],
+        "docstring": "DEPRECATED: Test coverage configuration (no runtime implementation)."
+      },
+      "eligibility_reason": "no_existing_tests",
+      "plan_summary": "Test plan for CoverageConfig (class)",
+      "detailed_plan": "Comprehensive testing plan for CoverageConfig:\n1. Test happy path scenarios\n2. Test edge cases and boundary conditions\n3. Test error handling and exceptions\n4. Mock external dependencies as needed",
+      "confidence": 0.0,
+      "tags": [
+        "source_file:/Users/wumpinihussein/Documents/code/ai/testcraft/testcraft/testcraft/config/models.py"
+      ]
+    },
+    {
+      "element": {
+        "name": "QualityConfig",
+        "type": "class",
+        "line_range": [
+          763,
+          773
+        ],
+        "docstring": "DEPRECATED: Test quality analysis configuration (no runtime implementation)."
+      },
+      "eligibility_reason": "no_existing_tests",
+      "plan_summary": "Test plan for QualityConfig (class)",
+      "detailed_plan": "Comprehensive testing plan for QualityConfig:\n1. Test happy path scenarios\n2. Test edge cases and boundary conditions\n3. Test error handling and exceptions\n4. Mock external dependencies as needed",
+      "confidence": 0.0,
+      "tags": [
+        "source_file:/Users/wumpinihussein/Documents/code/ai/testcraft/testcraft/testcraft/config/models.py"
+      ]
+    },
+    {
+      "element": {
+        "name": "TelemetryBackendConfig",
+        "type": "class",
+        "line_range": [
+          782,
+          813
+        ],
+        "docstring": "Configuration for specific telemetry backends."
+      },
+      "eligibility_reason": "no_existing_tests",
+      "plan_summary": "Test plan for TelemetryBackendConfig (class)",
+      "detailed_plan": "Comprehensive testing plan for TelemetryBackendConfig:\n1. Test happy path scenarios\n2. Test edge cases and boundary conditions\n3. Test error handling and exceptions\n4. Mock external dependencies as needed",
+      "confidence": 0.0,
+      "tags": [
+        "source_file:/Users/wumpinihussein/Documents/code/ai/testcraft/testcraft/testcraft/config/models.py"
+      ]
+    },
+    {
+      "element": {
+        "name": "LLMProviderConfig",
+        "type": "class",
+        "line_range": [
+          816,
+          948
+        ],
+        "docstring": "Configuration for LLM provider settings."
+      },
+      "eligibility_reason": "no_existing_tests",
+      "plan_summary": "Test plan for LLMProviderConfig (class)",
+      "detailed_plan": "Comprehensive testing plan for LLMProviderConfig:\n1. Test happy path scenarios\n2. Test edge cases and boundary conditions\n3. Test error handling and exceptions\n4. Mock external dependencies as needed",
+      "confidence": 0.0,
+      "tags": [
+        "source_file:/Users/wumpinihussein/Documents/code/ai/testcraft/testcraft/testcraft/config/models.py"
+      ]
+    },
+    {
+      "element": {
+        "name": "LLMProviderConfig.validate_api_keys_not_empty",
+        "type": "method",
+        "line_range": [
+          934,
+          938
+        ],
+        "docstring": "Ensure API keys are not empty strings."
+      },
+      "eligibility_reason": "no_existing_tests",
+      "plan_summary": "Test plan for LLMProviderConfig.validate_api_keys_not_empty (method)",
+      "detailed_plan": "Comprehensive testing plan for LLMProviderConfig.validate_api_keys_not_empty:\n1. Test happy path scenarios\n2. Test edge cases and boundary conditions\n3. Test error handling and exceptions\n4. Mock external dependencies as needed",
+      "confidence": 0.0,
+      "tags": [
+        "source_file:/Users/wumpinihussein/Documents/code/ai/testcraft/testcraft/testcraft/config/models.py"
+      ]
+    },
+    {
+      "element": {
+        "name": "LLMProviderConfig.validate_azure_endpoint",
+        "type": "method",
+        "line_range": [
+          942,
+          948
+        ],
+        "docstring": "Validate Azure endpoint URL format."
+      },
+      "eligibility_reason": "no_existing_tests",
+      "plan_summary": "Test plan for LLMProviderConfig.validate_azure_endpoint (method)",
+      "detailed_plan": "Comprehensive testing plan for LLMProviderConfig.validate_azure_endpoint:\n1. Test happy path scenarios\n2. Test edge cases and boundary conditions\n3. Test error handling and exceptions\n4. Mock external dependencies as needed",
+      "confidence": 0.0,
+      "tags": [
+        "source_file:/Users/wumpinihussein/Documents/code/ai/testcraft/testcraft/testcraft/config/models.py"
+      ]
+    },
+    {
+      "element": {
+        "name": "EvaluationConfig",
+        "type": "class",
+        "line_range": [
+          951,
+          1020
+        ],
+        "docstring": "Configuration for test evaluation harness."
+      },
+      "eligibility_reason": "no_existing_tests",
+      "plan_summary": "Test plan for EvaluationConfig (class)",
+      "detailed_plan": "Comprehensive testing plan for EvaluationConfig:\n1. Test happy path scenarios\n2. Test edge cases and boundary conditions\n3. Test error handling and exceptions\n4. Mock external dependencies as needed",
+      "confidence": 0.0,
+      "tags": [
+        "source_file:/Users/wumpinihussein/Documents/code/ai/testcraft/testcraft/testcraft/config/models.py"
+      ]
+    },
+    {
+      "element": {
+        "name": "TelemetryConfig",
+        "type": "class",
+        "line_range": [
+          1023,
+          1114
+        ],
+        "docstring": "Configuration for telemetry and observability."
+      },
+      "eligibility_reason": "no_existing_tests",
+      "plan_summary": "Test plan for TelemetryConfig (class)",
+      "detailed_plan": "Comprehensive testing plan for TelemetryConfig:\n1. Test happy path scenarios\n2. Test edge cases and boundary conditions\n3. Test error handling and exceptions\n4. Mock external dependencies as needed",
+      "confidence": 0.0,
+      "tags": [
+        "source_file:/Users/wumpinihussein/Documents/code/ai/testcraft/testcraft/testcraft/config/models.py"
+      ]
+    },
+    {
+      "element": {
+        "name": "TelemetryConfig.validate_sampling_rate",
+        "type": "method",
+        "line_range": [
+          1110,
+          1114
+        ],
+        "docstring": "Ensure sampling rate is between 0.0 and 1.0."
+      },
+      "eligibility_reason": "no_existing_tests",
+      "plan_summary": "Test plan for TelemetryConfig.validate_sampling_rate (method)",
+      "detailed_plan": "Comprehensive testing plan for TelemetryConfig.validate_sampling_rate:\n1. Test happy path scenarios\n2. Test edge cases and boundary conditions\n3. Test error handling and exceptions\n4. Mock external dependencies as needed",
+      "confidence": 0.0,
+      "tags": [
+        "source_file:/Users/wumpinihussein/Documents/code/ai/testcraft/testcraft/testcraft/config/models.py"
+      ]
+    },
+    {
+      "element": {
+        "name": "LoggingConfig",
+        "type": "class",
+        "line_range": [
+          1117,
+          1135
+        ],
+        "docstring": "Configuration for logging behavior."
+      },
+      "eligibility_reason": "no_existing_tests",
+      "plan_summary": "Test plan for LoggingConfig (class)",
+      "detailed_plan": "Comprehensive testing plan for LoggingConfig:\n1. Test happy path scenarios\n2. Test edge cases and boundary conditions\n3. Test error handling and exceptions\n4. Mock external dependencies as needed",
+      "confidence": 0.0,
+      "tags": [
+        "source_file:/Users/wumpinihussein/Documents/code/ai/testcraft/testcraft/testcraft/config/models.py"
+      ]
+    },
+    {
+      "element": {
+        "name": "UIConfig",
+        "type": "class",
+        "line_range": [
+          1138,
+          1149
+        ],
+        "docstring": "Configuration for user interface behavior."
+      },
+      "eligibility_reason": "no_existing_tests",
+      "plan_summary": "Test plan for UIConfig (class)",
+      "detailed_plan": "Comprehensive testing plan for UIConfig:\n1. Test happy path scenarios\n2. Test edge cases and boundary conditions\n3. Test error handling and exceptions\n4. Mock external dependencies as needed",
+      "confidence": 0.0,
+      "tags": [
+        "source_file:/Users/wumpinihussein/Documents/code/ai/testcraft/testcraft/testcraft/config/models.py"
+      ]
+    },
+    {
+      "element": {
+        "name": "PlanningConfig",
+        "type": "class",
+        "line_range": [
+          1152,
+          1194
+        ],
+        "docstring": "Configuration for test planning functionality."
+      },
+      "eligibility_reason": "no_existing_tests",
+      "plan_summary": "Test plan for PlanningConfig (class)",
+      "detailed_plan": "Comprehensive testing plan for PlanningConfig:\n1. Test happy path scenarios\n2. Test edge cases and boundary conditions\n3. Test error handling and exceptions\n4. Mock external dependencies as needed",
+      "confidence": 0.0,
+      "tags": [
+        "source_file:/Users/wumpinihussein/Documents/code/ai/testcraft/testcraft/testcraft/config/models.py"
+      ]
+    },
+    {
+      "element": {
+        "name": "TestCraftConfig",
+        "type": "class",
+        "line_range": [
+          1197,
+          1356
+        ],
+        "docstring": "Main configuration model for TestCraft."
+      },
+      "eligibility_reason": "no_existing_tests",
+      "plan_summary": "Test plan for TestCraftConfig (class)",
+      "detailed_plan": "Comprehensive testing plan for TestCraftConfig:\n1. Test happy path scenarios\n2. Test edge cases and boundary conditions\n3. Test error handling and exceptions\n4. Mock external dependencies as needed",
+      "confidence": 0.0,
+      "tags": [
+        "source_file:/Users/wumpinihussein/Documents/code/ai/testcraft/testcraft/testcraft/config/models.py"
+      ]
+    },
+    {
+      "element": {
+        "name": "TestCraftConfig.validate_coverage_thresholds",
+        "type": "method",
+        "line_range": [
+          1282,
+          1294
+        ],
+        "docstring": "Ensure coverage thresholds are logically consistent (deprecated)."
+      },
+      "eligibility_reason": "no_existing_tests",
+      "plan_summary": "Test plan for TestCraftConfig.validate_coverage_thresholds (method)",
+      "detailed_plan": "Comprehensive testing plan for TestCraftConfig.validate_coverage_thresholds:\n1. Test happy path scenarios\n2. Test edge cases and boundary conditions\n3. Test error handling and exceptions\n4. Mock external dependencies as needed",
+      "confidence": 0.0,
+      "tags": [
+        "source_file:/Users/wumpinihussein/Documents/code/ai/testcraft/testcraft/testcraft/config/models.py"
+      ]
+    },
+    {
+      "element": {
+        "name": "TestCraftConfig.validate_cost_thresholds",
+        "type": "method",
+        "line_range": [
+          1298,
+          1305
+        ],
+        "docstring": "Ensure cost thresholds are logically consistent."
+      },
+      "eligibility_reason": "no_existing_tests",
+      "plan_summary": "Test plan for TestCraftConfig.validate_cost_thresholds (method)",
+      "detailed_plan": "Comprehensive testing plan for TestCraftConfig.validate_cost_thresholds:\n1. Test happy path scenarios\n2. Test edge cases and boundary conditions\n3. Test error handling and exceptions\n4. Mock external dependencies as needed",
+      "confidence": 0.0,
+      "tags": [
+        "source_file:/Users/wumpinihussein/Documents/code/ai/testcraft/testcraft/testcraft/config/models.py"
+      ]
+    },
+    {
+      "element": {
+        "name": "TestCraftConfig.validate_quality_scores",
+        "type": "method",
+        "line_range": [
+          1309,
+          1317
+        ],
+        "docstring": "Ensure quality scores are within valid ranges (deprecated)."
+      },
+      "eligibility_reason": "no_existing_tests",
+      "plan_summary": "Test plan for TestCraftConfig.validate_quality_scores (method)",
+      "detailed_plan": "Comprehensive testing plan for TestCraftConfig.validate_quality_scores:\n1. Test happy path scenarios\n2. Test edge cases and boundary conditions\n3. Test error handling and exceptions\n4. Mock external dependencies as needed",
+      "confidence": 0.0,
+      "tags": [
+        "source_file:/Users/wumpinihussein/Documents/code/ai/testcraft/testcraft/testcraft/config/models.py"
+      ]
+    },
+    {
+      "element": {
+        "name": "TestCraftConfig.get_nested_value",
+        "type": "method",
+        "line_range": [
+          1319,
+          1330
+        ],
+        "docstring": "Get configuration value using dot notation (e.g., 'coverage.minimum_line_coverage')."
+      },
+      "eligibility_reason": "no_existing_tests",
+      "plan_summary": "Test plan for TestCraftConfig.get_nested_value (method)",
+      "detailed_plan": "Comprehensive testing plan for TestCraftConfig.get_nested_value:\n1. Test happy path scenarios\n2. Test edge cases and boundary conditions\n3. Test error handling and exceptions\n4. Mock external dependencies as needed",
+      "confidence": 0.0,
+      "tags": [
+        "source_file:/Users/wumpinihussein/Documents/code/ai/testcraft/testcraft/testcraft/config/models.py"
+      ]
+    },
+    {
+      "element": {
+        "name": "TestCraftConfig.update_from_dict",
+        "type": "method",
+        "line_range": [
+          1332,
+          1336
+        ],
+        "docstring": "Update configuration with values from a dictionary."
+      },
+      "eligibility_reason": "no_existing_tests",
+      "plan_summary": "Test plan for TestCraftConfig.update_from_dict (method)",
+      "detailed_plan": "Comprehensive testing plan for TestCraftConfig.update_from_dict:\n1. Test happy path scenarios\n2. Test edge cases and boundary conditions\n3. Test error handling and exceptions\n4. Mock external dependencies as needed",
+      "confidence": 0.0,
+      "tags": [
+        "source_file:/Users/wumpinihussein/Documents/code/ai/testcraft/testcraft/testcraft/config/models.py"
+      ]
+    },
+    {
+      "element": {
+        "name": "TestCraftConfig._deep_merge",
+        "type": "method",
+        "line_range": [
+          1338,
+          1352
+        ],
+        "docstring": "Deeply merge updates into base dictionary."
+      },
+      "eligibility_reason": "no_existing_tests",
+      "plan_summary": "Test plan for TestCraftConfig._deep_merge (method)",
+      "detailed_plan": "Comprehensive testing plan for TestCraftConfig._deep_merge:\n1. Test happy path scenarios\n2. Test edge cases and boundary conditions\n3. Test error handling and exceptions\n4. Mock external dependencies as needed",
+      "confidence": 0.0,
+      "tags": [
+        "source_file:/Users/wumpinihussein/Documents/code/ai/testcraft/testcraft/testcraft/config/models.py"
+      ]
+    }
+  ],
+  "selected_keys": [
+    "PlanningConfig::class::1152-1194",
+    "TestCraftConfig::class::1197-1356",
+    "TestCraftConfig.validate_coverage_thresholds::method::1282-1294",
+    "TestCraftConfig.validate_cost_thresholds::method::1298-1305",
+    "TestCraftConfig.validate_quality_scores::method::1309-1317",
+    "TestCraftConfig.get_nested_value::method::1319-1330",
+    "TestCraftConfig.update_from_dict::method::1332-1336",
+    "TestCraftConfig._deep_merge::method::1338-1352"
+  ],
+  "stats": {
+    "files_processed": 1,
+    "eligible_elements": 36,
+    "plans_generated": 36,
+    "planning_cost": 0.0,
+    "generation_time": 1.074280023574829
+  }
+}

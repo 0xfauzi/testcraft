@@ -1,6 +1,6 @@
 # Task ID: 12
 # Title: Implement Context Pipeline
-# Status: pending
+# Status: done
 # Dependencies: 4, 5
 # Priority: high
 # Description: Create adapters for indexing, retrieving, and summarizing code context from the repository.

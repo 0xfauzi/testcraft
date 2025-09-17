@@ -15,8 +15,8 @@ def main():
     # 1. Basic usage - load default configuration
     print("1. Loading default configuration:")
     config = TestCraftConfig()
-    print(f"   Framework: {config.style.framework}")
-    print(f"   Min coverage: {config.coverage.minimum_line_coverage}%")
+    print(f"   Framework: {config.generation.test_framework}")
+    print(f"   Batch size: {config.generation.batch_size}")
     print(f"   Cost limit: ${config.cost_management.cost_thresholds.daily_limit}")
 
     # 2. Using ConfigLoader for more control
@@ -29,32 +29,35 @@ def main():
 
     # 3. Environment variable overrides
     print("\n3. Environment variable overrides:")
-    os.environ["TESTCRAFT_COVERAGE__MINIMUM_LINE_COVERAGE"] = "90"
-    os.environ["TESTCRAFT_STYLE__FRAMEWORK"] = "unittest"
+    os.environ["TESTCRAFT_GENERATION__BATCH_SIZE"] = "8"
+    os.environ["TESTCRAFT_GENERATION__TEST_FRAMEWORK"] = "unittest"
 
     # Reload to pick up env vars
     config = loader.load_config(reload=True)
-    print(f"   Framework (from env): {config.style.framework}")
-    print(f"   Min coverage (from env): {config.coverage.minimum_line_coverage}%")
+    print(f"   Framework (from env): {config.generation.test_framework}")
+    print(f"   Batch size (from env): {config.generation.batch_size}")
 
     # 4. CLI overrides (highest priority)
     print("\n4. CLI overrides:")
     cli_overrides = {
         "cost_management": {"max_file_size_kb": 100},
-        "quality": {"enable_mutation_testing": False},
+        "generation": {"enable_refinement": False},
     }
 
     config = loader.load_config(cli_overrides=cli_overrides, reload=True)
     print(f"   Max file size (CLI): {config.cost_management.max_file_size_kb}KB")
-    print(f"   Mutation testing (CLI): {config.quality.enable_mutation_testing}")
+    print(f"   Enable refinement (CLI): {config.generation.enable_refinement}")
 
     # 5. Accessing nested values
     print("\n5. Accessing nested configuration values:")
     print(
-        f"   coverage.minimum_line_coverage: {config.get_nested_value('coverage.minimum_line_coverage')}"
+        f"   generation.test_framework: {config.get_nested_value('generation.test_framework')}"
     )
     print(
         f"   environment.auto_detect: {config.get_nested_value('environment.auto_detect')}"
+    )
+    print(
+        f"   generation.prompt_budgets.total_chars: {config.get_nested_value('generation.prompt_budgets.total_chars')}"
     )
     print(
         f"   invalid.key (default): {config.get_nested_value('invalid.key', 'NOT_FOUND')}"
@@ -78,11 +81,34 @@ def main():
     print(f"   Sample config created at: {created_path}")
     print(f"   File size: {created_path.stat().st_size} bytes")
 
+    # 8. Unified LLM configuration
+    print("\n8. Unified LLM configuration:")
+    print(f"   Default provider: {config.llm.default_provider}")
+    print(f"   Temperature: {config.llm.temperature}")
+    print(f"   Max retries: {config.llm.max_retries}")
+    print(f"   OpenAI model: {config.llm.openai_model}")
+    print(f"   Anthropic model: {config.llm.anthropic_model}")
+    
+    # Show provider switching
+    print("\n9. Provider switching demonstration:")
+    provider_examples = {
+        "openai": "For general use and o-series reasoning models",
+        "anthropic": "For large context and extended thinking",
+        "azure-openai": "For enterprise deployments",
+        "bedrock": "For AWS infrastructure integration"
+    }
+    
+    for provider, description in provider_examples.items():
+        print(f"   {provider}: {description}")
+    
+    print(f"\n   Current: Using {config.llm.default_provider}")
+    print("   Switch: Set TESTCRAFT_LLM__DEFAULT_PROVIDER=anthropic")
+
     # Clean up
     sample_path.unlink()
     for key in [
-        "TESTCRAFT_COVERAGE__MINIMUM_LINE_COVERAGE",
-        "TESTCRAFT_STYLE__FRAMEWORK",
+        "TESTCRAFT_GENERATION__BATCH_SIZE",
+        "TESTCRAFT_GENERATION__TEST_FRAMEWORK",
     ]:
         os.environ.pop(key, None)
 

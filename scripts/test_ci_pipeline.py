@@ -36,6 +36,7 @@ class LocalCITester:
         print(f"📁 Project root: {self.project_root}")
 
         checks = [
+            ("File Size Gate", self._run_size_gate),
             ("Lint Check (ruff)", self._run_ruff_check),
             ("Format Check (ruff)", self._run_format_check),
             ("Type Check (mypy)", self._run_mypy_check),
@@ -109,6 +110,10 @@ class LocalCITester:
             }
         except Exception as e:
             return False, {"error": str(e), "command": " ".join(cmd)}
+
+    def _run_size_gate(self) -> tuple[bool, dict]:
+        """Run file size gate check."""
+        return self._run_command(["python3", "scripts/size_gate.py"])
 
     def _run_ruff_check(self) -> tuple[bool, dict]:
         """Run ruff linting check."""
@@ -217,6 +222,11 @@ class LocalCITester:
             recommendations.append("🎉 All checks passed! Your code is ready for CI.")
             return recommendations
 
+        if "File Size Gate" in failed_checks:
+            recommendations.append(
+                "📏 Fix oversized files - refactor files exceeding 1000 lines into smaller modules"
+            )
+
         if "Lint Check (ruff)" in failed_checks:
             recommendations.append(
                 "🔧 Fix linting issues by running: uv run ruff check . --fix"
@@ -257,6 +267,7 @@ class LocalCITester:
     def run_specific_check(self, check_name: str) -> bool:
         """Run a specific check only."""
         check_map = {
+            "size": self._run_size_gate,
             "lint": self._run_ruff_check,
             "format": self._run_format_check,
             "type": self._run_mypy_check,
@@ -301,6 +312,7 @@ def main():
     parser.add_argument(
         "--check",
         choices=[
+            "size",
             "lint",
             "format",
             "type",
@@ -320,6 +332,7 @@ def main():
     if args.list_checks:
         print("Available CI checks:")
         checks = [
+            "size",
             "lint",
             "format",
             "type",

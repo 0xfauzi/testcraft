@@ -97,7 +97,7 @@ class EnhancedUIAdapter(RichUIAdapter):
             console=self.console,
             show_time=True,
             show_path=False,
-            markup=False,  # Avoid rich markup leaking in minimal logs
+            markup=True,  # Align with global policy - markup enabled
             rich_tracebacks=True,
         )
         
@@ -336,6 +336,26 @@ class EnhancedUIAdapter(RichUIAdapter):
         if "files_processed" in summary_data:
             self.display_file_progress_table(summary_data["files_processed"], "results")
     
+    def display_next_actions(self, actions: List[str]) -> None:
+        """Display next actions with appropriate formatting for each UI style."""
+        if not actions:
+            return
+        
+        if self.ui_style == UIStyle.MINIMAL:
+            # Minimal: single concise line
+            actions_str = " | ".join(actions)
+            self.console.print(f"• next: {actions_str}")
+        else:
+            # Classic: panel with checklist
+            action_items = "\n".join(f"• {action}" for action in actions)
+            panel = Panel(
+                action_items,
+                title="[primary]next actions[/]",
+                border_style="border",
+                padding=(1, 1)
+            )
+            self.console.print(panel)
+    
     def get_renderer(self):
         """Get the appropriate renderer based on UI style."""
         if self.ui_style == UIStyle.MINIMAL:
@@ -371,6 +391,11 @@ class MinimalRenderer:
             summary_parts.append(f"Δcov {line_coverage_delta:+.1%}")
             
         summary_parts.append(f"time {total_duration:.1f}s")
+        
+        # Add warning counter if warnings exist
+        warnings_count = self._count_warnings(results)
+        if warnings_count > 0:
+            summary_parts.append(f"warn={warnings_count}")
         
         summary_line = " • ".join(summary_parts)
         console.print(summary_line)
@@ -488,6 +513,24 @@ class MinimalRenderer:
             )
         
         console.print(table)
+    
+    def _count_warnings(self, results: dict) -> int:
+        """Count warnings in generation results."""
+        warnings_count = 0
+        
+        # Count various warning indicators
+        warnings_count += results.get("failed_generations", 0)
+        warnings_count += results.get("refine_exhausted_count", 0) 
+        warnings_count += results.get("refinement_failures", 0)
+        warnings_count += results.get("files_with_failures", 0)
+        
+        # Check for partial successes (files written vs processed mismatch)
+        files_written = results.get("files_written", 0)
+        files_processed = results.get("files_processed", 0)
+        if files_processed > files_written:
+            warnings_count += (files_processed - files_written)
+        
+        return warnings_count
 
 
 class DashboardManager:
@@ -555,3 +598,91 @@ class DashboardManager:
     def get_data(self, key: str, default: Any = None) -> Any:
         """Get data from the dashboard."""
         return self._data.get(key, default)
+
+    def render_planning_results(self, session: Any) -> None:
+        """
+        Render planning session results using appropriate UI style.
+        
+        Args:
+            session: PlanningSession object with items and stats
+        """
+        if self.ui_style == UIStyle.MINIMAL:
+            self._render_planning_minimal(session)
+        else:
+            self._render_planning_classic(session)
+
+    def _render_planning_minimal(self, session: Any) -> None:
+        """Render planning results in minimal mode."""
+        total_items = len(session.items)
+        generation_time = session.stats.get('generation_time', 0)
+        
+        # Simple one-line summary
+        self.console.print(f"✓ Generated {total_items} test plans in {generation_time:.1f}s")
+        
+        # Compact table for minimal mode
+        if total_items > 0:
+            table = Table(show_header=True, box=None, title_style="")
+            table.add_column("Element", style="cyan", no_wrap=True)
+            table.add_column("Type", justify="center", max_width=8)
+            table.add_column("Reason", style="yellow", max_width=15)
+            table.add_column("Confidence", justify="center", max_width=10)
+            
+            for item in session.items[:10]:  # Limit to first 10 for minimal mode
+                confidence_str = f"{item.confidence:.2f}" if item.confidence else "N/A"
+                element_type = item.element.type.value if hasattr(item.element.type, 'value') else str(item.element.type)
+                table.add_row(
+                    item.element.name[:20] + "..." if len(item.element.name) > 20 else item.element.name,
+                    element_type,
+                    item.eligibility_reason[:12] + "..." if len(item.eligibility_reason) > 12 else item.eligibility_reason,
+                    confidence_str
+                )
+            
+            if total_items > 10:
+                table.add_row("...", "...", f"+{total_items-10} more", "...")
+            
+            self.console.print(table)
+
+    def _render_planning_classic(self, session: Any) -> None:
+        """Render planning results in classic mode with full Rich styling."""
+        from rich.table import Table
+        
+        # Create detailed planning table
+        table = Table(title="Test Planning Results", show_header=True, header_style="bold magenta")
+        table.add_column("File", style="cyan", no_wrap=True)
+        table.add_column("Element", style="green")
+        table.add_column("Type", justify="center")
+        table.add_column("Eligibility", style="yellow")
+        table.add_column("Plan Summary", style="white", max_width=60)
+        table.add_column("Confidence", justify="center")
+        
+        for item in session.items:
+            # Extract file path from tags
+            file_path = "unknown"
+            for tag in item.tags:
+                if tag.startswith("source_file:"):
+                    file_path = tag.replace("source_file:", "")
+                    break
+            
+            confidence_str = f"{item.confidence:.2f}" if item.confidence else "N/A"
+            
+            element_type = item.element.type.value if hasattr(item.element.type, 'value') else str(item.element.type)
+            table.add_row(
+                Path(file_path).name if file_path != "unknown" else "unknown",
+                item.element.name,
+                element_type,
+                item.eligibility_reason,
+                item.plan_summary[:80] + "..." if len(item.plan_summary) > 80 else item.plan_summary,
+                confidence_str
+            )
+        
+        self.console.print(table)
+        
+        # Display detailed summary in classic mode
+        summary_panel = Panel(
+            f"Generated {len(session.items)} test plans in {session.stats.get('generation_time', 0):.2f}s\n"
+            f"Files processed: {session.stats.get('files_processed', 0)}\n"
+            f"Planning cost: ${session.stats.get('planning_cost', 0.0):.4f}",
+            title="Planning Summary",
+            style="green"
+        )
+        self.console.print(summary_panel)

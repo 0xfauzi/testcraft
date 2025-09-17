@@ -95,3 +95,36 @@ class LLMPort(Protocol):
             LLMError: If refinement fails
         """
         ...
+
+    def generate_test_plan(
+        self,
+        code_content: str,
+        context: str | None = None,
+        **kwargs: Any,
+    ) -> dict[str, Any]:
+        """
+        Generate a test plan for the provided code content.
+
+        Args:
+            code_content: The source code to plan tests for
+            context: Optional context information about the code
+            **kwargs: Additional parameters for plan generation
+
+        Returns:
+            Dictionary containing:
+                - 'plan_summary': Brief 1-3 sentence summary of test plan
+                - 'detailed_plan': Detailed implementation plan
+                - 'confidence': Optional confidence score (0.0 to 1.0)
+                - 'scenarios': Optional list of test scenarios to cover
+                - 'mocks': Optional mocking strategy
+                - 'fixtures': Optional fixture requirements
+                - 'data_matrix': Optional test data requirements
+                - 'edge_cases': Optional edge cases to test
+                - 'error_paths': Optional error handling tests
+                - 'dependencies': Optional test dependencies
+                - 'notes': Optional additional notes
+
+        Raises:
+            LLMError: If test plan generation fails
+        """
+        ...

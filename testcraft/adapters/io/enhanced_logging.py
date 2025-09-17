@@ -23,6 +23,7 @@ from rich.console import Console
 from rich.logging import RichHandler
 from rich.markup import escape
 from rich.text import Text
+import click
 
 from .rich_cli import TESTCRAFT_THEME
 
@@ -213,6 +214,7 @@ class StructuredLogger:
     
     def error_with_context(self, message: str, error: Exception, 
                           suggestions: Optional[List[str]] = None,
+                          fatal: bool = False,
                           **context):
         """Log error with rich context and suggestions."""
         # Use minimal template: [error] component: message • k1=v1 • k2=v2
@@ -227,6 +229,9 @@ class StructuredLogger:
             for suggestion in suggestions:
                 error_message += f"\n  {escape(suggestion)}"
         
+        # Only include traceback for fatal errors or when verbose
+        include_traceback = fatal or (LoggerManager._explicit_level == logging.DEBUG)
+        
         self.error(
             error_message,
             extra={
@@ -236,17 +241,24 @@ class StructuredLogger:
                 "suggestions": suggestions or [],
                 **context
             },
-            exc_info=True
+            exc_info=include_traceback
         )
     
     def performance_summary(self, operation: str, metrics: Dict[str, Any]):
         """Log performance summary with metrics."""
-        # Use minimal template: [info] operation: summary • duration=Xs • rate=Y • success=Z%
-        summary_parts = [
-            f"[info] {operation}: performance"
-            if LoggerManager.log_mode == LogMode.CLASSIC
-            else f"{operation}: performance"
-        ]
+        # Determine severity based on metrics
+        severity = LoggerManager.map_result_to_severity(metrics)
+        
+        # Use minimal template with appropriate severity styling
+        if LoggerManager.log_mode == LogMode.CLASSIC:
+            if severity == "success":
+                summary_parts = [f"[success] {operation}: performance"]
+            elif severity == "success_with_warnings":
+                summary_parts = [f"[warning] {operation}: performance (with warnings)"]
+            else:
+                summary_parts = [f"[error] {operation}: performance (failed)"]
+        else:
+            summary_parts = [f"{operation}: performance"]
         
         # Format key metrics in minimal style
         metric_parts = []
@@ -348,22 +360,23 @@ class LoggerManager:
             cls._explicit_level = level
             return
         
-        # Remove any existing RichHandlers that aren't ours, keep other handlers
+        # Only remove RichHandlers that have different consoles, keep others
         handlers_to_remove = []
         for handler in root_logger.handlers:
-            if isinstance(handler, RichHandler):
+            if isinstance(handler, RichHandler) and getattr(handler, 'console', None) is not cls._console:
                 handlers_to_remove.append(handler)
         
         for handler in handlers_to_remove:
             root_logger.removeHandler(handler)
         
-        # Add our rich handler
+        # Add our rich handler with markup enabled for classic mode
         rich_handler = RichHandler(
             console=cls._console,
             show_time=True,
             show_path=False,
-            markup=False,  # We sanitize ourselves for minimal; classic logs avoid inline markup too
+            markup=True,  # Enable markup for styled output in classic mode
             rich_tracebacks=True,
+            tracebacks_suppress=[click],  # Suppress click framework frames
         )
         
         rich_handler.setFormatter(logging.Formatter(fmt="%(message)s"))
@@ -447,6 +460,32 @@ class LoggerManager:
     def get_operation_logger(cls, operation: str) -> StructuredLogger:
         """Get logger for specific operation."""
         return cls.get_logger(f"testcraft.{operation}")
+    
+    @classmethod
+    def quiet_external_libs(cls, noisy_modules: List[str]) -> None:
+        """Bump external library loggers to WARNING level to reduce noise."""
+        for name in noisy_modules:
+            logging.getLogger(name).setLevel(logging.WARNING)
+    
+    @classmethod
+    def map_result_to_severity(cls, results: dict) -> str:
+        """Map run results to severity: success | success_with_warnings | failed."""
+        if not results.get("success", False):
+            return "failed"
+        
+        # Check for various warning indicators
+        warning_indicators = [
+            results.get("failed_generations", 0) > 0,
+            results.get("refine_exhausted_count", 0) > 0,
+            results.get("refinement_failures", 0) > 0,
+            results.get("files_with_failures", 0) > 0,
+            len(results.get("generation_results", [])) != results.get("files_written", 0),
+        ]
+        
+        if any(warning_indicators):
+            return "success_with_warnings"
+        
+        return "success"
 
 
 # Convenience functions for common use cases

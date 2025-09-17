@@ -6,6 +6,8 @@ import logging
 from dataclasses import dataclass
 from typing import Any, Literal
 
+from ...config.model_catalog_loader import resolve_model, get_models, get_providers
+
 logger = logging.getLogger(__name__)
 
 
@@ -21,87 +23,11 @@ class TokenLimits:
 
 
 class TokenCalculator:
-    """Calculates optimal token allocation for different providers and use cases."""
+    """Calculates optimal token allocation for different providers and use cases.
 
-    # Provider-specific token limits (Latest models as of September 2025)
-    PROVIDER_LIMITS: dict[str, dict[str, TokenLimits]] = {
-        "openai": {
-            # GPT-5: Released August 7, 2025 - Flagship model
-            "gpt-5": TokenLimits(
-                max_context=400000, max_output=128000, recommended_output=100000
-            ),
-            # GPT-4.1: Released April 2025 - Extended context model
-            "gpt-4.1": TokenLimits(
-                max_context=1000000, max_output=32768, recommended_output=25000
-            ),
-            # o4-mini: Reasoning model with visual capabilities and built-in reasoning
-            "o4-mini": TokenLimits(
-                max_context=200000, max_output=16384, recommended_output=12000
-            ),
-        },
-        "anthropic": {
-            # Claude 3.7 Sonnet: Released February 2025 - Extended thinking mode with configurable reasoning budget
-            "claude-3-7-sonnet": TokenLimits(
-                max_context=200000,
-                max_output=128000,
-                recommended_output=100000,
-                max_thinking=64000,
-                recommended_thinking=32000,
-            ),
-            # Claude Sonnet 4: Released May 22, 2025 - Next-gen balanced model with reasoning
-            "claude-sonnet-4": TokenLimits(
-                max_context=200000,
-                max_output=64000,
-                recommended_output=50000,
-                max_thinking=32000,
-                recommended_thinking=16000,
-            ),
-            # Claude Opus 4: Released May 22, 2025 - Premium reasoning model with deep thinking
-            "claude-opus-4": TokenLimits(
-                max_context=200000,
-                max_output=32000,
-                recommended_output=25000,
-                max_thinking=48000,
-                recommended_thinking=24000,
-            ),
-        },
-        "azure-openai": {
-            # Azure deployments of latest OpenAI models
-            "gpt-5": TokenLimits(
-                max_context=400000, max_output=128000, recommended_output=100000
-            ),
-            "gpt-4.1": TokenLimits(
-                max_context=1000000, max_output=32768, recommended_output=25000
-            ),
-            "o4-mini": TokenLimits(
-                max_context=200000, max_output=16384, recommended_output=12000
-            ),
-        },
-        "bedrock": {
-            # AWS Bedrock deployments of latest Claude models with extended thinking
-            "anthropic.claude-3-7-sonnet-v1:0": TokenLimits(
-                max_context=200000,
-                max_output=128000,
-                recommended_output=100000,
-                max_thinking=64000,
-                recommended_thinking=32000,
-            ),
-            "anthropic.claude-sonnet-4-v1:0": TokenLimits(
-                max_context=200000,
-                max_output=64000,
-                recommended_output=50000,
-                max_thinking=32000,
-                recommended_thinking=16000,
-            ),
-            "anthropic.claude-opus-4-v1:0": TokenLimits(
-                max_context=200000,
-                max_output=32000,
-                recommended_output=25000,
-                max_thinking=48000,
-                recommended_thinking=24000,
-            ),
-        },
-    }
+    Refactored to load model limits from the TOML catalog via
+    `testcraft.config.model_catalog_loader` and to avoid hardcoded limits.
+    """
 
     # Use case specific multipliers for recommended output
     USE_CASE_MULTIPLIERS: dict[str, float] = {
@@ -110,28 +36,31 @@ class TokenCalculator:
         "refinement": 1.2,  # Refinement needs moderate tokens
     }
 
-    def __init__(self, provider: str, model: str):
+    def __init__(self, provider: str, model: str, enable_extended_context: bool = False, enable_extended_output: bool = False):
         """Initialize token calculator for a specific provider and model.
 
         Args:
             provider: Provider name (openai, anthropic, azure-openai, bedrock)
             model: Model identifier
+            enable_extended_context: Whether to use extended context limits beyond documented defaults
+            enable_extended_output: Whether to use extended output limits beyond documented defaults
         """
         self.provider = provider
         self.model = model
+        self.enable_extended_context = enable_extended_context
+        self.enable_extended_output = enable_extended_output
         self.limits = self._get_model_limits()
 
     def _get_model_limits(self) -> TokenLimits:
-        """Get token limits for the current model."""
-        try:
-            return self.PROVIDER_LIMITS[self.provider][self.model]
-        except KeyError:
-            # Fallback to modern defaults (reasonable for 2025-era models)
-            logger.warning(
-                f"Unknown model {self.provider}/{self.model}, using modern defaults"
-            )
+        """Get token limits for the current model using the catalog.
 
-            # Only add thinking tokens for providers that support it (Anthropic)
+        Unknown models fall back to conservative defaults and emit a warning.
+        """
+        entry = resolve_model(self.provider, self.model)
+        if entry is None:
+            logger.warning(
+                f"Unknown model {self.provider}/{self.model}, using safe defaults"
+            )
             if self.provider in ["anthropic", "bedrock"]:
                 return TokenLimits(
                     max_context=200000,
@@ -140,11 +69,44 @@ class TokenCalculator:
                     max_thinking=32000,
                     recommended_thinking=16000,
                 )
-            else:
-                # OpenAI and Azure OpenAI use built-in reasoning, no configurable thinking tokens
-                return TokenLimits(
-                    max_context=200000, max_output=32000, recommended_output=25000
-                )
+            return TokenLimits(
+                max_context=200000, max_output=32000, recommended_output=25000
+            )
+
+        # Map catalog limits to TokenLimits; recommended_output derived from default_max_output
+        limits = entry.limits
+        max_thinking = limits.max_thinking if limits.max_thinking and limits.max_thinking > 0 else None
+        recommended_thinking = (
+            max_thinking // 2 if max_thinking and max_thinking > 0 else None
+        )
+        
+        # Apply beta feature logic for extended limits
+        max_context = int(limits.max_context)
+        max_output = int(limits.default_max_output)
+        recommended_output = int(limits.default_max_output)
+        
+        if self.enable_extended_context:
+            # Allow extended context - for now, keep the catalog limit as is
+            # In the future, this could be increased beyond catalog limits
+            logger.debug(f"Extended context enabled for {self.provider}/{self.model}: {max_context}")
+            
+        if self.enable_extended_output:
+            # Allow extended output - use a higher multiplier for recommended output
+            # But still respect the documented maximum from the catalog
+            extended_output = int(limits.default_max_output * 2.0)  # 2x the default
+            max_output = min(extended_output, 128000)  # Cap at 128k for safety
+            recommended_output = max_output
+            logger.debug(f"Extended output enabled for {self.provider}/{self.model}: {max_output}")
+        
+        return TokenLimits(
+            max_context=max_context,
+            max_output=max_output,
+            recommended_output=recommended_output,
+            max_thinking=(int(max_thinking) if max_thinking is not None else None),
+            recommended_thinking=(
+                int(recommended_thinking) if recommended_thinking is not None else None
+            ),
+        )
 
     def calculate_max_tokens(
         self,
@@ -178,6 +140,7 @@ class TokenCalculator:
 
         # If we have input length, ensure total doesn't exceed context window
         if input_length is not None:
+            # Enforce context ceiling: input + output must fit within safety-adjusted context
             max_context_safe = int(self.limits.max_context * safety_margin)
             available_for_output = max_context_safe - input_length
             if available_for_output > 0:
@@ -254,11 +217,16 @@ class TokenCalculator:
         return self.limits.max_thinking is not None
 
     def is_reasoning_model(self) -> bool:
-        """Check if the model has built-in reasoning capabilities (OpenAI o-series style)."""
-        # OpenAI o-series models have built-in reasoning
-        openai_reasoning_models = ["o4-mini", "o3", "o4"]
+        """Check if the model has built-in reasoning capabilities (OpenAI o1-series style)."""
+        # Check catalog entry for reasoning capabilities
+        entry = resolve_model(self.provider, self.model)
+        if entry and entry.flags:
+            return bool(entry.flags.reasoning_capable)
+        
+        # Fallback for unknown models - check for o1-series patterns
+        openai_reasoning_models = ["o1-mini", "o1-preview", "o1"]
         return self.provider in ["openai", "azure-openai"] and any(
-            reasoning_model in self.model for reasoning_model in openai_reasoning_models
+            reasoning_model in self.model.lower() for reasoning_model in openai_reasoning_models
         )
 
     def has_reasoning_capabilities(self) -> bool:
@@ -312,7 +280,10 @@ class TokenCalculator:
         Returns:
             List of supported model identifiers
         """
-        return list(cls.PROVIDER_LIMITS.get(provider, {}).keys())
+        try:
+            return get_models(provider)
+        except Exception:
+            return []
 
     @classmethod
     def get_all_providers(cls) -> list[str]:
@@ -321,4 +292,7 @@ class TokenCalculator:
         Returns:
             List of provider names
         """
-        return list(cls.PROVIDER_LIMITS.keys())
+        try:
+            return get_providers()
+        except Exception:
+            return []

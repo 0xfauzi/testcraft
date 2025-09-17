@@ -158,6 +158,33 @@ class RefinePort(Protocol):
         """
         ...
 
+    def manual_fix_suggestions(
+        self,
+        test_file: str | Path,
+        failure_output: str,
+        source_context: dict[str, Any] | None = None,
+        **kwargs: Any,
+    ) -> dict[str, Any]:
+        """
+        Generate targeted, manual fix suggestions when automated refinement is exhausted.
+
+        Args:
+            test_file: Path to the failing test file
+            failure_output: Formatted pytest failure output (stdout/stderr)
+            source_context: Optional source code context related to the test
+            **kwargs: Additional hint parameters
+
+        Returns:
+            Dictionary containing:
+                - 'manual_suggestions': Step-by-step, actionable instructions
+                - 'root_cause': Brief explanation of why the test is failing
+                - 'active_import_path': Runtime import path for accurate patch targets
+                - 'preflight_suggestions': Canonicalization checks/hints
+                - 'llm_confidence': Optional confidence score from the model
+                - 'improvement_areas': Suggested focus areas (if available)
+        """
+        ...
+
     def enhance_test_coverage(
         self,
         test_file: str | Path,

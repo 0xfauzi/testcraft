@@ -12,9 +12,11 @@ from ..adapters.parsing.codebase_parser import CodebaseParser
 from ..adapters.refine.main_adapter import RefineAdapter
 from ..adapters.telemetry.cost_manager import CostManager
 from ..adapters.telemetry.noop_adapter import NoOpTelemetryAdapter
+from ..adapters.coverage.quick_probe import CoverageQuickProbeAdapter
 from ..application.analyze_usecase import AnalyzeUseCase
 from ..application.coverage_usecase import CoverageUseCase
 from ..application.generate_usecase import GenerateUseCase
+from ..application.planning_usecase import PlanningUseCase
 from ..application.status_usecase import StatusUseCase
 from ..application.utility_usecases import UtilityUseCase
 from ..config.models import TestCraftConfig
@@ -44,19 +46,19 @@ def create_dependency_container(config: TestCraftConfig) -> dict[str, Any]:
 
         # Core services
         container["config"] = config
-        container["file_discovery"] = FileDiscoveryService()
+        container["file_discovery"] = FileDiscoveryService(config=config.test_patterns)
 
         # Adapters - using existing implementations or creating placeholders
         try:
             # State adapter
             container["state_adapter"] = StateJsonAdapter()
 
-            # Telemetry adapter (using noop for now)
-            container["telemetry_adapter"] = NoOpTelemetryAdapter()
+            # Telemetry adapter - select based on configuration
+            container["telemetry_adapter"] = _create_telemetry_adapter(config)
 
             # Cost adapter - now using real implementation
             container["cost_adapter"] = CostManager(
-                config=config.model_dump().get("cost", {}),
+                config=config.model_dump().get("cost_management", {}),
                 telemetry=container["telemetry_adapter"],
             )
 
@@ -70,6 +72,9 @@ def create_dependency_container(config: TestCraftConfig) -> dict[str, Any]:
 
             # Coverage adapter - placeholder for now
             container["coverage_adapter"] = _create_coverage_adapter(config)
+            
+            # Coverage probe adapter (for test discovery)
+            container["coverage_probe_adapter"] = CoverageQuickProbeAdapter(config.test_patterns.test_discovery)
 
             # Context adapter
             container["context_adapter"] = TestcraftContextAdapter()
@@ -77,17 +82,9 @@ def create_dependency_container(config: TestCraftConfig) -> dict[str, Any]:
             # Parser adapter
             container["parser_adapter"] = CodebaseParser()
 
-            # Refine adapter
-            from ..config.models import RefineConfig
-            refine_config = RefineConfig(
-                refinement_guardrails={
-                    "reject_empty": True,
-                    "reject_literal_none": True,
-                    "reject_identical": True,
-                    "validate_syntax": True,
-                    "format_on_refine": True
-                }
-            )
+            # Refine adapter - build RefineConfig from TOML
+            from ..application.generation.config import GenerationConfig
+            refine_config = GenerationConfig.build_refine_config_from_toml(config)
             container["refine_adapter"] = RefineAdapter(
                 llm=container["llm_adapter"],
                 config=refine_config,
@@ -100,6 +97,10 @@ def create_dependency_container(config: TestCraftConfig) -> dict[str, Any]:
 
         # Use cases
         try:
+            # Add coverage probe to config so it can be passed through
+            config_dict = config.model_dump()
+            config_dict["coverage_probe"] = container["coverage_probe_adapter"]
+            
             container["generate_usecase"] = GenerateUseCase(
                 llm_port=container["llm_adapter"],
                 writer_port=container["writer_adapter"],
@@ -110,7 +111,7 @@ def create_dependency_container(config: TestCraftConfig) -> dict[str, Any]:
                 state_port=container["state_adapter"],
                 telemetry_port=container["telemetry_adapter"],
                 file_discovery_service=container["file_discovery"],
-                config=config.model_dump(),
+                config=config_dict,
             )
 
             container["analyze_usecase"] = AnalyzeUseCase(
@@ -140,6 +141,16 @@ def create_dependency_container(config: TestCraftConfig) -> dict[str, Any]:
                 state_port=container["state_adapter"],
                 telemetry_port=container["telemetry_adapter"],
                 cost_port=container["cost_adapter"],
+                file_discovery_service=container["file_discovery"],
+                config=config.model_dump(),
+            )
+
+            container["planning_use_case"] = PlanningUseCase(
+                llm_port=container["llm_adapter"],
+                parser_port=container["parser_adapter"],
+                context_port=container["context_adapter"],
+                state_port=container["state_adapter"],
+                telemetry_port=container["telemetry_adapter"],
                 file_discovery_service=container["file_discovery"],
                 config=config.model_dump(),
             )
@@ -183,3 +194,36 @@ def _create_coverage_adapter(config: TestCraftConfig):
             return {"success": True, "format": output_format}
 
     return PlaceholderCoverageAdapter()
+
+
+def _create_telemetry_adapter(config: TestCraftConfig):
+    """Create telemetry adapter based on configuration."""
+    telemetry_config = config.telemetry
+    
+    # Check if telemetry is disabled or opt-out is enabled
+    if not telemetry_config.enabled or telemetry_config.opt_out_data_collection:
+        return NoOpTelemetryAdapter()
+    
+    backend = telemetry_config.backend
+    
+    if backend == "opentelemetry":
+        # Try to import and create OpenTelemetry adapter
+        try:
+            from ..adapters.telemetry.opentelemetry_adapter import OpenTelemetryAdapter
+            return OpenTelemetryAdapter(telemetry_config.model_dump())
+        except ImportError:
+            # Fallback to noop if OpenTelemetry dependencies are not available
+            import logging
+            logging.getLogger(__name__).warning(
+                "OpenTelemetry backend requested but dependencies not available, using NoOp adapter"
+            )
+            return NoOpTelemetryAdapter()
+    elif backend == "noop":
+        return NoOpTelemetryAdapter()
+    else:
+        # For other backends (datadog, jaeger), use noop for now
+        import logging
+        logging.getLogger(__name__).warning(
+            "Telemetry backend '%s' not yet implemented, using NoOp adapter", backend
+        )
+        return NoOpTelemetryAdapter()

@@ -1,0 +1,91 @@
+# Task ID: 28
+# Title: Complete TestCraft Textual UI Implementation
+# Status: pending
+# Dependencies: 8, 15, 16
+# Priority: high
+# Description: Develop a fully functional Textual-based TUI for TestCraft by integrating infrastructure, connecting business logic, completing all screens, and implementing advanced features for real test operations.
+# Details:
+1. Integrate StateManager, KeyboardManager, ThemeManager, and Modal System into app.py, ensuring state persistence to .testcraft/ui_state.json and applying ThemeManager-generated CSS with proper namespacing. 2. Refactor all existing screens to use the new infrastructure and modal dialogs. 3. Implement a dependency injection bridge to expose business use cases (GenerateUseCase, AnalyzeUseCase, CoverageUseCase) to the UI layer. 4. Connect GenerateScreen, AnalyzeScreen, and CoverageScreen to their respective use cases using async Textual Workers for non-blocking operations, with progress dialogs and error handling. 5. Complete and enhance all core screens: finish GenerateScreen (file discovery, batching, generation), build AnalyzeScreen (tree view, filtering, issue display), CoverageScreen (heatmaps, trends, goals), and StatusScreen (metrics, history, monitoring). 6. Implement missing screens: SettingsScreen (config editing, model selection, API keys, theme picker with form validation), HelpScreen (shortcuts, docs, tips), LogsScreen (real-time updates, filtering, export). 7. Develop a form validation framework (fields, validators, containers) and integrate it into relevant screens. 8. Add advanced features: command palette (Ctrl+P), global search/filter, export system (JSON, CSV, HTML, PDF), accessibility improvements, and robust error recovery with suggestions. 9. Address risks by ensuring container access in the TUI, using StateManager subscriptions for state sync, implementing a modal queue, and namespacing CSS. 10. Update or create all necessary files: app.py, screens/*.py, forms/*.py, widgets/*.py, and ensure all code is modular and maintainable.
+
+# Test Strategy:
+- Write unit tests for each infrastructure component (StateManager, KeyboardManager, ThemeManager, Modal System, form validation) with mocked dependencies.
+- Implement integration tests to verify correct wiring of use cases to screens and that real TestCraft operations execute as expected.
+- Use Textual's testing framework to simulate user interactions, keyboard navigation, modal dialogs, and state persistence across sessions.
+- Test form validation logic with valid and invalid inputs on SettingsScreen and other forms.
+- Verify accessibility compliance (keyboard navigation, screen reader support) and performance with large file lists.
+- Ensure error dialogs provide actionable recovery suggestions and logs update in real time.
+- Confirm that settings changes persist, help is accessible via F1, and export features generate correct files.
+
+# Subtasks:
+## 1. Integrate Core Infrastructure into app.py [pending]
+### Dependencies: None
+### Description: Integrate StateManager, KeyboardManager, ThemeManager, and Modal System into the main app entrypoint, ensuring state persistence and CSS namespacing.
+### Details:
+Modify app.py to initialize and inject StateManager, KeyboardManager, ThemeManager, and Modal System at app startup. Ensure StateManager persists UI state to .testcraft/ui_state.json on state changes and loads it on startup. Apply ThemeManager-generated CSS with proper namespacing to avoid style collisions. Wire up Modal System for global modal management.
+
+## 2. Refactor Existing Screens to Use New Infrastructure [pending]
+### Dependencies: 28.1
+### Description: Update all existing screens to utilize the new infrastructure and modal dialog system.
+### Details:
+For each screen in screens/*.py, refactor to use StateManager for state, ThemeManager for styling, and Modal System for dialogs. Remove legacy state or style management. Ensure all modal dialogs are routed through the centralized Modal System.
+
+## 3. Implement Dependency Injection Bridge for Use Cases [pending]
+### Dependencies: 28.1
+### Description: Create a bridge to expose business use cases (GenerateUseCase, AnalyzeUseCase, CoverageUseCase) to the UI layer via dependency injection.
+### Details:
+Add a bridge module (e.g., ui/di_bridge.py) that instantiates and provides access to the core use cases. Inject these into screens via constructor or context. Ensure all screens access use cases only through this bridge for testability.
+
+## 4. Connect GenerateScreen to GenerateUseCase with Async Workers [pending]
+### Dependencies: 28.2, 28.3
+### Description: Wire up GenerateScreen to GenerateUseCase using async Textual Workers for non-blocking operations, with progress dialogs and error handling.
+### Details:
+In screens/generate_screen.py, connect UI actions to GenerateUseCase methods via async workers. Show progress dialogs during long operations and handle errors with user-friendly modals. Ensure UI remains responsive and state is updated on completion.
+
+## 5. Implement SettingsScreen with Configuration Management [pending]
+### Dependencies: 28.2, 28.6
+### Description: Develop SettingsScreen for editing config, model selection, API keys, and theme picker, with form validation and persistence.
+### Details:
+Create screens/settings_screen.py with forms for each config section. Use the form validation framework for input validation. On submit, update the config file and reload relevant managers (e.g., ThemeManager). Provide feedback on success/failure.
+
+## 6. Develop Form Validation Framework [pending]
+### Dependencies: 28.1
+### Description: Implement a reusable form validation framework with fields, validators, and containers, and integrate it into relevant screens.
+### Details:
+Create forms/validation.py with base Field, Validator, and FormContainer classes. Support synchronous and async validation, error messages, and field-level feedback. Integrate into SettingsScreen and any other forms (e.g., login, API keys).
+
+## 7. Create HelpScreen with Documentation and Shortcuts [pending]
+### Dependencies: 28.2
+### Description: Build HelpScreen to display keyboard shortcuts, documentation links, and usage tips.
+### Details:
+Implement screens/help_screen.py with static and dynamic content. Display keyboard shortcuts, links to docs, and contextual tips. Use Textual widgets for layout and navigation.
+
+## 8. Build LogsScreen with Real-Time Updates and Filtering [pending]
+### Dependencies: 28.2
+### Description: Implement LogsScreen to show real-time logs, support filtering, and allow export.
+### Details:
+Create screens/logs_screen.py. Use a scrolling widget to display logs as they arrive (subscribe to log events or tail a file). Add input for filtering logs by level or text. Implement export functionality (see subtask 10).
+
+## 9. Connect AnalyzeScreen and CoverageScreen to Use Cases [pending]
+### Dependencies: 28.3, 28.2
+### Description: Wire up AnalyzeScreen and CoverageScreen to their respective use cases using async workers, with progress and error dialogs.
+### Details:
+In screens/analyze_screen.py and screens/coverage_screen.py, connect UI actions to AnalyzeUseCase and CoverageUseCase via async workers. Implement progress dialogs and robust error handling. Update UI with results (tree view, heatmaps, trends, etc.).
+
+## 10. Implement Command Palette and Global Search/Filter [pending]
+### Dependencies: 28.2, 28.3
+### Description: Add a command palette (Ctrl+P) and global search/filter system accessible from anywhere in the app.
+### Details:
+Implement widgets/command_palette.py for the palette UI and command registration. Add global keybinding (Ctrl+P) in app.py. Implement search/filter logic for screens, logs, and data tables. Ensure palette is extensible for future commands.
+
+## 11. Develop Export System for JSON, CSV, HTML, PDF [pending]
+### Dependencies: 28.8
+### Description: Implement export functionality for relevant screens (logs, reports, coverage) supporting JSON, CSV, HTML, and PDF formats.
+### Details:
+Create export/exporter.py with functions for each format. Integrate export options into LogsScreen, AnalyzeScreen, and CoverageScreen. Use modal dialogs for export configuration and feedback. Ensure exported files are saved to user-specified locations.
+
+## 12. Test, Document, and Finalize the Complete UI [pending]
+### Dependencies: 28.4, 28.5, 28.7, 28.8, 28.9, 28.10, 28.11
+### Description: Perform comprehensive testing, update documentation, and clean up codebase for maintainability.
+### Details:
+Write integration and end-to-end tests covering all screens and workflows. Update README and in-code documentation for new infrastructure and features. Refactor for modularity and remove dead code. Ensure all files (app.py, screens/*.py, forms/*.py, widgets/*.py) are up to date and maintainable.
+

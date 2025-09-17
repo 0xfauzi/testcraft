@@ -20,16 +20,23 @@ class TestTestCraftConfig:
         """Test that default configuration can be created."""
         config = TestCraftConfig()
 
-        # Test some default values
-        assert config.coverage.minimum_line_coverage == 80.0
-        assert config.coverage.minimum_branch_coverage == 70.0
-        assert config.style.framework == "pytest"
+        # Test some default values from new schema
+        assert config.generation.test_framework == "pytest"
+        assert config.generation.batch_size == 5
         assert config.environment.auto_detect is True
         assert config.cost_management.max_file_size_kb == 50
+        assert config.llm.default_provider == "openai"
+        
+        # Test that deprecated fields have default values (for backward compatibility)
+        assert config.coverage is not None
+        assert config.coverage.minimum_line_coverage == 80.0
+        assert config.style is not None
+        assert config.style.framework == "pytest"
+        assert config.quality is not None
         assert config.quality.enable_quality_analysis is True
 
-    def test_coverage_validation_success(self):
-        """Test successful coverage validation."""
+    def test_deprecated_coverage_validation_success(self):
+        """Test successful deprecated coverage validation (when provided)."""
         config_data = {
             "coverage": {
                 "minimum_line_coverage": 80.0,
@@ -40,8 +47,8 @@ class TestTestCraftConfig:
         config = TestCraftConfig(**config_data)
         assert config.coverage.minimum_line_coverage == 80.0
 
-    def test_coverage_validation_failure(self):
-        """Test coverage validation failures."""
+    def test_deprecated_coverage_validation_failure(self):
+        """Test deprecated coverage validation failures (when provided)."""
         # regenerate_if_below higher than minimum_line_coverage
         with pytest.raises(ValidationError) as exc_info:
             TestCraftConfig(
@@ -90,11 +97,11 @@ class TestTestCraftConfig:
         # Invalid scores
         with pytest.raises(ValidationError) as exc_info:
             TestCraftConfig(quality={"minimum_quality_score": 150.0})
-        assert "less than or equal to 100" in str(exc_info.value)
+        assert "between 0 and 100" in str(exc_info.value)
 
         with pytest.raises(ValidationError) as exc_info:
             TestCraftConfig(quality={"minimum_mutation_score": -10.0})
-        assert "greater than or equal to 0" in str(exc_info.value)
+        assert "between 0 and 100" in str(exc_info.value)
 
     def test_get_nested_value(self):
         """Test getting nested configuration values."""
@@ -465,8 +472,102 @@ class TestConfigIntegration:
                 # CLI values
                 assert config.cost_management.max_file_size_kb == 75
 
-                # Default values (not overridden)
+                # Default values (not overridden) - using deprecated field
                 assert config.quality.enable_quality_analysis is True
 
         finally:
             os.unlink(temp_file)
+
+    def test_new_generation_config_structure(self):
+        """Test the new generation configuration structure."""
+        config_data = {
+            "generation": {
+                "batch_size": 10,
+                "test_framework": "unittest",
+                "enable_refinement": False,
+                "coverage_threshold": 0.9,
+                "prompt_budgets": {
+                    "total_chars": 8000,
+                    "per_item_chars": 1200
+                },
+                "context_categories": {
+                    "snippets": True,
+                    "test_exemplars": False
+                }
+            }
+        }
+        config = TestCraftConfig(**config_data)
+        
+        assert config.generation.batch_size == 10
+        assert config.generation.test_framework == "unittest"
+        assert config.generation.enable_refinement is False
+        assert config.generation.coverage_threshold == 0.9
+        assert config.generation.prompt_budgets.total_chars == 8000
+        assert config.generation.prompt_budgets.per_item_chars == 1200
+        assert config.generation.context_categories.snippets is True
+        assert config.generation.context_categories.test_exemplars is False
+
+    def test_generation_config_mapping(self):
+        """Test mapping TestCraftConfig to GenerationConfig overrides."""
+        from testcraft.application.generation.config import GenerationConfig
+        
+        config_data = {
+            "generation": {
+                "batch_size": 8,
+                "test_framework": "pytest",
+                "immediate_refinement": False,
+                "prompt_budgets": {
+                    "total_chars": 12000
+                }
+            },
+            "llm": {
+                "enable_streaming": True
+            }
+        }
+        config = TestCraftConfig(**config_data)
+        
+        overrides = GenerationConfig.map_testcraft_config_to_overrides(config)
+        
+        assert overrides["batch_size"] == 8
+        assert overrides["test_framework"] == "pytest"
+        assert overrides["immediate_refinement"] is False
+        assert overrides["enable_streaming"] is True
+        assert overrides["prompt_budgets"]["total_chars"] == 12000
+
+    def test_deprecated_style_framework_mapping(self):
+        """Test that deprecated style.framework maps to generation.test_framework."""
+        from testcraft.application.generation.config import GenerationConfig
+        
+        config_data = {
+            "style": {
+                "framework": "unittest"
+            }
+        }
+        config = TestCraftConfig(**config_data)
+        
+        overrides = GenerationConfig.map_testcraft_config_to_overrides(config)
+        
+        assert overrides["test_framework"] == "unittest"
+
+    def test_refine_config_building(self):
+        """Test building RefineConfig from TOML configuration."""
+        from testcraft.application.generation.config import GenerationConfig
+        
+        config_data = {
+            "generation": {
+                "refine": {
+                    "enable": True,
+                    "max_retries": 5,
+                    "strict_assertion_preservation": False,
+                    "annotate_failed_tests": False
+                }
+            }
+        }
+        config = TestCraftConfig(**config_data)
+        
+        refine_config = GenerationConfig.build_refine_config_from_toml(config)
+        
+        assert refine_config.enable is True
+        assert refine_config.max_retries == 5
+        assert refine_config.strict_assertion_preservation is False
+        assert refine_config.annotate_failed_tests is False

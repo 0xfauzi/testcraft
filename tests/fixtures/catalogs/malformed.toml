@@ -1,0 +1,11 @@
+version = "0.1"
+
+[[models]]
+provider = "openai"
+model_id = "gpt-4o"
+# Missing closing quote - malformed TOML
+aliases = ["gpt4o", "gpt-4o-latest
+
+[models.limits]
+max_context = 128000
+default_max_output = 4096

@@ -1,0 +1,83 @@
+# Task ID: 22
+# Title: Integrate Real LLM APIs and Fix Adapter Interface Issues
+# Status: done
+# Dependencies: 3, 11, 13, 14
+# Priority: high
+# Description: Replace all fake LLM adapter implementations with real API integrations (at minimum OpenAI), resolve method signature mismatches, and ensure all adapters are production-ready for real use.
+# Details:
+1. Replace all mock/fake LLM adapters with real API integrations, starting with OpenAI using the official Python SDK (`openai` package). Ensure API keys are handled securely via environment variables or configuration files, never hardcoded. Example for OpenAI:
+
+```python
+import openai
+import os
+openai.api_key = os.getenv('OPENAI_API_KEY')
+```
+
+2. Implement robust API key management and configuration, leveraging the existing configuration system. Validate that keys are loaded at runtime and provide clear error messages if missing.
+
+3. Refactor the RefineAdapter and any other LLM adapters to ensure their method signatures match the expected interface. Specifically, ensure that calls to `llm.generate()` are replaced with the correct methods (`generate_tests()`, `analyze_code()`, `refine_content()`) as defined in the adapters. Update all usages and tests accordingly.
+
+4. Audit all LLM adapters for interface mismatches and correct them to ensure consistency across providers (OpenAI, Claude, Azure, Bedrock, etc.).
+
+5. Integrate real prompt construction using the prompt registry, ensuring that all LLM calls use the correct, versioned prompt templates and that prompt formatting is robust.
+
+6. Implement and test real API calls, handling JSON parsing, schema validation, and error handling for real-world LLM responses (including malformed or partial outputs). Use the common helpers for response parsing and validation.
+
+7. Ensure that response validation logic is robust against real LLM outputs, not just mock data. Update or extend JSON schema validation as needed.
+
+8. Update any other adapters or modules that depend on LLM functionality to use the new, real implementations. Remove or clearly separate any remaining mock/test-only code.
+
+9. Document all changes, including configuration instructions for API keys and troubleshooting for common integration errors.
+<info added on 2025-09-07T22:49:49.617Z>
+Official Python SDKs for 2024 are: OpenAI (`openai`), Anthropic Claude (`anthropic`), Azure OpenAI (via `openai` with Azure config), and AWS Bedrock (`boto3`). All are actively maintained, support type hints, and most offer async and streaming capabilities. For authentication, OpenAI and Anthropic use API keys loaded via environment variables or secure config; Azure OpenAI requires both an API key and endpoint; AWS Bedrock uses AWS credentials (environment variables, profiles, or IAM roles). Best practices include never hardcoding secrets, using Pydantic models for config validation, dependency injection for adapter setup, robust error handling with retries and logging, and output validation against JSON schemas. Adapters should abstract provider-specific logic behind a unified interface, support both sync and async methods, and handle streaming where available. Integration tests should use real API keys and validate outputs; unit tests should mock responses. Ensure adapters are extensible for future providers and keep SDKs updated to avoid breaking changes.
+</info added on 2025-09-07T22:49:49.617Z>
+<info added on 2025-09-07T22:50:54.347Z>
+The latest official Python SDKs for LLM integration as of September 2025 are: OpenAI (`openai`, v1.102.0), Anthropic Claude (`anthropic`, v0.21.0), Azure OpenAI (`azure-ai-openai`, v1.2.0), and AWS Bedrock (`boto3`, v1.34.x). All SDKs support Python 3.8+, provide both synchronous and asynchronous API access, and offer type-safe request/response objects. Authentication methods are provider-specific: OpenAI and Anthropic use API keys loaded via environment variables or secure config; Azure OpenAI requires both an API key and endpoint with Azure AD credentials; AWS Bedrock uses AWS credentials via environment variables, profiles, or IAM roles. Production best practices include never hardcoding secrets, using environment variables or secret managers, implementing robust error handling and retries, logging request/response metadata, and validating all LLM outputs against JSON schemas. Adapters should abstract provider-specific logic behind a unified interface, support both sync and async methods, and handle streaming where available. Integration tests must use real API keys/accounts and validate outputs; unit tests should mock SDK responses. Ensure adapters are extensible for future providers and keep SDKs updated to avoid breaking changes. Update all LLM adapters to use the latest SDKs and authentication methods, refactor method signatures to match SDK requirements and the `LLMPort` protocol, and implement secure credential loading via the configuration system.
+</info added on 2025-09-07T22:50:54.347Z>
+
+# Test Strategy:
+1. Write integration tests that perform real API calls to OpenAI (and other providers if possible) using test API keys, verifying that the adapters return valid, correctly parsed responses.
+2. Validate that all LLM outputs conform to the expected JSON schema using the existing validation logic.
+3. Simulate and test error handling for common API failures (invalid key, rate limit, malformed response, network errors).
+4. Run end-to-end flows (e.g., test generation, refinement) to ensure the system works with real LLMs and not just mock data.
+5. Confirm that all method signatures and interfaces are consistent and that no calls to removed or renamed methods remain.
+6. Review logs and error messages for clarity and completeness.
+7. Ensure that configuration and API key handling works in various environments (local, CI, production).
+
+# Subtasks:
+## 1. Replace Mock LLM Adapters with Real API Integrations [done]
+### Dependencies: None
+### Description: Remove all mock or fake LLM adapter implementations and integrate real API calls using the latest official Python SDKs for OpenAI, Anthropic Claude, Azure OpenAI, and AWS Bedrock. Ensure adapters use the correct SDK versions and support both synchronous and asynchronous methods as required.
+### Details:
+Install and configure the latest SDKs: openai (v1.102.0), anthropic (v0.21.0), azure-ai-openai (v1.2.0), and boto3 (v1.34.x). Refactor adapter code to use these SDKs for all LLM operations, abstracting provider-specific logic behind a unified interface. Ensure adapters are extensible for future providers and support streaming where available.
+<info added on 2025-09-07T22:55:08.907Z>
+Update SDK versions to use openai (v1.106.1, released Sep 4, 2025) and anthropic (v0.66.0) as the latest supported versions. Ensure all adapter code and dependencies reflect these versions, and verify that pyproject.toml is updated accordingly.
+</info added on 2025-09-07T22:55:08.907Z>
+<info added on 2025-09-07T22:57:55.388Z>
+Update AWS Bedrock integration to use the ChatBedrock class from the langchain-aws package instead of direct boto3 calls. This approach ensures a more consistent interface across providers, leverages built-in retry logic and error handling, and enables advanced features such as prompt caching. Add langchain-aws as a dependency and update all relevant adapter code and configuration to utilize ChatBedrock for Bedrock LLM operations.
+</info added on 2025-09-07T22:57:55.388Z>
+
+## 2. Implement Secure API Key and Credential Management [done]
+### Dependencies: 22.1
+### Description: Integrate robust API key and credential management for all LLM providers, leveraging the existing configuration system. Ensure secrets are never hardcoded and are loaded securely at runtime.
+### Details:
+Use environment variables or secret managers for OpenAI and Anthropic API keys, Azure OpenAI API key and endpoint, and AWS credentials (environment variables, profiles, or IAM roles). Validate credentials at startup and provide clear error messages if missing. Use Pydantic models for config validation and dependency injection for adapter setup.
+
+## 3. Refactor and Standardize Adapter Interfaces and Method Signatures [done]
+### Dependencies: 22.1
+### Description: Audit all LLM adapters for interface mismatches and refactor method signatures to match the unified LLMPort protocol and SDK requirements. Ensure all calls use the correct methods and update usages and tests accordingly.
+### Details:
+Update RefineAdapter and other adapters to expose methods like generate_tests(), analyze_code(), and refine_content() as defined in the interface. Replace direct llm.generate() calls with the appropriate adapter methods. Ensure consistency across all providers and update all usages and tests to match the new signatures.
+
+## 4. Integrate Prompt Registry and Robust Prompt Construction [done]
+### Dependencies: 22.3
+### Description: Ensure all LLM adapters use the prompt registry for constructing prompts, utilizing versioned prompt templates and robust formatting. Validate that prompt construction is consistent and resilient to template changes.
+### Details:
+Refactor adapters to fetch and format prompts using the prompt registry. Implement logic to select the correct prompt version and handle formatting errors gracefully. Ensure all LLM calls use the constructed prompts and that prompt changes are tracked and versioned.
+
+## 5. Implement and Validate Real LLM Response Parsing and Output Validation [done]
+### Dependencies: 22.1, 22.3
+### Description: Implement robust parsing, schema validation, and error handling for real LLM API responses. Ensure adapters handle malformed or partial outputs and validate all outputs against JSON schemas.
+### Details:
+Use common helpers for response parsing and validation. Extend or update JSON schema validation logic as needed to handle real-world LLM outputs. Implement error handling with retries and logging for API failures or malformed responses. Remove or clearly separate any remaining mock/test-only code.
+

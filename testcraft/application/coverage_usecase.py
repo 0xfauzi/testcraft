@@ -47,7 +47,7 @@ class CoverageUseCase:
         coverage_port: CoveragePort,
         state_port: StatePort,
         telemetry_port: TelemetryPort,
-        file_discovery_service: FileDiscoveryService | None = None,
+        file_discovery_service: FileDiscoveryService,
         config: dict[str, Any] | None = None,
     ):
         """
@@ -57,7 +57,7 @@ class CoverageUseCase:
             coverage_port: Port for coverage operations
             state_port: Port for state management
             telemetry_port: Port for telemetry and metrics
-            file_discovery_service: Service for file discovery (creates default if None)
+            file_discovery_service: Service for file discovery
             config: Optional configuration overrides
         """
         self._coverage = coverage_port
@@ -65,7 +65,7 @@ class CoverageUseCase:
         self._telemetry = telemetry_port
 
         # Initialize file discovery service
-        self._file_discovery = file_discovery_service or FileDiscoveryService()
+        self._file_discovery = file_discovery_service
 
         # Configuration with sensible defaults
         self._config = {

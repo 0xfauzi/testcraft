@@ -1,21 +1,335 @@
-[style]
-framework = "pytest"
-assertion_style = "pytest"
+[test_patterns]
+test_patterns = [
+    "test_*.py",
+    "*_test.py",
+    "tests/**/test_*.py",
+]
+exclude = [
+    "migrations/*",
+    "*/deprecated/*",
+    "__pycache__/*",
+    "*.pyc",
+]
+exclude_dirs = [
+    "venv",
+    "env",
+    ".env",
+    ".venv",
+    "virtualenv",
+    "ENV",
+    "env.bak",
+    "venv.bak",
+    ".venv-*",
+    "poetry-*",
+    "conda-meta",
+    "envs",
+    ".venv-*",
+    ".uv-cache",
+    "build",
+    "dist",
+    "*.egg-info",
+    "*.dist-info",
+    "pip-wheel-metadata",
+    "pip-build-env",
+    "__pycache__",
+    ".pytest_cache",
+    ".coverage",
+    ".cache",
+    ".mypy_cache",
+    ".ruff_cache",
+    ".tox",
+    ".nox",
+    ".hypothesis",
+    ".vscode",
+    ".idea",
+    ".vs",
+    ".atom",
+    ".sublime-project",
+    ".sublime-workspace",
+    ".git",
+    ".hg",
+    ".svn",
+    ".bzr",
+    "node_modules",
+    "bower_components",
+    "docs/_build",
+    "_build",
+    "site",
+    ".pytest_cache",
+    ".coverage",
+    "htmlcov",
+    ".stestr",
+    ".testrepository",
+    ".artifacts",
+    "site-packages",
+    "lib",
+    "lib64",
+    "include",
+    "bin",
+    "Scripts",
+    "share",
+    "pyvenv.cfg",
+    "Lib",
+    "local",
+    "pkg_resources",
+    "pip",
+    "setuptools",
+    "wheel",
+    "distutils-precedence.pth",
+    ".DS_Store",
+    "Thumbs.db",
+    "tmp",
+    "temp",
+    ".tmp",
+    ".temp",
+    "lib2to3",
+    "test",
+    "tests",
+    ".ipynb_checkpoints",
+    ".dockerignore",
+    "docker-compose.override.yml",
+    ".pipfile",
+    ".poetry",
+    ".pdm-build",
+    "pyvenv.cfg",
+    "conda-meta",
+    ".github",
+    ".gitlab",
+    ".circleci",
+    ".travis",
+    "docs",
+    "_static",
+    "_templates",
+]
 
-[coverage]
-minimum_line_coverage = 80.0
-junit_xml = true
+[test_patterns.test_discovery]
+mode = "auto"
+classify_support_files = true
+enable_coverage_probe = false
+collector_timeout_sec = 15
+probe_timeout_sec = 20
+cache_ttl_sec = 600
+max_ast_files = 5000
+mapper_min_score = 2
+
+[llm]
+openai_model = "gpt-4.1"
+openai_max_tokens = 12000
+openai_timeout = 60.0
+anthropic_model = "claude-sonnet-4"
+anthropic_max_tokens = 100000
+anthropic_timeout = 60.0
+azure_openai_deployment = "claude-sonnet-4"
+azure_openai_api_version = "2024-02-15-preview"
+azure_openai_timeout = 60.0
+bedrock_model_id = "anthropic.claude-3-7-sonnet-v1:0"
+bedrock_timeout = 60.0
+default_provider = "openai"
+max_retries = 3
+enable_streaming = false
+temperature = 0.1
 
 [generation]
+batch_size = 5
+coverage_threshold = 0.9
+disable_ruff_format = false
+immediate_refinement = true
+enable_refinement = true
+max_refinement_iterations = 3
+max_refine_workers = 2
+keep_failed_writes = false
+refinement_backoff_sec = 0.2
+test_framework = "pytest"
 include_docstrings = true
 generate_fixtures = true
+parametrize_similar_tests = true
+max_test_methods_per_class = 20
+always_analyze_new_files = false
+
+[generation.prompt_budgets]
+per_item_chars = 1500
+total_chars = 10000
+
+[generation.prompt_budgets.section_caps]
+snippets = 10
+neighbors = 5
+test_exemplars = 5
+contracts = 8
+deps_config_fixtures = 2
+coverage_hints = 3
+callgraph = 3
+error_paths = 3
+usage_examples = 5
+pytest_settings = 1
+side_effects = 1
+path_constraints = 3
+
+[generation.context_budgets.directory_tree]
+max_depth = 4
+max_entries_per_dir = 200
+include_py_only = true
+
+[generation.context_categories]
+snippets = true
+neighbors = true
+test_exemplars = true
+contracts = true
+deps_config_fixtures = true
+coverage_hints = true
+callgraph = true
+error_paths = true
+usage_examples = true
+pytest_settings = true
+side_effects = true
+path_constraints = true
+
+[generation.refine]
+enable = true
+max_retries = 2
+backoff_base_sec = 1.0
+backoff_max_sec = 8.0
+stop_on_no_change = true
+max_total_minutes = 5.0
+immediate_refinement = true
+max_refine_workers = 2
+keep_failed_writes = false
+refine_on_first_failure_only = true
+refinement_backoff_sec = 0.2
+strict_assertion_preservation = true
+fail_on_xfail_markers = true
+allow_xfail_on_suspected_bugs = false
+report_suspected_prod_bugs = true
+pytest_args_for_refinement = [
+    "-vv",
+    "--tb=short",
+    "-x",
+]
+allow_ast_equivalence_check = true
+treat_cosmetic_as_no_change = true
+max_diff_hunks = 3
+annotate_failed_tests = true
+annotation_placement = "top"
+annotation_include_failure_excerpt = true
+annotation_max_failure_chars = 600
+annotation_style = "hash"
+include_llm_fix_instructions = true
+prefer_runtime_import_paths = true
+enable_timeout_detection = true
+timeout_threshold_seconds = 30.0
+enable_schema_repair = true
+schema_repair_temperature = 0.0
+enable_preflight_analysis = true
+
+[generation.refine.refinement_guardrails]
+reject_empty = true
+reject_literal_none = true
+reject_identical = true
+validate_syntax = true
+format_on_refine = true
+
+[generation.test_runner]
+
+[generation.merge]
+
+[cost_management]
+max_file_size_kb = 50
+max_context_size_chars = 100000
+max_files_per_request = 15
+use_cheaper_model_threshold_kb = 10
+enable_content_compression = true
+skip_trivial_files = true
+token_usage_logging = true
+
+[cost_management.cost_thresholds]
+daily_limit = 50.0
+per_request_limit = 2.0
+warning_threshold = 1.0
+
+[telemetry]
+enabled = false
+backend = "opentelemetry"
+service_name = "testcraft"
+environment = "development"
+trace_sampling_rate = 1.0
+capture_llm_calls = true
+capture_coverage_runs = true
+capture_file_operations = true
+capture_test_generation = true
+collect_metrics = true
+metrics_interval_seconds = 30
+track_token_usage = true
+track_coverage_delta = true
+track_test_pass_rate = true
+anonymize_file_paths = true
+anonymize_code_content = true
+opt_out_data_collection = false
+
+[telemetry.global_attributes]
+
+[telemetry.backends.opentelemetry]
+insecure = false
+timeout = 10
+
+[telemetry.backends.opentelemetry.headers]
+
+[telemetry.backends.datadog]
+site = "datadoghq.com"
+service = "testcraft"
+env = "development"
+
+[telemetry.backends.jaeger]
+endpoint = "http://localhost:14268/api/traces"
+agent_host_name = "localhost"
+agent_port = 6831
 
 [evaluation]
 enabled = false
 acceptance_checks = true
-llm_judge_enabled = false
+llm_judge_enabled = true
+rubric_dimensions = [
+    "correctness",
+    "coverage",
+    "clarity",
+    "safety",
+]
+statistical_testing = true
+confidence_level = 0.95
+human_review_enabled = false
+artifacts_path = ".testcraft/evaluation_artifacts"
+state_file = ".testcraft_evaluation_state.json"
+evaluation_timeout_seconds = 300
+batch_size = 10
 
-[llm]
-default_provider = "openai"
-openai_model = "gpt-4"
-temperature = 0.1
+[environment]
+auto_detect = true
+preferred_manager = "auto"
+respect_virtual_env = true
+dependency_validation = true
+
+[environment.overrides.poetry]
+use_poetry_run = true
+respect_poetry_venv = true
+
+[environment.overrides.pipenv]
+use_pipenv_run = true
+
+[environment.overrides.conda]
+activate_environment = true
+
+[environment.overrides.uv]
+use_uv_run = false
+
+[logging]
+max_debug_chars = 2000
+persist_verbose_artifacts = true
+suppress_modules = [
+    "asyncio",
+    "httpx",
+    "openai",
+    "urllib3",
+    "textual",
+]
+
+[ui]
+default_style = "classic"
+minimal_warn_counter = true

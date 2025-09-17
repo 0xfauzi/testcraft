@@ -1,0 +1,393 @@
+# TestCraft Model Catalog
+# Single source of truth for model limits, capabilities, pricing, and provenance.
+
+# -----------------------------------------------------------------------------
+# Schema (documented for humans; TOML keys are consumed by tooling):
+# [[models]]
+# provider                 = "openai" | "anthropic" | "azure-openai" | "bedrock"
+# model_id                 = "<provider-native model identifier>"
+# aliases                  = ["optional", "alternate", "names"]
+#
+# [models.limits]
+# max_context              = <int>   # Maximum context window in tokens
+# default_max_output       = <int>   # Conservative default output cap in tokens
+# max_thinking             = <int>   # Optional: thinking/reasoning tokens (if applicable)
+#
+# [models.flags]
+# vision                   = <bool>
+# tool_use                 = <bool>  # function/tool calling support
+# structured_outputs       = <bool>  # JSON/schema style structured outputs
+# reasoning_capable        = <bool>  # explicit reasoning mode support
+#
+# [models.beta.headers]              # Optional: provider-specific beta headers
+# "OpenAI-Beta"            = "responses=2024-12-17"  # example
+#
+# [models.pricing.per_million]
+# input                    = <float> # USD per 1M input tokens
+# output                   = <float> # USD per 1M output tokens
+#
+# [models.source]
+# url                      = "https://..."  # Official documentation URL
+# last_verified            = "YYYY-MM-DD"   # Date this entry was verified
+# notes                    = "Rationale for conservative defaults, caveats, etc."
+# -----------------------------------------------------------------------------
+
+version = "0.1"
+
+[[models]]
+provider = "openai"
+model_id = "gpt-4o"
+aliases = ["gpt4o", "gpt-4o-latest"]
+
+[models.limits]
+max_context = 128000
+default_max_output = 4096
+# Thinking tokens not explicitly applicable for this model family
+max_thinking = 0
+
+[models.flags]
+vision = true
+tool_use = true
+structured_outputs = true
+reasoning_capable = false
+
+[models.beta.headers]
+# Beta headers when required by specific APIs/features
+"OpenAI-Beta" = "responses=2024-12-17"
+
+[models.source]
+url = "https://platform.openai.com/docs/models/gpt-4o"
+last_verified = "2025-09-15"
+notes = "Conservative default_max_output=4096 used where docs omit explicit cap."
+
+
+[[models]]
+provider = "openai"
+model_id = "gpt-4o-mini"
+aliases = ["gpt4o-mini", "gpt-4o-mini-latest", "4o-mini"]
+
+[models.limits]
+max_context = 128000
+default_max_output = 16384
+max_thinking = 0
+
+[models.flags]
+vision = true
+tool_use = true
+structured_outputs = true
+reasoning_capable = false
+
+[models.pricing.per_million]
+input = 0.15
+output = 0.6
+
+[models.source]
+url = "https://platform.openai.com/docs/models/gpt-4o-mini"
+last_verified = "2025-09-15"
+notes = "Standard GPT-4o-mini model with enhanced capabilities; pricing per OpenAI pricing page."
+
+
+[[models]]
+provider = "openai"
+model_id = "o1-mini"
+aliases = ["o1mini", "o1-mini-latest"]
+
+[models.limits]
+max_context = 128000
+default_max_output = 65536
+max_thinking = 0
+
+[models.flags]
+vision = false
+tool_use = false
+structured_outputs = true
+reasoning_capable = true
+
+[models.beta.headers]
+# Uses Responses API which may require beta headers
+"OpenAI-Beta" = "responses=2024-12-17"
+
+[models.pricing.per_million]
+input = 3.0
+output = 12.0
+
+[models.source]
+url = "https://platform.openai.com/docs/models/o1-mini"
+last_verified = "2025-09-15"
+notes = "Reasoning model that uses Responses API. Temperature fixed at 1.0, requires max_completion_tokens parameter."
+
+
+# Official OpenAI models (confirmed from platform.openai.com/docs/models)
+[[models]]
+provider = "openai"
+model_id = "o4-mini"
+aliases = ["o4mini", "o4-mini-latest"]
+
+[models.limits]
+max_context = 200000
+default_max_output = 16384
+max_thinking = 0
+
+[models.flags]
+vision = false
+tool_use = false
+structured_outputs = true
+reasoning_capable = true
+
+[models.beta.headers]
+# Uses Responses API which may require beta headers
+"OpenAI-Beta" = "responses=2024-12-17"
+
+[models.pricing.per_million]
+input = 0.15
+output = 0.6
+
+[models.source]
+url = "https://platform.openai.com/docs/models/o4-mini"
+last_verified = "2025-09-15"
+notes = "Official o4-mini reasoning model from OpenAI. Uses Responses API with fixed temperature and requires max_completion_tokens parameter."
+
+
+[[models]]
+provider = "openai"
+model_id = "gpt-5"
+aliases = ["gpt5", "gpt-5-latest"]
+
+[models.limits]
+max_context = 400000
+default_max_output = 128000
+max_thinking = 0
+
+[models.flags]
+vision = true
+tool_use = true
+structured_outputs = true
+reasoning_capable = false
+
+[models.pricing.per_million]
+input = 30.0
+output = 120.0
+
+[models.source]
+url = "https://platform.openai.com/docs/models/gpt-5"
+last_verified = "2025-09-15"
+notes = "Official GPT-5 model from OpenAI with large context window and advanced capabilities."
+
+
+[[models]]
+provider = "openai"
+model_id = "gpt-4.1"
+aliases = ["gpt41", "gpt-4.1-latest"]
+
+[models.limits]
+max_context = 1000000
+default_max_output = 32768
+max_thinking = 0
+
+[models.flags]
+vision = true
+tool_use = true
+structured_outputs = true
+reasoning_capable = false
+
+[models.pricing.per_million]
+input = 25.0
+output = 100.0
+
+[models.source]
+url = "https://platform.openai.com/docs/models/gpt-4.1"
+last_verified = "2025-09-15"
+notes = "Official GPT-4.1 model from OpenAI with 1M token context window for long-context tasks."
+
+
+[[models]]
+provider = "anthropic"
+model_id = "claude-3-7-sonnet"
+# UPDATED: Added proper alias mapping for dated variants
+aliases = ["claude-3.7-sonnet", "claude-sonnet-3.7", "claude-3-7-sonnet-20250219"]
+
+[models.limits]
+max_context = 200000
+default_max_output = 4096
+max_thinking = 0
+
+[models.flags]
+vision = true
+tool_use = true
+structured_outputs = true
+reasoning_capable = true
+
+[models.pricing.per_million]
+input = 3.0
+output = 15.0
+
+[models.source]
+url = "https://docs.anthropic.com/en/docs/about-claude/models/overview"
+last_verified = "2025-09-15"
+notes = "Claude 3.7 Sonnet from Anthropic official docs. Maps to claude-3-7-sonnet-20250219 dated variant."
+
+
+[[models]]
+provider = "anthropic"
+model_id = "claude-sonnet-4"
+# UPDATED: Added dated variant aliases and corrected output limit
+aliases = ["claude-4-sonnet", "sonnet-4", "claude-sonnet-4-20250514"]
+
+[models.limits]
+max_context = 200000
+default_max_output = 64000  # Updated to match official Anthropic docs (64K output)
+max_thinking = 0
+
+[models.flags]
+vision = true
+tool_use = true
+structured_outputs = true
+reasoning_capable = true
+
+[models.pricing.per_million]
+input = 3.0
+output = 15.0
+
+[models.source]
+url = "https://docs.anthropic.com/en/docs/about-claude/models/overview"
+last_verified = "2025-09-15"
+notes = "Claude Sonnet 4 from official Anthropic docs. 64K max output as per official specs. Maps to claude-sonnet-4-20250514 dated variant. Standard pricing up to 200K input tokens; 1M long-context beta available with special pricing."
+
+
+[[models]]
+provider = "anthropic"
+model_id = "claude-3-5-sonnet"
+# UPDATED: Added dated variant aliases
+aliases = ["claude-3.5-sonnet", "claude-35-sonnet", "sonnet-3.5", "claude-3-5-sonnet-20241022"]
+
+[models.limits]
+max_context = 200000
+default_max_output = 8192
+max_thinking = 0
+
+[models.flags]
+vision = true
+tool_use = true
+structured_outputs = true
+reasoning_capable = true
+
+[models.pricing.per_million]
+input = 3.0
+output = 15.0
+
+[models.source]
+url = "https://docs.anthropic.com/en/docs/about-claude/models"
+last_verified = "2025-09-15"
+notes = "Claude 3.5 Sonnet with enhanced capabilities; pricing per Anthropic official docs."
+
+
+[[models]]
+provider = "anthropic"
+model_id = "claude-opus-4-1"
+# UPDATED: Use official Claude Opus 4.1 naming and add dated aliases
+aliases = ["claude-4-opus", "opus-4.1", "claude-opus-4-1-20250805", "claude-opus-4", "opus-4"]
+
+[models.limits]
+max_context = 200000
+default_max_output = 32000  # Official Opus 4.1 output limit
+max_thinking = 0
+
+[models.flags]
+vision = true
+tool_use = true
+structured_outputs = true
+reasoning_capable = true
+
+[models.pricing.per_million]
+input = 15.0
+output = 75.0
+
+[models.source]
+url = "https://docs.anthropic.com/en/docs/about-claude/models/overview"
+last_verified = "2025-09-15"
+notes = "Claude Opus 4.1 - most capable model from Anthropic. Maps to claude-opus-4-1-20250805 dated variant."
+
+
+# Legacy model entry removed - use claude-opus-4-1 as the official current model
+
+
+[[models]]
+provider = "bedrock"
+model_id = "anthropic.claude-3-haiku-20240307-v1:0"
+aliases = ["claude-3-haiku", "haiku-3"]
+
+[models.limits]
+max_context = 200000
+default_max_output = 4096
+max_thinking = 0
+
+[models.flags]
+vision = false
+tool_use = true
+structured_outputs = true
+reasoning_capable = false
+
+[models.pricing.per_million]
+input = 0.25
+output = 1.25
+
+[models.source]
+url = "https://docs.aws.amazon.com/bedrock/latest/userguide/model-parameters-anthropic-claude-messages.html"
+last_verified = "2025-09-15"
+notes = "Claude 3 Haiku on AWS Bedrock; pricing per AWS Bedrock pricing page."
+
+
+[[models]]
+provider = "bedrock"
+# UPDATED: Use official Claude Sonnet 4 on Bedrock
+model_id = "anthropic.claude-sonnet-4-20250514-v1:0"
+aliases = ["claude-sonnet-4", "sonnet-4"]
+
+[models.limits]
+max_context = 200000
+default_max_output = 64000  # Official Claude Sonnet 4 output limit
+max_thinking = 0
+
+[models.flags]
+vision = true
+tool_use = true
+structured_outputs = true
+reasoning_capable = true
+
+[models.pricing.per_million]
+input = 3.0
+output = 15.0
+
+[models.source]
+url = "https://docs.aws.amazon.com/bedrock/latest/userguide/model-parameters-anthropic-claude-messages.html"
+last_verified = "2025-09-15"
+notes = "Official Claude Sonnet 4 on AWS Bedrock; pricing per AWS Bedrock pricing page."
+
+
+[[models]]
+provider = "bedrock"
+# Legacy Claude 3.5 Sonnet for backward compatibility
+model_id = "anthropic.claude-3-5-sonnet-20240620-v1:0"
+aliases = ["claude-3-5-sonnet-legacy", "sonnet-3.5-legacy"]
+
+[models.limits]
+max_context = 200000
+default_max_output = 4096
+max_thinking = 0
+
+[models.flags]
+vision = true
+tool_use = true
+structured_outputs = true
+reasoning_capable = true
+
+[models.pricing.per_million]
+input = 3.0
+output = 15.0
+
+[models.source]
+url = "https://docs.aws.amazon.com/bedrock/latest/userguide/model-parameters-anthropic-claude-messages.html"
+last_verified = "2025-09-15"
+notes = "Legacy Claude 3.5 Sonnet on AWS Bedrock for backward compatibility only."
+
+

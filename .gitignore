@@ -68,6 +68,9 @@ htmlcov/
 .ipynb_checkpoints/
 .sourcery/
 
+# TestCraft artifacts
+.artifacts/
+
 # Misc
 *.pid
 *.seed

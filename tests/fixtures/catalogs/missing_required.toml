@@ -1,0 +1,22 @@
+version = "0.1"
+
+[[models]]
+# Missing provider - required field
+model_id = "test-model"
+
+[models.limits]
+max_context = 128000
+default_max_output = 4096
+
+[[models]]
+provider = "test-provider"
+# Missing model_id - required field
+
+[models.limits]
+max_context = 128000
+default_max_output = 4096
+
+[[models]]
+provider = "test-provider"
+model_id = "test-model"
+# Missing limits - required field
