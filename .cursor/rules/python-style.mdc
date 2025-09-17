@@ -1,0 +1,61 @@
+---
+globs: *.py
+description: Python coding standards and style guide for testcraft
+---
+
+# Python Style Guide for TestCraft
+
+## Linting and Formatting
+- **Primary**: Use ruff for linting and formatting
+- **Fallback**: Use black only when ruff is not available
+- **Configuration**: Follow settings in [pyproject.toml](mdc:pyproject.toml)
+
+## Code Structure
+```python
+# ✅ DO: Import order - stdlib, third-party, local
+import os
+from pathlib import Path
+from typing import Dict, List, Optional
+
+import pytest
+from rich.console import Console
+
+from testcraft.domain.models import TestCase
+from testcraft.adapters.io.file_adapter import FileAdapter
+```
+
+## Type Hints
+- Use type hints for all function parameters and return values
+- Prefer `from typing import` for complex types
+- Use `Optional[T]` instead of `T | None` for compatibility
+
+```python
+# ✅ DO: Clear type hints
+def process_files(
+    file_paths: List[Path], 
+    config: Dict[str, Any]
+) -> Optional[TestCase]:
+    pass
+
+# ❌ DON'T: Missing type hints
+def process_files(file_paths, config):
+    pass
+```
+
+## Error Handling
+- Use specific exception types, not bare `Exception`
+- Follow existing patterns in [testcraft/domain/models.py](mdc:testcraft/domain/models.py)
+
+```python
+# ✅ DO: Specific exceptions
+from testcraft.domain.models import TestCraftError
+
+def validate_input(data: str) -> None:
+    if not data:
+        raise ValueError("Input data cannot be empty")
+```
+
+## Dependency Injection
+- Follow patterns established in [testcraft/cli/dependency_injection.py](mdc:testcraft/cli/dependency_injection.py)
+- Use constructor injection for dependencies
+- Prefer interfaces over concrete implementations

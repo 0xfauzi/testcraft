@@ -1,0 +1,146 @@
+---
+alwaysApply: true
+description: Task Master workflow and development process standards
+---
+
+# Task Master Workflow Standards
+
+## Task Master Integration Workflow
+
+When working with Task Master tasks (taskmaster mcp), **STRICTLY FOLLOW** this workflow:
+
+### 1. Branch Creation 🌿
+```bash
+# ✅ DO: Create feature branch immediately for the task
+git checkout -b feature/task-{task_id}-{brief-description}
+git push -u origin feature/task-{task_id}-{brief-description}
+```
+
+### 2. Current State Assessment 🧪
+```bash
+# ✅ DO: Run test suite to ensure clean starting state
+pytest tests/ -v
+# or
+python -m pytest tests/
+```
+- **Purpose**: Understand current application state
+- **Requirement**: All tests must pass before proceeding
+- **Action**: If tests fail, fix them before starting task implementation
+
+### 3. Implementation Planning 📋
+```bash
+# ✅ DO: Generate detailed implementation plan using Task Master
+taskmaster expand --id={task_id} --research --force
+taskmaster show {task_id}
+```
+- Use Task Master's planning capabilities
+- Generate detailed sub-task breakdown
+- Include research-backed implementation strategies
+
+### 4. Plan Review & Approval ✅
+- **Present plan for review** before implementation
+- Include:
+  - Sub-task breakdown
+  - Implementation approach
+  - Testing strategy
+  - Potential risks/challenges
+- **Wait for explicit approval** before proceeding
+
+### 5. Sub-Task Implementation 🔄
+For each sub-task:
+
+```bash
+# Update sub-task status
+taskmaster set-status --id={subtask_id} --status=in-progress
+
+# After completion
+taskmaster update-subtask --id={subtask_id} --prompt="Implementation complete: [details]"
+```
+
+**Process**:
+- Implement one sub-task at a time
+- **Ask for review after each sub-task completion**
+- Document implementation details and decisions
+- Handle any issues or deviations from plan
+
+### 6. Test Validation After Each Sub-Task 🧪
+```bash
+# ✅ DO: Run test suite after each sub-task
+pytest tests/ -v
+
+# Run specific tests if applicable
+pytest tests/test_specific_module.py -v
+```
+- **Requirement**: All tests must pass before proceeding
+- **Action**: Fix any failing tests immediately
+- **Documentation**: Update sub-task with test results
+
+### 7. Commit & Push Process 🚀
+**Only after approval and passing tests**:
+
+```bash
+# Stage changes
+git add .
+
+# Commit with descriptive message
+git commit -m "feat(task-{task_id}): {subtask_description}
+
+- Implementation details
+- Test status: passing
+- Related to task {task_id}"
+
+# Push changes
+git push origin feature/task-{task_id}-{brief-description}
+
+# Mark sub-task as done
+taskmaster set-status --id={subtask_id} --status=done
+```
+
+### 8. Task Completion 🎯
+When all sub-tasks are complete:
+
+```bash
+# Mark main task as done
+taskmaster set-status --id={task_id} --status=done
+
+# Create pull request (if not already created)
+gh pr create --title "feat: {task_description}" --body "Completes task {task_id}"
+```
+
+## Workflow Principles
+
+### ⚠️ CRITICAL REQUIREMENTS
+- **Never skip the branch creation step**
+- **Never implement without plan approval**
+- **Never commit without passing tests**
+- **Never mark task done without approval**
+- **Always run tests after each sub-task**
+
+### 🔄 Review Points
+1. **Plan Review**: Before any implementation
+2. **Sub-task Review**: After each sub-task completion
+3. **Final Review**: Before marking task complete
+
+### 📝 Documentation Requirements
+- Document implementation decisions in sub-task updates
+- Include test results in commit messages
+- Reference task IDs in all commits
+- Update any affected documentation files
+
+### 🐛 Error Handling
+- If tests fail: Fix immediately, don't proceed
+- If implementation differs from plan: Get approval for changes
+- If blocked: Update task status and seek guidance
+- If plan needs revision: Get re-approval before continuing
+
+## Git Branch Naming Convention
+```
+feature/task-{task_id}-{brief-description}
+bugfix/task-{task_id}-{brief-description}
+refactor/task-{task_id}-{brief-description}
+```
+
+Examples:
+- `feature/task-15-user-authentication`
+- `bugfix/task-23-parsing-error`
+- `refactor/task-8-llm-adapter-cleanup`

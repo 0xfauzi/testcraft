@@ -1,0 +1,77 @@
+---
+globs: tests/**/*.py,testcraft/tests/**/*.py
+description: Testing standards and patterns for testcraft
+---
+
+# Testing Standards
+
+## Test Structure
+Follow the existing test organization:
+
+- **Unit Tests**: [tests/](mdc:tests/) - Test individual components
+- **Integration Tests**: [tests/e2e/](mdc:tests/e2e/) - Test component interactions
+- **Application Tests**: [tests/application/](mdc:tests/application/) - Test use cases
+
+## Test Naming
+```python
+# ✅ DO: Descriptive test names
+def test_generate_usecase_creates_test_with_valid_context():
+    pass
+
+def test_llm_adapter_handles_api_timeout_gracefully():
+    pass
+
+# ❌ DON'T: Vague test names
+def test_generation():
+    pass
+
+def test_adapter():
+    pass
+```
+
+## Fixtures and Mocks
+- Use pytest fixtures for shared test data
+- Follow patterns in [tests/fixtures/](mdc:tests/fixtures/)
+- Mock external dependencies (APIs, file system)
+
+```python
+# ✅ DO: Use fixtures and proper mocking
+@pytest.fixture
+def mock_llm_adapter():
+    adapter = Mock(spec=LLMPort)
+    adapter.generate_test.return_value = TestCase(...)
+    return adapter
+
+def test_use_case_with_mock_adapter(mock_llm_adapter):
+    use_case = GenerateUseCase(llm_adapter=mock_llm_adapter)
+    result = use_case.execute(...)
+    assert result is not None
+```
+
+## Test Categories
+
+### Use Case Tests
+Test application layer business logic:
+- [tests/test_generate_usecase_enrichment.py](mdc:tests/test_generate_usecase_enrichment.py)
+- [tests/test_coverage_usecase.py](mdc:tests/test_coverage_usecase.py)
+
+### Adapter Tests
+Test external integrations:
+- [tests/test_llm_adapters.py](mdc:tests/test_llm_adapters.py)
+- [tests/test_coverage_adapters.py](mdc:tests/test_coverage_adapters.py)
+
+### Integration Tests
+Test component interactions:
+- [tests/test_enhanced_context_integration.py](mdc:tests/test_enhanced_context_integration.py)
+- [tests/test_evaluation_integration.py](mdc:tests/test_evaluation_integration.py)
+
+## Assertions
+- Use descriptive assertion messages
+- Test both positive and negative cases
+- Verify side effects and state changes
+
+```python
+# ✅ DO: Clear assertions with messages
+assert result.test_count > 0, "Should generate at least one test"
+assert "import pytest" in result.content, "Generated test should import pytest"
+```

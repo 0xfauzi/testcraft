@@ -1,0 +1,97 @@
+---
+alwaysApply: true
+description: Overview of testcraft cursor rules and quick reference
+---
+
+# TestCraft Cursor Rules Overview
+
+This directory contains comprehensive coding standards and architectural guidelines for the testcraft project.
+
+## Core Rules
+
+### 🏗️ [testcraft-core.mdc](mdc:.cursor/rules/testcraft-core.mdc)
+**Always Applied** - Core project standards, architecture patterns, and fundamental principles:
+- Clean Architecture with clear layer separation
+- DRY principle and code reuse standards
+- File size limits (max 1000 lines)
+- TOML over YAML preference
+
+### 🐍 [python-style.mdc](mdc:.cursor/rules/python-style.mdc)
+**Python Files** - Python-specific coding standards:
+- ruff for linting/formatting (black as fallback)
+- Type hints and import organization
+- Error handling patterns
+
+### 🔌 [adapter-patterns.mdc](mdc:.cursor/rules/adapter-patterns.mdc)
+**Adapter Layer** - External integration patterns:
+- Port/Adapter architecture implementation
+- LLM, IO, Parsing, and Context adapter standards
+- Error wrapping and configuration injection
+
+### 🧪 [testing-patterns.mdc](mdc:.cursor/rules/testing-patterns.mdc)
+**Test Files** - Testing standards and organization:
+- Test structure and naming conventions
+- Fixture and mocking patterns
+- Unit, integration, and application test categories
+
+### 💻 [cli-patterns.mdc](mdc:.cursor/rules/cli-patterns.mdc)
+**CLI Layer** - Command-line interface standards:
+- Click command structure
+- Dependency injection patterns
+- Error handling and output formatting
+
+### ⚙️ [configuration.mdc](mdc:.cursor/rules/configuration.mdc)
+**Config Management** - TOML configuration patterns:
+- TOML format preference over YAML
+- Pydantic model validation
+- Environment variable handling
+
+### 🖥️ [ui-patterns.mdc](mdc:.cursor/rules/ui-patterns.mdc)
+**UI Components** - Textual UI design standards:
+- Minimalist, professional design philosophy
+- Textual framework patterns
+- Clean layouts and consistent styling
+
+### 🏛️ [domain-modeling.mdc](mdc:.cursor/rules/domain-modeling.mdc)
+**Domain Layer** - Business logic modeling:
+- Rich domain entities and value objects
+- Domain services and repository patterns
+- Clean separation from external concerns
+
+### 🤖 [llm-integration.mdc](mdc:.cursor/rules/llm-integration.mdc)
+**LLM Integration** - AI model integration patterns:
+- Structured prompt management
+- Robust response parsing and validation
+- Error handling and retry logic
+- Approved models and documentation standards
+
+### 🔄 [workflow-patterns.mdc](mdc:.cursor/rules/workflow-patterns.mdc)
+**Always Applied** - Task Master workflow and development process:
+- Strict Task Master task workflow (branch → test → plan → review → implement → commit)
+- Git branching conventions
+- Review and approval processes
+- Test validation requirements
+
+## Quick Reference
+
+### Key Directories
+- `testcraft/domain/` - Core business logic
+- `testcraft/ports/` - Interface definitions  
+- `testcraft/adapters/` - External integrations
+- `testcraft/application/` - Use cases
+- `testcraft/cli/` - Command-line interface
+- `testcraft/config/` - Configuration management
+
+### Core Principles
+1. **Reuse existing abstractions** - Don't reinvent the wheel
+2. **AST parsing preferred** - Over regex-based parsing  
+3. **TOML configuration** - Not YAML
+4. **Dependency injection** - Follow established patterns
+5. **Professional UI** - Minimalist, clean design
+6. **Strict workflow compliance** - Follow Task Master workflow for all tasks
+
+### Getting Started
+1. Check [testcraft-core.mdc](mdc:.cursor/rules/testcraft-core.mdc) for architecture overview
+2. Review [python-style.mdc](mdc:.cursor/rules/python-style.mdc) for coding standards
+3. Examine existing code in target layer before implementing
+4. Follow established patterns in the relevant adapter or use case

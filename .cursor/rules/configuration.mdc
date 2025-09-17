@@ -1,0 +1,82 @@
+---
+globs: testcraft/config/**/*.py,*.toml
+description: Configuration management patterns and TOML standards
+---
+
+# Configuration Standards
+
+## Format Preference
+- **Primary**: TOML format (not YAML)
+- **Main Config**: [pyproject.toml](mdc:pyproject.toml)
+- **Config Loader**: [testcraft/config/loader.py](mdc:testcraft/config/loader.py)
+
+## Configuration Structure
+```python
+# ✅ DO: Use the established config loader
+from testcraft.config.loader import load_config
+from testcraft.config.models import TestCraftConfig
+
+config = load_config()  # Loads from pyproject.toml and env vars
+```
+
+## TOML Configuration Example
+```toml
+# ✅ DO: Follow TOML best practices
+[tool.testcraft]
+model = "gpt-4"
+max_tokens = 2000
+temperature = 0.1
+
+[tool.testcraft.generation]
+include_docstrings = true
+test_framework = "pytest"
+
+[tool.testcraft.output]
+format = "standard"
+verbose = false
+```
+
+## Configuration Models
+- Define config structures in [testcraft/config/models/](mdc:testcraft/config/models/)
+- Use Pydantic models for validation
+- Support environment variable overrides
+
+```python
+# ✅ DO: Use Pydantic for config validation
+from pydantic import BaseModel, Field
+from typing import Optional
+
+class GenerationConfig(BaseModel):
+    model: str = Field(default="gpt-4")
+    max_tokens: int = Field(default=2000, gt=0)
+    temperature: float = Field(default=0.1, ge=0.0, le=2.0)
+    
+    class Config:
+        env_prefix = "TESTCRAFT_"
+```
+
+## Environment Variables
+- Prefix with `TESTCRAFT_`
+- Support credential management through [testcraft/config/credentials.py](mdc:testcraft/config/credentials.py)
+- Use environment variables for secrets, TOML for application config
+
+```python
+# ✅ DO: Separate secrets from config
+# In TOML - application settings
+[tool.testcraft]
+model = "gpt-4"
+
+# In environment - secrets
+TESTCRAFT_OPENAI_API_KEY="sk-..."
+TESTCRAFT_ANTHROPIC_API_KEY="sk-ant-..."
+```
+
+## Config Loading Priority
+1. Environment variables (highest priority)
+2. TOML configuration file
+3. Default values (lowest priority)
+
+## Validation
+- Validate all config values at startup
+- Provide clear error messages for invalid config
+- Support --config-check command for validation

@@ -1,0 +1,59 @@
+---
+globs: testcraft/adapters/**/*.py
+description: Adapter pattern implementation standards for external integrations
+---
+
+# Adapter Pattern Standards
+
+## Structure
+All adapters should implement interfaces defined in [testcraft/ports/](mdc:testcraft/ports/).
+
+```python
+# ✅ DO: Implement port interfaces
+from testcraft.ports.llm_port import LLMPort
+from testcraft.domain.models import TestCase
+
+class OpenAIAdapter(LLMPort):
+    def __init__(self, api_key: str, model: str = "gpt-4"):
+        self._client = OpenAI(api_key=api_key)
+        self._model = model
+    
+    async def generate_test(self, context: str) -> TestCase:
+        # Implementation
+        pass
+```
+
+## Existing Adapter Categories
+
+### LLM Adapters
+- Location: [testcraft/adapters/llm/](mdc:testcraft/adapters/llm/)
+- Purpose: AI model integrations (OpenAI, Anthropic, etc.)
+- Interface: [testcraft/ports/llm_port.py](mdc:testcraft/ports/llm_port.py)
+
+### IO Adapters  
+- Location: [testcraft/adapters/io/](mdc:testcraft/adapters/io/)
+- Purpose: File system and output operations
+- Examples: [testcraft/adapters/io/file_adapter.py](mdc:testcraft/adapters/io/file_adapter.py)
+
+### Parsing Adapters
+- Location: [testcraft/adapters/parsing/](mdc:testcraft/adapters/parsing/)
+- Purpose: Code parsing and AST analysis
+- Preference: AST-based parsing over regex
+
+### Context Adapters
+- Location: [testcraft/adapters/context/](mdc:testcraft/adapters/context/)
+- Purpose: Code context extraction and analysis
+
+## Error Handling in Adapters
+```python
+# ✅ DO: Wrap external errors
+try:
+    result = external_service.call()
+except ExternalServiceError as e:
+    raise TestCraftError(f"Service failed: {e}") from e
+```
+
+## Configuration
+- Use dependency injection for configuration
+- Follow patterns in [testcraft/config/](mdc:testcraft/config/)
+- Support both TOML config files and environment variables

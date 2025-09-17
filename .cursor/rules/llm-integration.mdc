@@ -1,0 +1,175 @@
+---
+globs: testcraft/adapters/llm/**/*.py,testcraft/prompts/**/*.py
+description: LLM integration patterns and prompt management standards
+---
+
+# LLM Integration Standards
+
+## Prompt Management
+- **Location**: [testcraft/prompts/](mdc:testcraft/prompts/)
+- **Structure**: Separate prompt templates from business logic
+- **Versioning**: Track prompt changes for reproducibility
+
+```python
+# ✅ DO: Structured prompt management
+from testcraft.prompts import PromptTemplate
+
+class TestGenerationPrompt(PromptTemplate):
+    template = """
+    Generate pytest tests for the following Python code:
+    
+    Code:
+    {code_content}
+    
+    Requirements:
+    - Use pytest framework
+    - Include docstrings
+    - Test both positive and negative cases
+    
+    Generated tests:
+    """
+    
+    def format(self, code_content: str) -> str:
+        return self.template.format(code_content=code_content)
+```
+
+## Documentation and Model Standards
+
+### Documentation References
+- **Always refer to official LLM provider documentation** for accurate, up-to-date information
+- **Use context7 MCP tool** when necessary to find documentation for libraries and APIs
+- **Claude Models Documentation**: https://docs.claude.com/en/docs/about-claude/models/overview
+- **OpenAI Models Documentation**: https://platform.openai.com/docs/models
+
+### Approved Models
+
+**Claude Models (Anthropic)**:
+- **Claude Sonnet 3.7**: `claude-3-7-sonnet-latest`
+- **Claude Sonnet 4**: `claude-sonnet-4-20250514` (default)  
+- **Claude Opus 4**: `claude-opus-4-20250514`
+
+**OpenAI Models**:
+- **GPT-4.1**: `gpt-4.1` (default) - https://platform.openai.com/docs/models/gpt-4.1
+- **GPT-5**: `gpt-5` - https://platform.openai.com/docs/models/gpt-5
+- **O4-Mini**: `o4-mini` - https://platform.openai.com/docs/models/o4-mini
+
+```python
+# ✅ DO: Use approved models with proper configuration
+APPROVED_MODELS = {
+    "claude": {
+        "sonnet-4": "claude-sonnet-4-20250514",  # Default
+        "sonnet-3.7": "claude-3-7-sonnet-latest",
+        "opus-4": "claude-opus-4-20250514"
+    },
+    "openai": {
+        "gpt-4.1": "gpt-4.1",  # Default
+        "gpt-5": "gpt-5", 
+        "o4-mini": "o4-mini"
+    }
+}
+```
+
+## LLM Adapter Pattern
+Follow patterns in [testcraft/adapters/llm/](mdc:testcraft/adapters/llm/):
+
+```python
+# ✅ DO: Consistent LLM adapter interface
+from testcraft.ports.llm_port import LLMPort
+from testcraft.domain.models import TestCase, FileContext
+
+class OpenAIAdapter(LLMPort):
+    def __init__(self, api_key: str, model: str = "gpt-4"):
+        self._client = OpenAI(api_key=api_key)
+        self._model = model
+        self._max_retries = 3
+    
+    async def generate_test(self, context: FileContext) -> TestCase:
+        prompt = self._build_prompt(context)
+        
+        for attempt in range(self._max_retries):
+            try:
+                response = await self._client.chat.completions.create(
+                    model=self._model,
+                    messages=[{"role": "user", "content": prompt}],
+                    temperature=0.1
+                )
+                return self._parse_response(response)
+                
+            except RateLimitError:
+                if attempt < self._max_retries - 1:
+                    await asyncio.sleep(2 ** attempt)
+                else:
+                    raise
+```
+
+## Response Processing
+```python
+# ✅ DO: Robust response parsing
+def _parse_response(self, response: ChatCompletion) -> TestCase:
+    content = response.choices[0].message.content
+    
+    # Extract test code from response
+    test_code = self._extract_code_block(content)
+    
+    if not test_code:
+        raise ValueError("No test code found in response")
+    
+    # Validate generated code
+    try:
+        ast.parse(test_code)
+    except SyntaxError as e:
+        raise ValueError(f"Generated code has syntax error: {e}")
+    
+    return TestCase(
+        name=self._extract_test_name(test_code),
+        content=test_code,
+        file_path=context.file_path.with_suffix("_test.py")
+    )
+```
+
+## Error Handling
+```python
+# ✅ DO: Handle LLM-specific errors gracefully
+from testcraft.domain.models import TestCraftError
+
+class LLMError(TestCraftError):
+    """Base class for LLM-related errors."""
+    pass
+
+class LLMRateLimitError(LLMError):
+    """Raised when hitting API rate limits."""
+    pass
+
+class LLMResponseError(LLMError):
+    """Raised when LLM response is invalid."""
+    pass
+
+# In adapter:
+except RateLimitError as e:
+    raise LLMRateLimitError(f"Rate limit exceeded: {e}") from e
+except OpenAIError as e:
+    raise LLMError(f"OpenAI API error: {e}") from e
+```
+
+## Configuration
+```python
+# ✅ DO: Configurable LLM parameters
+@dataclass
+class LLMConfig:
+    model: str = "gpt-4"
+    temperature: float = 0.1
+    max_tokens: int = 2000
+    timeout: int = 30
+    max_retries: int = 3
+```
+
+## Context Management
+- Include relevant file context in prompts
+- Limit context size to stay within token limits  
+- Use context adapters from [testcraft/adapters/context/](mdc:testcraft/adapters/context/)
+
+## Quality Assurance
+- Always validate generated code syntax
+- Test generated code when possible
+- Log prompt/response pairs for debugging
+- Track token usage and costs

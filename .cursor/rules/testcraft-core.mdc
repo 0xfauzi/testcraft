@@ -1,0 +1,37 @@
+---
+alwaysApply: true
+description: Core testcraft project standards and architecture
+---
+
+# TestCraft Core Standards
+
+## Project Identity
+- **Project Name**: testcraft (never sloptest or smart-test-gen)
+- **Configuration Format**: TOML (not YAML)
+- **Package Manager**: uv (preferred over pip)
+
+## Architecture Pattern
+TestCraft follows Clean Architecture with clear separation of concerns:
+
+- **[domain/](mdc:testcraft/domain/)**: Core business logic and models
+- **[ports/](mdc:testcraft/ports/)**: Interface definitions (abstractions)
+- **[adapters/](mdc:testcraft/adapters/)**: External system implementations
+- **[application/](mdc:testcraft/application/)**: Use cases and application services
+- **[cli/](mdc:testcraft/cli/)**: Command-line interface layer
+- **[config/](mdc:testcraft/config/)**: Configuration management
+
+## Code Quality Standards
+- **File Size**: No file should exceed 1000 lines
+- **DRY Principle**: Reuse existing abstractions, avoid code duplication
+- **Separation of Concerns**: Each module should have a single responsibility
+- **Generic Design**: Write reusable, generic components when possible
+
+## Parsing Strategy
+- **Primary**: Use AST parsing for code analysis
+- **Fallback**: Regex-based parsing only when AST parsing is not feasible
+
+## Dependencies and Imports
+Always prefer importing from existing modules and reusing established patterns found in:
+- [testcraft/adapters/](mdc:testcraft/adapters/) for external integrations
+- [testcraft/application/](mdc:testcraft/application/) for business logic
+- [testcraft/domain/models.py](mdc:testcraft/domain/models.py) for core data structures

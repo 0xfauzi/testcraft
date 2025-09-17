@@ -1,0 +1,98 @@
+---
+globs: testcraft/adapters/textual/**/*.py,examples/*ui*.py
+description: UI design patterns and textual interface standards
+---
+
+# UI Design Standards
+
+## Design Philosophy
+- **Minimalist**: Less is more, avoid unnecessary clutter
+- **Professional**: Clean, business-appropriate appearance  
+- **Functional**: Focus on usability over decoration
+
+## Textual Framework
+TestCraft uses Textual for TUI components in [testcraft/adapters/textual/](mdc:testcraft/adapters/textual/).
+
+### Layout Patterns
+```python
+# ✅ DO: Clean, structured layouts
+from textual.app import App, ComposeResult
+from textual.containers import Container, Vertical
+from textual.widgets import Header, Footer, Static
+
+class TestCraftApp(App):
+    CSS_PATH = "app.tcss"
+    
+    def compose(self) -> ComposeResult:
+        yield Header()
+        yield Container(
+            Vertical(
+                Static("Test Generation Results", classes="title"),
+                TestResultsList(id="results"),
+                classes="main-content"
+            )
+        )
+        yield Footer()
+```
+
+### Styling with TCSS
+```css
+/* ✅ DO: Minimal, professional styling */
+.title {
+    text-align: center;
+    text-style: bold;
+    margin: 1 0;
+}
+
+.main-content {
+    border: solid $primary;
+    padding: 1;
+}
+
+.success {
+    color: $success;
+}
+
+.error {
+    color: $error;
+}
+```
+
+## UI Examples
+Reference existing UI implementations:
+- **Enhanced UI**: [examples/enhanced_ui_demo.py](mdc:examples/enhanced_ui_demo.py)
+- **Minimal UI**: [examples/minimal_ui_demo.py](mdc:examples/minimal_ui_demo.py)
+- **Rich UI**: [examples/rich_ui_demo.py](mdc:examples/rich_ui_demo.py)
+
+## Color Scheme
+- Use muted, professional colors
+- Consistent color coding for status:
+  - Green: Success, completed
+  - Yellow: Warning, in-progress  
+  - Red: Error, failed
+  - Blue: Information, neutral
+
+## Interactive Elements
+```python
+# ✅ DO: Clear, purposeful interactions
+from textual.widgets import Button, Input
+
+class GenerationForm(Widget):
+    def compose(self) -> ComposeResult:
+        yield Input(placeholder="Enter file path...", id="file_input")
+        yield Button("Generate Tests", variant="primary", id="generate_btn")
+    
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        if event.button.id == "generate_btn":
+            self.start_generation()
+```
+
+## Progress Indication
+- Use progress bars for long-running operations
+- Provide clear status messages
+- Show completion percentages when possible
+
+## Error Display
+- Clear, actionable error messages
+- Avoid technical jargon in user-facing messages
+- Provide next steps or suggestions when possible

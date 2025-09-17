@@ -1,0 +1,85 @@
+---
+globs: testcraft/cli/**/*.py
+description: CLI patterns and command structure standards
+---
+
+# CLI Patterns and Standards
+
+## Command Structure
+Follow the established pattern in [testcraft/cli/](mdc:testcraft/cli/):
+
+- **[main.py](mdc:testcraft/cli/main.py)**: Entry point and CLI app setup
+- **[commands/](mdc:testcraft/cli/commands/)**: Individual command implementations  
+- **[services/](mdc:testcraft/cli/services/)**: CLI-specific service layer
+- **[formatters/](mdc:testcraft/cli/formatters/)**: Output formatting utilities
+
+## Command Implementation Pattern
+```python
+# ✅ DO: Follow established command pattern
+import click
+from testcraft.cli.dependency_injection import get_use_case
+
+@click.command()
+@click.option('--file', '-f', help='Target file path')
+@click.option('--verbose', '-v', is_flag=True, help='Verbose output')
+@click.pass_context
+def generate(ctx, file: str, verbose: bool):
+    """Generate tests for the specified file."""
+    try:
+        use_case = get_use_case('generate')
+        result = use_case.execute(file_path=file)
+        
+        if verbose:
+            click.echo(f"Generated {result.test_count} tests")
+        
+    except Exception as e:
+        click.echo(f"Error: {e}", err=True)
+        ctx.exit(1)
+```
+
+## Dependency Injection
+- Use [testcraft/cli/dependency_injection.py](mdc:testcraft/cli/dependency_injection.py)
+- Don't instantiate use cases directly in commands
+- Follow the factory pattern for service creation
+
+```python
+# ✅ DO: Use dependency injection
+from testcraft.cli.dependency_injection import get_use_case
+
+def my_command():
+    use_case = get_use_case('generate')
+    result = use_case.execute(...)
+
+# ❌ DON'T: Direct instantiation
+from testcraft.application.generate_usecase import GenerateUseCase
+
+def my_command():
+    use_case = GenerateUseCase(...)  # Avoid this
+```
+
+## Output Formatting
+- Use formatters from [testcraft/cli/formatters/](mdc:testcraft/cli/formatters/)
+- Follow minimalist, professional output style
+- Provide both verbose and quiet modes
+
+## Error Handling
+```python
+# ✅ DO: Consistent error handling
+@click.command()
+@click.pass_context
+def my_command(ctx):
+    try:
+        # Command logic
+        pass
+    except TestCraftError as e:
+        click.echo(f"Error: {e}", err=True)
+        ctx.exit(1)
+    except Exception as e:
+        click.echo(f"Unexpected error: {e}", err=True)
+        ctx.exit(2)
+```
+
+## Configuration
+- Load config through [testcraft/config/loader.py](mdc:testcraft/config/loader.py)
+- Support TOML configuration files
+- Allow CLI options to override config values
