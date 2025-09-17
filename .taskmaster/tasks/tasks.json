@@ -9,7 +9,7 @@
         "testStrategy": "Verify project structure exists with correct directories. Ensure all development tools can be invoked. Validate pyproject.toml configuration with a simple import test.",
         "priority": "high",
         "dependencies": [],
-        "status": "pending",
+        "status": "done",
         "subtasks": [
           {
             "id": 1,
@@ -17,7 +17,7 @@
             "description": "Create a new Python project directory, ensure Python 3.11+ is available, and set up a virtual environment for isolated development.",
             "dependencies": [],
             "details": "Establish the root project folder, verify Python 3.11+ installation, and create a virtual environment using the preferred tool (e.g., venv, uv, or Poetry). Activate the environment for subsequent steps.",
-            "status": "pending",
+            "status": "done",
             "testStrategy": "Check that the virtual environment is active and Python version is 3.11 or higher by running 'python --version' and verifying isolation from global packages."
           },
           {
@@ -28,7 +28,7 @@
               "1.1"
             ],
             "details": "Use the package manager to install ruff, black, mypy, and pytest as development dependencies. Create or update configuration files for each tool (e.g., pyproject.toml sections or standalone config files) to enforce code quality standards.\n<info added on 2025-09-06T21:22:00.312Z>\nProject name has been updated to \"testcraft\" from \"smart-test-generator\". The pyproject.toml file has been modified to reflect this change, including updating the project name and adjusting the pytest coverage path to match the new structure. All development tools (ruff, black, mypy, pytest) have been successfully configured with appropriate settings and verified to be working correctly.\n</info added on 2025-09-06T21:22:00.312Z>",
-            "status": "pending",
+            "status": "done",
             "testStrategy": "Run each tool (ruff, black, mypy, pytest) on a sample file to confirm correct installation and configuration."
           },
           {
@@ -39,7 +39,7 @@
               "1.1"
             ],
             "details": "Manually or via script, generate the specified directories and add empty __init__.py files to each. Follow Clean/Hex architecture conventions for separation of concerns.",
-            "status": "pending",
+            "status": "done",
             "testStrategy": "Verify the presence of all required directories and __init__.py files. Attempt to import each package in a Python shell to confirm discoverability."
           },
           {
@@ -51,7 +51,7 @@
               "1.2"
             ],
             "details": "Define project name, version, authors, and dependencies in pyproject.toml. Add entry point: 'sloptest = smart_test_generator.cli.main:app'. Include tool configuration sections for ruff, black, mypy, and pytest as needed.",
-            "status": "pending",
+            "status": "done",
             "testStrategy": "Validate pyproject.toml syntax and confirm entry point is discoverable by running 'python -m smart_test_generator.cli.main' or equivalent."
           },
           {
@@ -64,7 +64,7 @@
               "1.4"
             ],
             "details": "Draft a .gitignore tailored for Python projects, write a basic README.md with project overview and setup instructions, and select an appropriate open-source LICENSE. Initialize Git and commit all scaffolding files.",
-            "status": "pending",
+            "status": "done",
             "testStrategy": "Verify that .gitignore excludes virtual environment and build artifacts, README.md renders correctly on GitHub, LICENSE is present, and 'git status' shows a clean working directory after commit."
           }
         ]
@@ -73,7 +73,7 @@
         "id": 2,
         "title": "Implement Domain Models",
         "description": "Create the core domain models using pydantic to represent the fundamental entities in the system.",
-        "status": "pending",
+        "status": "done",
         "dependencies": [
           1
         ],
@@ -85,7 +85,7 @@
             "id": 1,
             "title": "Implement TestElement model",
             "description": "Create TestElement model with name, type, line range, and docstring fields",
-            "status": "pending",
+            "status": "done",
             "dependencies": [],
             "details": "",
             "testStrategy": ""
@@ -94,7 +94,7 @@
             "id": 2,
             "title": "Implement CoverageResult model",
             "description": "Create CoverageResult model with line/branch coverage and missing lines",
-            "status": "pending",
+            "status": "done",
             "dependencies": [],
             "details": "",
             "testStrategy": ""
@@ -103,7 +103,7 @@
             "id": 3,
             "title": "Implement GenerationResult model",
             "description": "Create GenerationResult model with file path, content, success/failure status and error message",
-            "status": "pending",
+            "status": "done",
             "dependencies": [],
             "details": "",
             "testStrategy": ""
@@ -112,7 +112,7 @@
             "id": 4,
             "title": "Implement TestGenerationPlan model",
             "description": "Create TestGenerationPlan model with elements to test, existing tests, and coverage information",
-            "status": "pending",
+            "status": "done",
             "dependencies": [],
             "details": "",
             "testStrategy": ""
@@ -121,7 +121,7 @@
             "id": 5,
             "title": "Implement RefineOutcome model",
             "description": "Create RefineOutcome model with updated files, rationale and plan",
-            "status": "pending",
+            "status": "done",
             "dependencies": [],
             "details": "",
             "testStrategy": ""
@@ -130,7 +130,7 @@
             "id": 6,
             "title": "Implement AnalysisReport model",
             "description": "Create AnalysisReport model with files to process, reasons, and existing test presence",
-            "status": "pending",
+            "status": "done",
             "dependencies": [],
             "details": "",
             "testStrategy": ""
@@ -139,7 +139,7 @@
             "id": 7,
             "title": "Implement TestElementType enum",
             "description": "Create enum for categorizing test elements (function, class, method, module)",
-            "status": "pending",
+            "status": "done",
             "dependencies": [],
             "details": "",
             "testStrategy": ""
@@ -148,7 +148,7 @@
             "id": 8,
             "title": "Add custom validators",
             "description": "Implement validators for line ranges, coverage percentages, missing lines, and other data integrity rules",
-            "status": "pending",
+            "status": "done",
             "dependencies": [],
             "details": "",
             "testStrategy": ""
@@ -157,7 +157,7 @@
             "id": 9,
             "title": "Configure model immutability",
             "description": "Set models as immutable using `frozen = True` configuration",
-            "status": "pending",
+            "status": "done",
             "dependencies": [],
             "details": "",
             "testStrategy": ""
@@ -166,7 +166,7 @@
             "id": 10,
             "title": "Add field descriptions",
             "description": "Add detailed field descriptions for better API documentation",
-            "status": "pending",
+            "status": "done",
             "dependencies": [],
             "details": "",
             "testStrategy": ""
@@ -183,14 +183,14 @@
         "dependencies": [
           1
         ],
-        "status": "pending",
+        "status": "done",
         "subtasks": []
       },
       {
         "id": 4,
         "title": "Define Interface Ports",
         "description": "All 12 interface ports have been implemented using Python Protocols, providing clear contracts between the application layer and adapters. Each port is defined in its own file under testcraft/ports/, with comprehensive docstrings, precise type hints, and no adapter imports. The __init__.py file exports all port interfaces. These protocols are now ready for adapter implementations.",
-        "status": "pending",
+        "status": "done",
         "dependencies": [
           2
         ],
@@ -202,7 +202,7 @@
             "id": 1,
             "title": "Verify protocol files and exports",
             "description": "Check that all 12 protocol files exist in testcraft/ports/ and that __init__.py exports each interface.",
-            "status": "pending",
+            "status": "done",
             "dependencies": [],
             "details": "",
             "testStrategy": ""
@@ -211,7 +211,7 @@
             "id": 2,
             "title": "Run mypy and linting on ports directory",
             "description": "Ensure all protocol files pass mypy type checking and linting with no errors.",
-            "status": "pending",
+            "status": "done",
             "dependencies": [],
             "details": "",
             "testStrategy": ""
@@ -220,7 +220,7 @@
             "id": 3,
             "title": "Create test implementations for each protocol",
             "description": "Write minimal test classes for each protocol to verify interface compliance and demonstrate usage.",
-            "status": "pending",
+            "status": "done",
             "dependencies": [],
             "details": "",
             "testStrategy": ""
@@ -231,7 +231,7 @@
         "id": 5,
         "title": "Implement Parser Adapters",
         "description": "Create adapters for parsing Python code and mapping tests to source code elements. The parser must extract both structural metadata and the actual source code content for each code element to support test generation.",
-        "status": "pending",
+        "status": "done",
         "dependencies": [
           4
         ],
@@ -244,7 +244,7 @@
         "id": 6,
         "title": "Implement Coverage Adapters",
         "description": "All coverage adapters for measuring code coverage using pytest+coverage with AST fallback are now implemented and production-ready. The solution provides robust coverage measurement, fallback capabilities, and comprehensive reporting.\n\nKey components:\n- adapters/coverage/pytest_coverage.py: Full pytest+coverage integration with command building, environment setup, coverage parsing (JSON/XML), timeout handling, and artifact storage in .testcraft/coverage/<run_id>\n- adapters/coverage/ast_fallback.py: AST-based coverage estimation with executable line detection, complex construct analysis, private function filtering, and realistic coverage estimation\n- adapters/coverage/composite.py: Composite adapter that tries pytest first and falls back to AST with reason tracking and unified interface\n- adapters/coverage/main_adapter.py: Primary adapter implementing CoveragePort interface with all required methods, HTML/JSON report generation, and comprehensive coverage analysis\n- adapters/coverage/__init__.py: Exports all adapters\n- test_coverage_adapters.py: Comprehensive test suite with unit and integration tests for all adapters\n\nAll adapters handle error cases, timeouts, and edge cases. Code is lint-free and follows project standards.",
-        "status": "pending",
+        "status": "done",
         "dependencies": [
           4,
           5
@@ -258,7 +258,7 @@
         "id": 7,
         "title": "Implement Writer Adapters",
         "description": "Create adapters for safely writing generated tests to the filesystem with different strategies. All writes must be formatted with Black and isort for consistent code formatting.",
-        "status": "pending",
+        "status": "done",
         "dependencies": [
           4,
           5
@@ -271,7 +271,7 @@
             "id": 1,
             "title": "Integrate Black and isort formatting into writer_append.py",
             "description": "Update writer_append.py so that all writes (including dry-run output) are formatted using Black and isort before being written or diffed.",
-            "status": "pending",
+            "status": "done",
             "dependencies": [],
             "details": "<info added on 2025-09-07T15:03:58.368Z>\n✅ COMPLETED - Black and isort formatting integration in writer_append.py\n\nImplementation Details:\n- Added _format_content() method that uses subprocess to call both isort and Black\n- Format pipeline: content → isort (import sorting) → Black (code formatting) → formatted output\n- Graceful fallback: returns original content if formatting tools aren't available\n- All write operations automatically format content before writing or showing diffs\n- Dry-run mode also shows formatted content in previews\n\nKey Features:\n- Temporary file approach for safe formatting without affecting original content\n- Error handling prevents failures when Black/isort not installed\n- Consistent formatting applied to both new files and appended content\n- Integration verified through unit tests with subprocess mocking\n</info added on 2025-09-07T15:03:58.368Z>",
             "testStrategy": ""
@@ -280,7 +280,7 @@
             "id": 2,
             "title": "Integrate Black and isort formatting into writer_ast_merge.py",
             "description": "Update writer_ast_merge.py so that all merged output (including dry-run diff) is formatted using Black and isort before being written or diffed.",
-            "status": "pending",
+            "status": "done",
             "dependencies": [],
             "details": "<info added on 2025-09-07T15:04:17.585Z>\n✅ COMPLETED - Black and isort formatting integration in writer_ast_merge.py\n\nImplementation Details:\n- Added a _format_content() method, mirroring the approach used in writer_append.py, to ensure consistent formatting logic across writer adapters.\n- The formatting pipeline applies isort for import sorting followed by Black for code formatting to all merged content before output, guaranteeing standardized and readable code.\n- Both the final merged output and the dry-run diff generation now utilize this formatting pipeline, ensuring that diffs accurately reflect the formatted result.\n- The implementation includes graceful fallback handling: if Black or isort are unavailable, the merge proceeds without formatting rather than failing.\n\nAST Merge Features Enhanced:\n- The AST merging logic now preserves the existing code structure while intelligently adding new elements, minimizing unnecessary changes.\n- Enhanced deduplication ensures that imports, functions, and classes are merged without introducing duplicates.\n- The merge process is structurally aware: imports are placed first, followed by constants, classes, functions, and then other statements, resulting in a logical and maintainable code order.\n- If AST parsing fails, the system falls back to simple concatenation to avoid blocking the merge process.\n- Dry-run mode now generates a unified diff that precisely shows the changes that would be made after formatting, improving transparency and reviewability.\n</info added on 2025-09-07T15:04:17.585Z>",
             "testStrategy": ""
@@ -289,7 +289,7 @@
             "id": 3,
             "title": "Update unit tests to validate Black and isort formatting",
             "description": "Extend unit tests to check that all written and diffed files are correctly formatted with Black and isort.",
-            "status": "pending",
+            "status": "done",
             "dependencies": [],
             "details": "<info added on 2025-09-07T15:04:22.973Z>\nComprehensive unit tests have been implemented to validate all core writer adapter behaviors, including strict enforcement of Black and isort formatting on written and diffed files. Tests cover SafetyPolicies (path validation, size limits, dangerous pattern detection, Python syntax validation, test file naming), WriterAppendAdapter (file creation, append, dry-run, backup, directory creation, formatting integration), and WriterASTMergeAdapter (AST merge logic, deduplication, diff generation, merge fallbacks). Key features include mocked subprocess calls for Black/isort, fallback behavior when formatting fails, exhaustive safety policy scenarios, dry-run mode validation, complex AST merge cases, and robust error/exception handling.\n</info added on 2025-09-07T15:04:22.973Z>",
             "testStrategy": ""
@@ -300,7 +300,7 @@
         "id": 8,
         "title": "Implement State Management",
         "description": "Create adapters for managing state across runs, including coverage history and generation logs, using a clean JSON state storage system.",
-        "status": "pending",
+        "status": "done",
         "dependencies": [
           4
         ],
@@ -313,7 +313,7 @@
         "id": 9,
         "title": "Implement Telemetry and Cost Management",
         "description": "Production-ready modular telemetry and cost management system with privacy-first features, multi-backend support, and comprehensive metrics/cost tracking.",
-        "status": "pending",
+        "status": "done",
         "dependencies": [
           4
         ],
@@ -332,7 +332,7 @@
         "dependencies": [
           4
         ],
-        "status": "pending",
+        "status": "done",
         "subtasks": [
           {
             "id": 1,
@@ -340,7 +340,7 @@
             "description": "Define the structure for JSON reports and implement the reporter_json.py adapter to generate structured reports including coverage delta, tests generated, pass rate, prompts, schemas, and retrieval diagnostics.",
             "dependencies": [],
             "details": "Establish a clear schema for all required report fields. Implement logic to serialize test run data into this schema, supporting both standard and verbose modes.",
-            "status": "pending",
+            "status": "done",
             "testStrategy": "Unit tests for report generation with various input scenarios, including edge cases and verbose output."
           },
           {
@@ -349,7 +349,7 @@
             "description": "Develop artifact_store.py to store coverage reports, generated tests, LLM responses, and manage run history with cleanup policies.",
             "dependencies": [],
             "details": "Create methods for saving, retrieving, and cleaning up artifacts. Ensure compatibility with different artifact types and implement configurable cleanup strategies.",
-            "status": "pending",
+            "status": "done",
             "testStrategy": "Test artifact storage and retrieval for all supported types. Verify cleanup policies remove artifacts as expected."
           },
           {
@@ -358,7 +358,7 @@
             "description": "Create helper functions using Rich to format tables for CLI output, ensuring clear and visually appealing presentation of report data.",
             "dependencies": [],
             "details": "Utilize Rich's Table and Console APIs to render tabular data such as test results, coverage summaries, and diagnostics in the CLI.",
-            "status": "pending",
+            "status": "done",
             "testStrategy": "Unit tests for table formatting with various data sets. Visual inspection for alignment, color, and readability."
           },
           {
@@ -367,7 +367,7 @@
             "description": "Develop CLI helpers for spinners and progress bars using Rich to provide real-time feedback during long-running operations.",
             "dependencies": [],
             "details": "Leverage Rich's Progress and Spinner components to indicate activity during report generation, artifact storage, and test runs.",
-            "status": "pending",
+            "status": "done",
             "testStrategy": "Test spinner and progress bar display during simulated long-running tasks. Verify correct updates and completion states."
           },
           {
@@ -376,7 +376,7 @@
             "description": "Implement functions to generate concise, human-readable summaries of test runs and diagnostics for CLI output.",
             "dependencies": [],
             "details": "Summarize key metrics and outcomes using Rich panels or layouts for quick user comprehension.",
-            "status": "pending",
+            "status": "done",
             "testStrategy": "Test summary generation with diverse input data. Validate clarity and completeness of summaries."
           },
           {
@@ -389,7 +389,7 @@
               "10.5"
             ],
             "details": "Define a color palette and layout strategy. Use Rich's theming and layout features to unify the appearance of all CLI outputs.",
-            "status": "pending",
+            "status": "done",
             "testStrategy": "Visual inspection and user feedback for theme consistency and layout effectiveness."
           },
           {
@@ -400,7 +400,7 @@
               "10.6"
             ],
             "details": "Ensure all output (tables, spinners, summaries) is routed through UIPort, supporting both interactive and non-interactive modes.",
-            "status": "pending",
+            "status": "done",
             "testStrategy": "Test UIPort output in different CLI contexts. Verify correct rendering and fallback behavior."
           },
           {
@@ -417,7 +417,7 @@
               "10.7"
             ],
             "details": "Document usage, configuration, and extension points. Develop integration tests covering typical and edge-case workflows.",
-            "status": "pending",
+            "status": "done",
             "testStrategy": "Review documentation for completeness. Run integration tests simulating real user workflows and verify expected outcomes."
           }
         ]
@@ -433,7 +433,7 @@
           2,
           3
         ],
-        "status": "pending",
+        "status": "done",
         "subtasks": []
       },
       {
@@ -447,7 +447,7 @@
           4,
           5
         ],
-        "status": "pending",
+        "status": "done",
         "subtasks": []
       },
       {
@@ -461,14 +461,14 @@
           4,
           11
         ],
-        "status": "pending",
+        "status": "done",
         "subtasks": []
       },
       {
         "id": 14,
         "title": "Implement Refinement System",
         "description": "Create a single adapter for refining generated tests based on pytest failures and other issues, leveraging LLM analysis of failure output and code context.",
-        "status": "pending",
+        "status": "done",
         "dependencies": [
           6,
           7,
@@ -492,7 +492,7 @@
           6,
           8
         ],
-        "status": "pending",
+        "status": "done",
         "subtasks": []
       },
       {
@@ -507,14 +507,14 @@
           6,
           8
         ],
-        "status": "pending",
+        "status": "done",
         "subtasks": []
       },
       {
         "id": 17,
         "title": "Implement Generate Use Case",
         "description": "The core Generate Use Case is now fully implemented as a production-ready application layer orchestrator for test generation. It coordinates the end-to-end workflow, leveraging all finalized LLM adapters, refinement, coverage, context, and writer systems. The implementation strictly follows clean architecture principles, with pure business logic separated from adapters and robust dependency injection for all ports. The workflow is asynchronous, supports batching and concurrency, and includes comprehensive telemetry, error handling, and resource management. All integration points are validated with real adapters, and the system gracefully degrades on non-critical failures. The use case is highly configurable and supports iterative refinement, context gathering, and detailed reporting.",
-        "status": "pending",
+        "status": "done",
         "dependencies": [
           4,
           5,
@@ -536,7 +536,7 @@
             "id": 1,
             "title": "Document architecture and workflow",
             "description": "Write comprehensive documentation for the Generate Use Case, covering class structure, dependency injection, async workflow, configuration options, and integration points. Include diagrams and code samples illustrating the orchestration logic and adapter separation.",
-            "status": "pending",
+            "status": "done",
             "dependencies": [],
             "details": "",
             "testStrategy": ""
@@ -545,7 +545,7 @@
             "id": 2,
             "title": "Expand integration test coverage",
             "description": "Add additional integration tests targeting edge cases in batching, concurrency, error handling, and graceful degradation. Ensure tests cover real adapter interactions and telemetry reporting.",
-            "status": "pending",
+            "status": "done",
             "dependencies": [],
             "details": "",
             "testStrategy": ""
@@ -556,7 +556,7 @@
         "id": 18,
         "title": "Implement Status and Utility Use Cases",
         "description": "Create application layer use cases for viewing generation state/history and utility functions. StatusUseCase is implemented with comprehensive status, filtering, sorting, statistics, and proper error handling. Next, implement UtilityUseCases for debug-state, sync-state, reset-state, env, and cost utilities following the same patterns.",
-        "status": "pending",
+        "status": "done",
         "dependencies": [
           4,
           8,
@@ -570,7 +570,7 @@
             "id": 1,
             "title": "Analyze existing use case patterns and identify abstractions",
             "description": "",
-            "status": "pending",
+            "status": "done",
             "dependencies": [],
             "details": "",
             "testStrategy": ""
@@ -579,7 +579,7 @@
             "id": 2,
             "title": "Implement StatusUseCase in application/status_usecase.py",
             "description": "",
-            "status": "pending",
+            "status": "done",
             "dependencies": [],
             "details": "",
             "testStrategy": ""
@@ -588,7 +588,7 @@
             "id": 3,
             "title": "Implement UtilityUseCases in application/utility_usecases.py for debug-state, sync-state, reset-state, env, and cost utilities following established patterns",
             "description": "",
-            "status": "pending",
+            "status": "done",
             "dependencies": [],
             "details": "",
             "testStrategy": ""
@@ -597,7 +597,7 @@
             "id": 4,
             "title": "Write unit tests for StatusUseCase covering status, filtering, sorting, statistics, and error handling",
             "description": "",
-            "status": "pending",
+            "status": "done",
             "dependencies": [],
             "details": "",
             "testStrategy": ""
@@ -606,7 +606,7 @@
             "id": 5,
             "title": "Write unit tests for UtilityUseCases covering all utility functions and error scenarios",
             "description": "",
-            "status": "pending",
+            "status": "done",
             "dependencies": [],
             "details": "",
             "testStrategy": ""
@@ -627,7 +627,7 @@
           17,
           18
         ],
-        "status": "pending",
+        "status": "done",
         "subtasks": []
       },
       {
@@ -641,7 +641,7 @@
           17,
           19
         ],
-        "status": "pending",
+        "status": "done",
         "subtasks": [
           {
             "id": 1,
@@ -649,7 +649,7 @@
             "description": "Develop evaluation/harness.py for testcraft, supporting offline golden repo testing, automated acceptance checks (syntactic validity, importability, pytest success, coverage delta), and integration with JSON state adapters and existing LLM adapters. Ensure clean architecture and artifact storage patterns.",
             "dependencies": [],
             "details": "Implement the core harness logic in evaluation/harness.py, using the testcraft naming convention and TOML-based configuration (.testcraft.toml). Integrate with the coverage adapters and LLM adapters, and ensure all evaluation artifacts (inputs, outputs, scores, rationales, prompt versions) are stored as structured JSON for traceability. Follow clean architecture principles to separate evaluation logic, adapters, and artifact management.\n<info added on 2025-09-08T13:13:40.132Z>\n✅ Subtask 20.1 Implementation Complete!\n\nWhat was accomplished:\n\n1. Created EvaluationPort Interface (testcraft/ports/evaluation_port.py):\n   - Comprehensive protocol defining all evaluation operations\n   - Rich type definitions: EvaluationConfig, AcceptanceResult, LLMJudgeResult, EvaluationResult\n   - Support for single, pairwise, and batch evaluation modes\n   - Golden repository evaluation and trend analysis methods\n   - Follows testcraft's established port-based architecture patterns\n\n2. Implemented TestcraftEvaluationAdapter (testcraft/adapters/evaluation/main_adapter.py):\n   - Automated Acceptance Checks: Syntax validation, import checking, pytest execution, coverage improvement measurement\n   - LLM-as-Judge Integration: Rubric-driven evaluation with structured prompts, rationale generation, versioned prompts from registry\n   - A/B Testing Pipeline: Pairwise comparison with statistical confidence, side-by-side evaluation\n   - Batch Processing: Efficient evaluation of multiple test variants\n   - Golden Repository Testing: Comprehensive regression detection against known-good repositories\n   - Trend Analysis: Historical evaluation analysis with recommendations\n   - Clean Architecture: Proper dependency injection via ports, no direct adapter dependencies\n   - 2025 Best Practices: Bias mitigation, statistical testing, artifact storage with traceability\n\n3. Created Evaluation Harness (evaluation/harness.py):\n   - High-level Interface: Convenient methods for all evaluation scenarios\n   - Dependency Management: Automatic initialization of required adapters\n   - Configuration Support: Integration with testcraft config system\n   - Convenience Functions: Quick evaluation and comparison utilities\n   - Proper Integration: Uses JSON state adapters, artifact storage, LLM routing\n\nKey Features Implemented:\n- testcraft naming throughout (not testgen)\n- Clean architecture with port-based dependency injection\n- JSON state management integration for evaluation artifacts\n- Safety policies enforcement for file operations\n- Comprehensive error handling and logging\n- Artifact storage for all evaluation results with cleanup policies\n- LLM-as-judge with rubric-driven scoring and rationale generation\n- Statistical A/B testing with confidence estimation\n- Golden repo evaluation for regression testing\n- Trend analysis for continuous improvement\n\nIntegration Status:\n- Coverage adapter integration for acceptance checks\n- LLM adapter integration via router for flexibility  \n- State adapter integration for persistent evaluation tracking\n- Artifact store integration for result storage and cleanup\n- Prompt registry integration for versioned evaluation prompts\n- Safety policies integration for secure file operations\n\nThe core evaluation harness is now fully operational and ready for integration testing. All components follow established testcraft patterns and support the latest 2025 evaluation methodologies.\n</info added on 2025-09-08T13:13:40.132Z>",
-            "status": "pending",
+            "status": "done",
             "testStrategy": "Test with sample repositories and golden repos. Verify that all acceptance checks run correctly and that artifacts are stored in the expected JSON structure. Use unit and integration tests to validate harness behavior and error handling."
           },
           {
@@ -658,7 +658,7 @@
             "description": "Implement rubric-driven LLM-as-judge workflows with rationale generation, versioned prompt registry, and support for both single-output and pairwise (A/B) scoring. Integrate bias mitigation, statistical significance testing, and human-in-the-loop review. Leverage modern frameworks (PromptFoo, PromptLayer patterns) and enable batch prompt variant execution.",
             "dependencies": [],
             "details": "Add LLM-as-judge evaluation with explicit, versioned rubrics for correctness, coverage, clarity, and safety. Engineer prompts to elicit numeric scores and concise rationales per dimension. Store all scores, rationales, and prompt versions as structured artifacts. Implement side-by-side (SxS) A/B testing with standardized prompts and statistical significance testing (e.g., t-tests, bootstrap). Support aggregation of multiple LLM judges and human review. Integrate with PromptFoo/PromptLayer-style pipelines and ensure CLI commands for running and visualizing A/B tests.",
-            "status": "pending",
+            "status": "done",
             "testStrategy": "Test with multiple prompt variants and sample datasets, verifying correct rubric application, rationale logging, and artifact storage. Validate statistical testing outputs and aggregation logic. Simulate bias and verify mitigation strategies. Confirm human-in-the-loop review can be triggered and logged."
           },
           {
@@ -667,7 +667,7 @@
             "description": "Implement a TOML configuration system for testcraft, replacing YAML. Provide minimal and comprehensive .testcraft.toml samples with detailed comments and schema validation.",
             "dependencies": [],
             "details": "Design a robust TOML schema for all evaluation harness options, including LLM-as-judge settings, prompt registry, acceptance checks, and artifact paths. Generate sample .testcraft.toml files: one minimal for quickstart, one comprehensive with inline comments explaining each option. Ensure schema validation and error reporting for misconfigurations.",
-            "status": "pending",
+            "status": "done",
             "testStrategy": "Validate configuration parsing with both minimal and comprehensive TOML files. Test error handling for invalid configs. Confirm all harness features are configurable via TOML and that changes are reflected in harness behavior."
           },
           {
@@ -676,7 +676,7 @@
             "description": "Set up a CI pipeline to lint (ruff), type-check (mypy), run tests (pytest), verify documentation builds, and automate regression testing for prompt and evaluation changes.",
             "dependencies": [],
             "details": "Configure CI to run ruff for linting, mypy for type checks, and pytest for all evaluation harness and adapter tests. Add steps to build and check documentation. Integrate prompt evaluation into CI/CD: automatically run regression tests on prompt changes, log evaluation results, and fail builds on significant regressions. Ensure all artifacts and logs are stored for traceability.",
-            "status": "pending",
+            "status": "done",
             "testStrategy": "Trigger CI on code and config changes. Verify that lint, type, and test failures are caught. Simulate prompt changes and confirm regression tests run and results are logged. Ensure documentation builds without errors."
           },
           {
@@ -685,7 +685,7 @@
             "description": "Write and maintain README.md, advanced usage docs, configuration reference, architecture overview, contributing guidelines, and a best practices checklist for prompt evaluation and harness usage.",
             "dependencies": [],
             "details": "Document all evaluation harness features, configuration options, and architecture. Include a quickstart guide, advanced usage (LLM-as-judge, A/B testing, statistical analysis), and a configuration reference for .testcraft.toml. Provide an architecture overview and contributing guidelines. Add a best practices checklist covering dataset curation, prompt evaluation, statistical testing, artifact logging, continuous monitoring, and multimodal support.\n<info added on 2025-09-08T14:29:08.497Z>\n✅ Subtask 20.5 Implementation Complete!\n\nSuccessfully authored comprehensive documentation and best practices checklist for TestCraft evaluation harness:\n\nDocumentation Deliverables Created:\n\n1. Updated README.md \n- Complete quickstart guide with evaluation harness features\n- Beautiful architecture overview with emojis and clear structure\n- Advanced evaluation and A/B testing command examples\n- Updated installation, configuration, and development sections\n- Links to all new documentation resources\n\n2. Advanced Usage Guide (docs/advanced-usage.md)\n- Comprehensive evaluation harness usage patterns\n- A/B testing and prompt optimization workflows  \n- Statistical analysis methodology and interpretation\n- Bias detection and mitigation strategies\n- Golden repository testing procedures\n- Comprehensive evaluation campaign management\n- Configuration management best practices\n- Integration patterns for CI/CD and custom adapters\n- Real-world code examples throughout\n\n3. Configuration Reference (docs/configuration.md)\n- Complete TOML configuration documentation\n- All evaluation harness configuration options\n- Environment variable override patterns\n- Security and performance configuration\n- LLM provider setup and model selection\n- Validation and troubleshooting guidance\n- Best practices for environment-specific configs\n\n4. Architecture Overview (docs/architecture.md)\n- Clean Architecture principles and implementation\n- Detailed component breakdown and interactions\n- Evaluation harness architecture deep-dive\n- Dependency injection patterns\n- Error handling strategies\n- Testing architecture and patterns\n- Extension points for customization\n- Code examples demonstrating patterns\n\n5. Contributing Guidelines (CONTRIBUTING.md)\n- Complete contributor onboarding guide\n- Code style and architecture standards\n- Testing requirements and patterns\n- Pull request process and templates\n- Issue reporting guidelines\n- Evaluation system contribution guidelines\n- Release process documentation\n- Community guidelines and recognition\n\n6. Best Practices Checklist (docs/best-practices-checklist.md)\n- Comprehensive checklist covering all evaluation aspects:\n  - Dataset Curation: Data collection, validation, versioning\n  - Prompt Evaluation: Multi-dimensional assessment, LLM-as-judge\n  - Statistical Testing: Methodology, quality control, interpretation\n  - Artifact Logging: Storage, retention, reproducibility\n  - Continuous Monitoring: Quality trends, anomaly detection, KPIs\n  - Bias Detection: Identification, metrics, mitigation strategies\n  - A/B Testing: Campaign planning, execution, management\n  - Configuration Management: Environment separation, validation\n  - Performance Optimization: System performance, cost optimization\n  - Security and Privacy: Data protection, code safety\n  - Multimodal Support: Content type handling, cross-modal evaluation\n  - Quality Assurance: Testing validation, documentation standards\n\nKey Features Documented:\n\nEvaluation Harness Core Functions:\n- Single test evaluation with acceptance checks\n- LLM-as-judge with rubric-driven scoring\n- Batch evaluation and A/B testing pipelines\n- Statistical significance analysis\n- Bias detection and mitigation\n- Golden repository regression testing\n\nAdvanced Workflows:\n- Comprehensive evaluation campaigns\n- Cross-scenario analysis and recommendations\n- Trend analysis and continuous monitoring\n- Integration patterns for CI/CD\n- Custom adapter development\n\nConfiguration System:\n- TOML-based hierarchical configuration\n- Environment-specific setups\n- Security and performance optimization\n- Complete option reference\n\nBest Practices Coverage:\n- Dataset curation and quality assurance\n- Statistical methodology and interpretation\n- Artifact management and reproducibility\n- Continuous monitoring and alerting\n- Bias detection and fairness assessment\n- Performance and cost optimization\n\nDocumentation Quality Standards Met:\n\n- Comprehensive Coverage: All evaluation features documented\n- Practical Examples: Real code examples throughout\n- Multiple Skill Levels: Beginner quickstart + advanced patterns\n- Cross-Referenced: Extensive linking between documents\n- Actionable Guidance: Step-by-step procedures and checklists\n- Best Practices: Industry-standard evaluation methodologies\n- Maintainable: Clear structure for ongoing updates\n\nThe documentation suite provides complete coverage of TestCraft's evaluation capabilities following 2025 best practices for LLM evaluation, A/B testing, and statistical analysis. Users can now effectively implement comprehensive test quality assessment workflows with proper bias detection, statistical validation, and continuous improvement processes.\n</info added on 2025-09-08T14:29:08.497Z>",
-            "status": "pending",
+            "status": "done",
             "testStrategy": "Review documentation for completeness and clarity. Test quickstart and advanced usage steps on a fresh environment. Validate that the best practices checklist is actionable and covers all critical evaluation steps."
           }
         ]
@@ -1440,7 +1440,7 @@
     ],
     "metadata": {
       "created": "2025-01-27T20:16:58.061Z",
-      "updated": "2025-09-10T22:28:41.568Z",
+      "updated": "2025-09-17T22:01:03.157Z",
       "description": "Tasks for master context"
     }
   }
