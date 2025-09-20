@@ -1290,11 +1290,86 @@
         ],
         "priority": "high",
         "subtasks": []
+      },
+      {
+        "id": 35,
+        "title": "Complete TestCraft Evaluation Harness Core Methods and CI Integration",
+        "description": "Fully implement all core evaluation methods in TestcraftEvaluationAdapter, including statistical analysis, bias detection, A/B testing, coverage integration, and prompt template fixes, and re-enable all evaluation harness tests in CI.",
+        "details": "1. Implement all placeholder methods in TestcraftEvaluationAdapter, ensuring robust automated acceptance checks (syntactic validity, importability, pytest success, coverage improvement) and LLM-as-judge evaluation using rubric-based scoring. Use established frameworks such as EleutherAI's lm-evaluation-harness for reference on prompt management and metric extensibility.\n\n2. Develop statistical analysis algorithms for A/B testing pipelines, including hypothesis testing (e.g., t-tests, chi-squared tests) to determine statistical significance of test quality differences. Integrate with artifact storage for result tracking and reproducibility. For bias detection, implement metrics such as disparate impact, subgroup performance analysis, and fairness-aware statistical tests, referencing best practices from academic LLM evaluation literature.\n\n3. Fix and version prompt templates to ensure alignment with test expectations and output schemas, leveraging the prompt registry system. Ensure all templates are validated and tested for compatibility with LLM adapters.\n\n4. Integrate coverage adapters to measure and report coverage improvements, using the composite coverage system for fallback and unified reporting. Ensure coverage metrics are included in evaluation outputs and artifacts.\n\n5. Complete the A/B testing pipeline, supporting side-by-side prompt variants, randomized assignment, and statistical significance reporting. Store all relevant metadata and results for reproducibility and downstream analysis.\n\n6. Update .github/workflows/ci.yml to re-enable all evaluation harness integration tests, ensuring that all 11 tests are executed and pass without skipping. Use best practices for CI test reporting and artifact retention.\n\n7. Ensure compatibility with existing LLM router, coverage adapters, artifact storage, and state management systems. Follow clean architecture and dependency injection patterns for maintainability and extensibility.",
+        "testStrategy": "- Write comprehensive unit tests for each evaluation method in TestcraftEvaluationAdapter, including edge cases and error handling.\n- Develop integration tests covering the full evaluation harness workflow: acceptance checks, LLM-as-judge, A/B testing, statistical analysis, bias detection, and coverage reporting.\n- Validate prompt templates against expected schemas and test with all supported LLM adapters.\n- Run all 11 integration tests in CI, verifying that none are skipped and all pass. Inspect CI logs and artifacts for correct coverage, statistical, and bias metrics.\n- Use synthetic and real test data to verify statistical significance calculations and bias detection algorithms. Confirm reproducibility of results and correct artifact storage.",
+        "status": "pending",
+        "dependencies": [
+          6,
+          11,
+          13,
+          17,
+          19,
+          20
+        ],
+        "priority": "high",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "Implement Core Evaluation Methods in TestcraftEvaluationAdapter",
+            "description": "Develop and complete all placeholder methods in TestcraftEvaluationAdapter, ensuring robust automated acceptance checks (syntactic validity, importability, pytest success, coverage improvement) and LLM-as-judge evaluation using rubric-based scoring. Reference established frameworks such as EleutherAI's lm-evaluation-harness for prompt management and metric extensibility.",
+            "dependencies": [],
+            "details": "Ensure all core evaluation logic is implemented, including syntactic and runtime checks, and integrate rubric-based LLM evaluation. Use best practices from lm-evaluation-harness for extensibility and prompt handling.",
+            "status": "pending",
+            "testStrategy": "Write comprehensive unit tests for each method, including edge cases and error handling. Develop integration tests to verify the full evaluation workflow."
+          },
+          {
+            "id": 2,
+            "title": "Develop Statistical Analysis and Bias Detection Algorithms",
+            "description": "Implement statistical analysis algorithms for A/B testing pipelines, including hypothesis testing (t-tests, chi-squared tests) and bias detection metrics such as disparate impact and subgroup performance analysis. Integrate with artifact storage for result tracking and reproducibility.",
+            "dependencies": [
+              "35.1"
+            ],
+            "details": "Ensure statistical significance of test quality differences is reported and bias detection follows best practices from academic LLM evaluation literature. Store all results and metadata for reproducibility.",
+            "status": "pending",
+            "testStrategy": "Write unit tests for statistical and bias detection modules. Validate correctness using synthetic and real evaluation data. Test integration with artifact storage."
+          },
+          {
+            "id": 3,
+            "title": "Fix and Version Prompt Templates with Registry Integration",
+            "description": "Update, validate, and version all prompt templates to ensure alignment with test expectations and output schemas, leveraging the prompt registry system. Ensure compatibility with LLM adapters and that all templates are tested for correctness.",
+            "dependencies": [
+              "35.1"
+            ],
+            "details": "Systematically review and fix prompt templates, enforce schema validation, and integrate with the prompt registry for version control and compatibility checks.",
+            "status": "pending",
+            "testStrategy": "Write automated tests to validate prompt template correctness, schema compliance, and compatibility with all supported LLM adapters."
+          },
+          {
+            "id": 4,
+            "title": "Integrate Coverage Adapters and Unified Coverage Reporting",
+            "description": "Integrate coverage adapters to measure and report coverage improvements using the composite coverage system. Ensure unified reporting and that coverage metrics are included in evaluation outputs and artifacts.",
+            "dependencies": [
+              "35.1"
+            ],
+            "details": "Implement fallback mechanisms for coverage measurement and ensure all relevant metrics are captured and reported in evaluation artifacts.",
+            "status": "pending",
+            "testStrategy": "Write unit and integration tests for coverage adapter integration and reporting. Validate that coverage improvements are correctly measured and reported."
+          },
+          {
+            "id": 5,
+            "title": "Re-enable and Validate CI Integration for Evaluation Harness",
+            "description": "Update .github/workflows/ci.yml to re-enable all evaluation harness integration tests, ensuring all 11 tests execute and pass. Ensure compatibility with LLM router, coverage adapters, artifact storage, and state management systems, following clean architecture and dependency injection patterns.",
+            "dependencies": [
+              "35.1",
+              "35.2",
+              "35.3",
+              "35.4"
+            ],
+            "details": "Ensure CI runs all evaluation harness tests without skips, retains artifacts, and reports results using best practices for maintainability and extensibility.",
+            "status": "pending",
+            "testStrategy": "Verify all CI tests run and pass. Check artifact retention and reporting. Write regression tests to ensure future changes do not break CI integration."
+          }
+        ]
       }
     ],
     "metadata": {
       "created": "2025-01-27T20:16:58.061Z",
-      "updated": "2025-09-20T13:31:17.632Z",
+      "updated": "2025-09-20T16:34:42.374Z",
       "description": "Tasks for master context"
     }
   }
