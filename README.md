@@ -55,7 +55,7 @@ uv pip install -e .
 4. Configure your LLM provider (choose one):
 ```bash
 export OPENAI_API_KEY="your-api-key"
-export ANTHROPIC_API_KEY="your-api-key"  
+export ANTHROPIC_API_KEY="your-api-key"
 export AZURE_OPENAI_API_KEY="your-api-key"
 export AWS_ACCESS_KEY_ID="your-access-key"
 ```
@@ -129,7 +129,7 @@ testcraft evaluation campaign campaign_config.json --verbose
 # Show version and status
 testcraft version
 
-# Initialize configuration interactively  
+# Initialize configuration interactively
 testcraft config init
 
 # Get help for any command
@@ -146,7 +146,7 @@ TestCraft follows **Clean Architecture** principles with clear separation of con
 ```
 testcraft/
 ├── domain/          # Core business logic and entities
-├── application/     # Use cases and application services  
+├── application/     # Use cases and application services
 ├── ports/           # Interface definitions (contracts)
 ├── adapters/        # External integrations
 │   ├── llm/         # LLM provider integrations
@@ -154,7 +154,7 @@ testcraft/
 │   ├── coverage/    # Test coverage analysis
 │   ├── evaluation/  # Evaluation harness and A/B testing
 │   ├── context/     # Code context and retrieval
-│   ├── parsing/     # Code parsing and analysis  
+│   ├── parsing/     # Code parsing and analysis
 │   ├── refine/      # Test refinement and improvement
 │   └── telemetry/   # Observability and metrics
 ├── config/          # Configuration management
@@ -165,7 +165,7 @@ testcraft/
 ### Key Components
 
 - **Evaluation Harness** (`evaluation/harness.py`): Comprehensive test evaluation system
-- **LLM Router** (`adapters/llm/router.py`): Multi-provider LLM integration  
+- **LLM Router** (`adapters/llm/router.py`): Multi-provider LLM integration
 - **Configuration System** (`config/`): TOML-based configuration with validation
 - **Artifact Store** (`adapters/io/artifact_store.py`): Evaluation result storage
 - **Rich UI** (`adapters/io/ui_rich.py`): Beautiful terminal interfaces
@@ -193,7 +193,7 @@ pre-commit install
 # Run all development tools
 uv run pytest --cov=testcraft    # Tests with coverage
 uv run ruff check .             # Linting
-uv run ruff format .            # Code formatting  
+uv run ruff format .            # Code formatting
 uv run mypy testcraft/          # Type checking
 ```
 
@@ -222,7 +222,7 @@ testcraft evaluation --help
 
 - **README.md**: This file - project overview and quick start
 - **Advanced Usage**: See `docs/advanced-usage.md` (coming soon)
-- **Configuration Reference**: See `docs/configuration.md` (coming soon) 
+- **Configuration Reference**: See `docs/configuration.md` (coming soon)
 - **Architecture Guide**: See `docs/architecture.md` (coming soon)
 - **Contributing**: See `CONTRIBUTING.md` (coming soon)
 
@@ -256,7 +256,7 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 ## 🔗 Additional Resources
 
 - [Example Configurations](.testcraft-comprehensive.toml)
-- [Evaluation Harness Documentation](evaluation/harness.py)  
+- [Evaluation Harness Documentation](evaluation/harness.py)
 - [CLI Command Reference](testcraft/cli/main.py)
 - [Architecture Patterns](testcraft/ports/)
 

@@ -17,18 +17,18 @@ from testcraft.prompts import PromptTemplate
 class TestGenerationPrompt(PromptTemplate):
     template = """
     Generate pytest tests for the following Python code:
-    
+
     Code:
     {code_content}
-    
+
     Requirements:
     - Use pytest framework
     - Include docstrings
     - Test both positive and negative cases
-    
+
     Generated tests:
     """
-    
+
     def format(self, code_content: str) -> str:
         return self.template.format(code_content=code_content)
 ```
@@ -45,7 +45,7 @@ class TestGenerationPrompt(PromptTemplate):
 
 **Claude Models (Anthropic)**:
 - **Claude Sonnet 3.7**: `claude-3-7-sonnet-latest`
-- **Claude Sonnet 4**: `claude-sonnet-4-20250514` (default)  
+- **Claude Sonnet 4**: `claude-sonnet-4-20250514` (default)
 - **Claude Opus 4**: `claude-opus-4-20250514`
 
 **OpenAI Models**:
@@ -63,7 +63,7 @@ APPROVED_MODELS = {
     },
     "openai": {
         "gpt-4.1": "gpt-4.1",  # Default
-        "gpt-5": "gpt-5", 
+        "gpt-5": "gpt-5",
         "o4-mini": "o4-mini"
     }
 }
@@ -82,10 +82,10 @@ class OpenAIAdapter(LLMPort):
         self._client = OpenAI(api_key=api_key)
         self._model = model
         self._max_retries = 3
-    
+
     async def generate_test(self, context: FileContext) -> TestCase:
         prompt = self._build_prompt(context)
-        
+
         for attempt in range(self._max_retries):
             try:
                 response = await self._client.chat.completions.create(
@@ -94,7 +94,7 @@ class OpenAIAdapter(LLMPort):
                     temperature=0.1
                 )
                 return self._parse_response(response)
-                
+
             except RateLimitError:
                 if attempt < self._max_retries - 1:
                     await asyncio.sleep(2 ** attempt)
@@ -107,19 +107,19 @@ class OpenAIAdapter(LLMPort):
 # ✅ DO: Robust response parsing
 def _parse_response(self, response: ChatCompletion) -> TestCase:
     content = response.choices[0].message.content
-    
+
     # Extract test code from response
     test_code = self._extract_code_block(content)
-    
+
     if not test_code:
         raise ValueError("No test code found in response")
-    
+
     # Validate generated code
     try:
         ast.parse(test_code)
     except SyntaxError as e:
         raise ValueError(f"Generated code has syntax error: {e}")
-    
+
     return TestCase(
         name=self._extract_test_name(test_code),
         content=test_code,
@@ -165,7 +165,7 @@ class LLMConfig:
 
 ## Context Management
 - Include relevant file context in prompts
-- Limit context size to stay within token limits  
+- Limit context size to stay within token limits
 - Use context adapters from [testcraft/adapters/context/](mdc:testcraft/adapters/context/)
 
 ## Quality Assurance

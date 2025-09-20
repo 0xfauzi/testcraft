@@ -17,22 +17,21 @@ repos:
         types_or: [python, pyi]
 
   # MyPy type checking (matches CI: mypy testcraft/)
-  # Note: Currently has some type errors - uncomment when ready
-  # - repo: https://github.com/pre-commit/mirrors-mypy
-  #   rev: v1.13.0
-  #   hooks:
-  #     - id: mypy
-  #       name: mypy type check
-  #       args: [--show-error-codes, --pretty]
-  #       files: ^testcraft/
-  #       additional_dependencies:
-  #         - types-requests
-  #         - types-PyYAML
-  #         - types-toml
-  #         - pydantic
-  #         - rich
-  #         - textual
-  #         - click
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v1.13.0
+    hooks:
+      - id: mypy
+        name: mypy type check (syntax focus)
+        args: [--show-error-codes, --pretty, --no-error-summary, --config-file=mypy-staged.ini]
+        files: ^testcraft/(domain|config/models|ports)/
+        additional_dependencies:
+          - types-requests
+          - types-PyYAML
+          - types-toml
+          - pydantic
+          - rich
+          - textual
+          - click
 
   # Security scanning (matches CI: safety check)
   - repo: local

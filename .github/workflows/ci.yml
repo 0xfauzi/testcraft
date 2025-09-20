@@ -286,13 +286,13 @@ jobs:
           find downloaded-artifacts/ -name "*.xml" -exec cp {} . \;
           find downloaded-artifacts/ -name "coverage.xml" -exec cp {} . \;
           find downloaded-artifacts/ -name "safety-report.json" -exec cp {} . \;
-          
+
           # Move prompt regression artifacts if they exist
           if [ -d "downloaded-artifacts/prompt-regression-artifacts" ]; then
             cp -r downloaded-artifacts/prompt-regression-artifacts ./
           fi
         fi
-        
+
         # Run artifact collection and compression
         python scripts/ci_artifacts.py --retention-days=30
 
@@ -302,7 +302,7 @@ jobs:
         import json
         from datetime import datetime
         from pathlib import Path
-        
+
         # Create CI summary
         summary = {
             'ci_run': {
@@ -312,7 +312,7 @@ jobs:
                 'workflow': '${{ github.workflow }}',
                 'job_results': {
                     'lint_and_format': '${{ needs.lint-and-format.result }}' if '${{ needs.lint-and-format.result }}' else 'skipped',
-                    'type_check': '${{ needs.type-check.result }}' if '${{ needs.type-check.result }}' else 'skipped', 
+                    'type_check': '${{ needs.type-check.result }}' if '${{ needs.type-check.result }}' else 'skipped',
                     'test': '${{ needs.test.result }}' if '${{ needs.test.result }}' else 'skipped',
                     'docs_check': '${{ needs.docs-check.result }}' if '${{ needs.docs-check.result }}' else 'skipped',
                     'prompt_regression': '${{ needs.prompt-regression-check.result }}' if '${{ needs.prompt-regression-check.result }}' else 'skipped',
@@ -320,12 +320,12 @@ jobs:
                 }
             }
         }
-        
+
         # Save summary
         Path('ci-artifacts').mkdir(exist_ok=True)
         with open('ci-artifacts/ci-summary.json', 'w') as f:
             json.dump(summary, f, indent=2)
-        
+
         # Print summary
         print('📊 CI Pipeline Summary:')
         for job, result in summary['ci_run']['job_results'].items():
@@ -350,7 +350,7 @@ jobs:
     - name: Check job results
       run: |
         echo "🔍 Checking integration results..."
-        
+
         # Check critical jobs
         if [ "${{ needs.lint-and-format.result }}" != "success" ]; then
           echo "❌ Lint and format check failed"
@@ -361,21 +361,21 @@ jobs:
           exit 1
         fi
         if [ "${{ needs.test.result }}" != "success" ]; then
-          echo "❌ Test suite failed"  
+          echo "❌ Test suite failed"
           exit 1
         fi
         if [ "${{ needs.docs-check.result }}" != "success" ]; then
           echo "❌ Documentation check failed"
           exit 1
         fi
-        
+
         echo "✅ All critical integration checks passed"
 
     - name: Report final status
       run: |
         echo "🎉 CI pipeline completed successfully!"
         echo "📊 All quality gates passed:"
-        echo "  ✅ Code formatting and linting"  
+        echo "  ✅ Code formatting and linting"
         echo "  ✅ Type checking"
         echo "  ✅ Test suite execution"
         echo "  ✅ Documentation validation"

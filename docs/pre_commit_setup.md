@@ -13,10 +13,11 @@ Our pre-commit hooks run the **same checks as GitHub CI**:
 4. **📚 Documentation Check** - Doc validation (matches `python scripts/doc_check.py`)
 5. **📋 Standard Checks** - Whitespace, YAML/TOML/JSON syntax, large files, etc.
 
-### ⏸️ Optional (Currently Disabled)
+### ✅ Enabled and Active
 6. **🏷️ MyPy Type Check** - Type checking (matches `mypy testcraft/`)
-   - Currently commented out due to existing type errors
-   - Uncomment in `.pre-commit-config.yaml` when type errors are resolved
+   - **NOW ACTIVE** with staged rollout focusing on critical files
+   - Covers domain models, config, and port interfaces
+   - Gradually expanding scope as more files are fixed
 
 ## 🚀 Setup Instructions
 

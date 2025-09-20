@@ -24,14 +24,25 @@ class SpanKind(Enum):
     CONSUMER = "consumer"
 
 
-@dataclass
-class SpanContext:
-    """Context information for a telemetry span."""
+class SpanContext(Protocol):
+    """Protocol for telemetry span objects with tracing capabilities."""
 
     trace_id: str
     span_id: str
-    parent_span_id: str | None = None
-    baggage: dict[str, Any] | None = None
+    parent_span_id: str | None
+    baggage: dict[str, Any] | None
+
+    def set_attribute(self, key: str, value: Any) -> None:
+        """Set an attribute on the span."""
+        ...
+
+    def record_exception(self, exception: Exception) -> None:
+        """Record an exception on the span."""
+        ...
+
+    def get_trace_context(self) -> "SpanContext":
+        """Get the trace context for this span."""
+        ...
 
 
 @dataclass

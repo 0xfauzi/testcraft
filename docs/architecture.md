@@ -118,7 +118,7 @@ class TestGenerationRequest:
     coverage_threshold: float
     include_fixtures: bool
 
-@dataclass 
+@dataclass
 class GeneratedTest:
     """Domain model for generated tests."""
     content: str
@@ -143,12 +143,12 @@ Business rules are encoded in domain models and services:
 ```python
 class TestGenerationRules:
     """Domain rules for test generation."""
-    
+
     @staticmethod
     def should_generate_fixture(source_code: str) -> bool:
         """Business rule: Generate fixtures for classes with complex setup."""
         return has_complex_initialization(source_code)
-    
+
     @staticmethod
     def calculate_confidence_score(metrics: Dict[str, Any]) -> float:
         """Business rule: Calculate confidence based on multiple factors."""
@@ -166,11 +166,11 @@ Application services orchestrate business workflows using domain models and port
 # testcraft/application/generate_usecase.py
 class GenerateUseCase:
     """Use case for test generation workflow."""
-    
+
     def __init__(
         self,
         llm_port: LLMPort,
-        coverage_port: CoveragePort, 
+        coverage_port: CoveragePort,
         writer_port: WriterPort,
         ui_port: UIPort
     ):
@@ -178,35 +178,35 @@ class GenerateUseCase:
         self.coverage_port = coverage_port
         self.writer_port = writer_port
         self.ui_port = ui_port
-    
+
     async def execute(self, request: TestGenerationRequest) -> GenerationResult:
         """Execute test generation workflow."""
         try:
             # 1. Validate request
             self._validate_request(request)
-            
+
             # 2. Analyze source code
             analysis = await self.coverage_port.analyze_files(request.source_files)
-            
+
             # 3. Generate tests using LLM
             generated_tests = await self.llm_port.generate_tests(
                 source_files=request.source_files,
                 analysis=analysis,
                 config=request.config
             )
-            
+
             # 4. Write tests to files
             written_files = await self.writer_port.write_tests(generated_tests)
-            
+
             # 5. Update UI with progress
             await self.ui_port.display_results(written_files)
-            
+
             return GenerationResult(
                 generated_tests=generated_tests,
                 written_files=written_files,
                 success=True
             )
-            
+
         except Exception as e:
             return GenerationResult(
                 error=str(e),
@@ -224,7 +224,7 @@ testcraft/application/generation/
 └── services/
     ├── state_discovery.py        # State sync & file discovery
     ├── coverage_evaluator.py     # Coverage measurement & deltas
-    ├── plan_builder.py           # File selection & plan creation  
+    ├── plan_builder.py           # File selection & plan creation
     ├── content_builder.py        # Source extraction & test paths
     ├── context_assembler.py      # Unified context building
     ├── enrichment_detectors.py   # Context enrichment detection
@@ -255,7 +255,7 @@ Use cases are composed to handle complex workflows:
 ```python
 class ComprehensiveTestingUseCase:
     """Composite use case for complete testing workflow."""
-    
+
     def __init__(
         self,
         generate_usecase: GenerateUseCase,
@@ -265,20 +265,20 @@ class ComprehensiveTestingUseCase:
         self.generate = generate_usecase
         self.coverage = coverage_usecase
         self.evaluate = evaluate_usecase
-    
+
     async def execute(self, request: ComprehensiveTestingRequest) -> ComprehensiveResult:
         """Execute complete testing workflow."""
         # 1. Generate tests
         generation_result = await self.generate.execute(request.generation_request)
-        
+
         # 2. Analyze coverage
         coverage_result = await self.coverage.execute(request.coverage_request)
-        
+
         # 3. Evaluate quality (if enabled)
         evaluation_result = None
         if request.evaluation_enabled:
             evaluation_result = await self.evaluate.execute(request.evaluation_request)
-        
+
         return ComprehensiveResult(
             generation=generation_result,
             coverage=coverage_result,
@@ -296,7 +296,7 @@ Ports define contracts between the application core and external systems.
 # testcraft/ports/llm_port.py
 class LLMPort(Protocol):
     """Port for LLM provider integrations."""
-    
+
     async def generate_tests(
         self,
         source_files: List[Path],
@@ -305,7 +305,7 @@ class LLMPort(Protocol):
     ) -> List[GeneratedTest]:
         """Generate tests for source files."""
         ...
-    
+
     async def refine_tests(
         self,
         test_content: str,
@@ -314,7 +314,7 @@ class LLMPort(Protocol):
     ) -> str:
         """Refine tests based on error feedback."""
         ...
-    
+
     def calculate_token_usage(self, content: str) -> TokenUsage:
         """Calculate token usage for content."""
         ...
@@ -336,11 +336,11 @@ Adapters implement ports and handle integration with external systems.
 # testcraft/adapters/llm/openai.py
 class OpenAIAdapter(LLMPort):
     """OpenAI implementation of LLM port."""
-    
+
     def __init__(self, api_key: str, model: str):
         self.client = OpenAI(api_key=api_key)
         self.model = model
-    
+
     async def generate_tests(
         self,
         source_files: List[Path],
@@ -358,32 +358,32 @@ class OpenAIAdapter(LLMPort):
 # testcraft/adapters/llm/router.py
 class LLMRouter:
     """Router for multiple LLM providers."""
-    
+
     def __init__(self):
         self.providers: Dict[str, LLMPort] = {}
-    
+
     def register(self, name: str, provider: LLMPort) -> None:
         """Register an LLM provider."""
         self.providers[name] = provider
-    
+
     def get_provider(self, name: str) -> LLMPort:
         """Get provider by name."""
         if name not in self.providers:
             raise ValueError(f"Unknown provider: {name}")
         return self.providers[name]
-    
+
     @classmethod
     def from_config(cls, config: LLMConfig) -> LLMPort:
         """Create router from configuration."""
         router = cls()
-        
+
         # Register available providers
         if config.openai_api_key:
             router.register("openai", OpenAIAdapter(config.openai_api_key, config.openai_model))
-        
+
         if config.anthropic_api_key:
             router.register("anthropic", ClaudeAdapter(config.anthropic_api_key, config.anthropic_model))
-        
+
         # Return default provider
         return router.get_provider(config.default_provider)
 ```
@@ -427,7 +427,7 @@ The evaluation harness is a sophisticated system for assessing test quality usin
 # testcraft/ports/evaluation_port.py
 class EvaluationPort(Protocol):
     """Port for test evaluation operations."""
-    
+
     def evaluate_single(
         self,
         test_content: str,
@@ -436,7 +436,7 @@ class EvaluationPort(Protocol):
     ) -> EvaluationResult:
         """Evaluate a single test."""
         ...
-    
+
     def evaluate_pairwise(
         self,
         test_a: str,
@@ -446,7 +446,7 @@ class EvaluationPort(Protocol):
     ) -> Dict[str, Any]:
         """Compare two test variants."""
         ...
-    
+
     def run_statistical_significance_analysis(
         self,
         evaluation_data: List[Dict[str, Any]],
@@ -462,7 +462,7 @@ class EvaluationPort(Protocol):
 ```python
 class EvaluationWorkflow:
     """Orchestrates evaluation processes."""
-    
+
     def __init__(
         self,
         evaluator: EvaluationPort,
@@ -472,7 +472,7 @@ class EvaluationWorkflow:
         self.evaluator = evaluator
         self.artifact_store = artifact_store
         self.state_adapter = state_adapter
-    
+
     async def run_ab_testing_campaign(
         self,
         prompt_variants: List[Dict[str, str]],
@@ -481,7 +481,7 @@ class EvaluationWorkflow:
     ) -> CampaignResult:
         """Run comprehensive A/B testing campaign."""
         campaign_id = self._generate_campaign_id()
-        
+
         try:
             # 1. Execute evaluations for each variant
             variant_results = []
@@ -490,31 +490,31 @@ class EvaluationWorkflow:
                     variant, test_dataset, config
                 )
                 variant_results.append(variant_result)
-                
+
                 # Store intermediate results
                 await self.artifact_store.store_artifact(
                     artifact_type="variant_result",
                     content=variant_result,
                     campaign_id=campaign_id
                 )
-            
+
             # 2. Statistical analysis
             statistical_result = await self.evaluator.run_statistical_significance_analysis(
                 evaluation_data=variant_results,
                 analysis_type="ab_testing",
                 confidence_level=config.confidence_level
             )
-            
+
             # 3. Bias detection
             bias_result = await self.evaluator.detect_evaluation_bias(
                 evaluation_history=variant_results
             )
-            
+
             # 4. Generate recommendations
             recommendations = self._generate_recommendations(
                 variant_results, statistical_result, bias_result
             )
-            
+
             campaign_result = CampaignResult(
                 campaign_id=campaign_id,
                 variant_results=variant_results,
@@ -522,16 +522,16 @@ class EvaluationWorkflow:
                 bias_analysis=bias_result,
                 recommendations=recommendations
             )
-            
+
             # Store final results
             await self.artifact_store.store_artifact(
                 artifact_type="campaign_result",
                 content=campaign_result,
                 campaign_id=campaign_id
             )
-            
+
             return campaign_result
-            
+
         except Exception as e:
             await self._handle_campaign_error(campaign_id, e)
             raise
@@ -572,7 +572,7 @@ class TestcraftConfig:
     generation: GenerationConfig
     evaluation: EvaluationConfig
     llm: LLMConfig
-    
+
     @classmethod
     def from_toml(cls, toml_path: Path) -> 'TestcraftConfig':
         """Load configuration from TOML file."""
@@ -595,29 +595,29 @@ class EvaluationConfig:
 # testcraft/config/loader.py
 class ConfigLoader:
     """Hierarchical configuration loader."""
-    
+
     @classmethod
     def load_config(cls, project_root: Path) -> TestcraftConfig:
         """Load configuration from multiple sources."""
         # 1. Start with defaults
         config = TestcraftConfig.default()
-        
+
         # 2. Load global config
         global_config = cls._load_global_config()
         if global_config:
             config = cls._merge_configs(config, global_config)
-        
+
         # 3. Load project config
         project_config = cls._load_project_config(project_root)
         if project_config:
             config = cls._merge_configs(config, project_config)
-        
+
         # 4. Apply environment overrides
         config = cls._apply_env_overrides(config)
-        
+
         # 5. Validate final configuration
         cls._validate_config(config)
-        
+
         return config
 ```
 
@@ -631,23 +631,23 @@ TestCraft uses constructor-based dependency injection for loose coupling and tes
 # testcraft/cli/dependency_injection.py
 class DependencyContainer:
     """Container for managing dependencies."""
-    
+
     def __init__(self, config: TestcraftConfig):
         self.config = config
         self._instances: Dict[str, Any] = {}
-    
+
     def get_llm_adapter(self) -> LLMPort:
         """Get LLM adapter instance."""
         if 'llm_adapter' not in self._instances:
             self._instances['llm_adapter'] = LLMRouter.from_config(self.config.llm)
         return self._instances['llm_adapter']
-    
+
     def get_coverage_adapter(self) -> CoveragePort:
         """Get coverage adapter instance."""
         if 'coverage_adapter' not in self._instances:
             self._instances['coverage_adapter'] = TestcraftCoverageAdapter()
         return self._instances['coverage_adapter']
-    
+
     def get_generate_usecase(self) -> GenerateUseCase:
         """Get test generation use case."""
         return GenerateUseCase(
@@ -664,7 +664,7 @@ class DependencyContainer:
 def create_dependency_container(config: TestcraftConfig) -> DependencyContainer:
     """Factory function for creating dependency container."""
     container = DependencyContainer(config)
-    
+
     # Register adapters based on configuration
     if config.evaluation.enabled:
         container.register('evaluation_harness', TestEvaluationHarness(
@@ -672,7 +672,7 @@ def create_dependency_container(config: TestcraftConfig) -> DependencyContainer:
             coverage_adapter=container.get_coverage_adapter(),
             llm_adapter=container.get_llm_adapter()
         ))
-    
+
     return container
 ```
 
@@ -694,7 +694,7 @@ class ConfigurationError(TestcraftError):
 
 class LLMError(TestcraftError):
     """LLM provider errors."""
-    
+
     def __init__(self, message: str, provider: str, retryable: bool = False):
         super().__init__(message)
         self.provider = provider
@@ -714,28 +714,28 @@ class CoverageAnalysisError(TestcraftError):
 ```python
 class ErrorHandler:
     """Centralized error handling and recovery."""
-    
+
     def __init__(self, config: TestcraftConfig):
         self.config = config
         self.retry_config = config.error_handling
-    
+
     async def handle_llm_error(self, error: LLMError, context: Dict[str, Any]) -> Any:
         """Handle LLM provider errors with retry logic."""
         if not error.retryable:
             raise error
-        
+
         retry_count = context.get('retry_count', 0)
         if retry_count >= self.retry_config.max_retries:
             raise error
-        
+
         # Exponential backoff
         delay = self.retry_config.base_delay * (2 ** retry_count)
         await asyncio.sleep(delay)
-        
+
         # Retry with alternative provider if available
         if self.retry_config.fallback_provider:
             context['provider'] = self.retry_config.fallback_provider
-        
+
         context['retry_count'] = retry_count + 1
         return await self._retry_operation(context)
 ```
@@ -765,7 +765,7 @@ TestCraft follows a comprehensive testing strategy with different test types for
 # tests/test_domain_models.py
 class TestGenerationRules:
     """Test domain business rules."""
-    
+
     def test_should_generate_fixture_for_complex_class(self):
         """Test fixture generation rule."""
         source_code = """
@@ -775,11 +775,11 @@ class TestGenerationRules:
                 self.cache = cache
                 self.logger = logger
         """
-        
+
         result = TestGenerationRules.should_generate_fixture(source_code)
-        
+
         assert result is True
-    
+
     def test_confidence_score_calculation(self):
         """Test confidence score calculation."""
         metrics = {
@@ -788,9 +788,9 @@ class TestGenerationRules:
             'tests_pass': True,
             'coverage_improvement': 85.0
         }
-        
+
         score = TestGenerationRules.calculate_confidence_score(metrics)
-        
+
         assert 0.8 <= score <= 1.0
 ```
 
@@ -800,30 +800,30 @@ class TestGenerationRules:
 # tests/test_evaluation_integration.py
 class TestEvaluationIntegration:
     """Integration tests for evaluation harness."""
-    
+
     @pytest.fixture
     def harness(self, tmp_path):
         """Create evaluation harness for testing."""
         config = TestcraftConfig.default()
         config.evaluation.enabled = True
-        
+
         return TestEvaluationHarness(
             config=config,
             project_root=tmp_path
         )
-    
+
     async def test_single_evaluation_workflow(self, harness):
         """Test complete single evaluation workflow."""
         test_content = """
         def test_add():
             assert add(2, 3) == 5
         """
-        
+
         result = harness.evaluate_single_test(
             test_content=test_content,
             source_file="src/calculator.py"
         )
-        
+
         assert result.acceptance.syntactically_valid
         assert result.acceptance.imports_successfully
         assert result.llm_judge.overall_score > 0
@@ -835,7 +835,7 @@ class TestEvaluationIntegration:
 # tests/test_cli_integration.py
 class TestCLIIntegration:
     """End-to-end CLI tests."""
-    
+
     def test_evaluation_ab_test_command(self, tmp_path, runner):
         """Test A/B testing CLI command."""
         # Setup test configuration
@@ -844,13 +844,13 @@ class TestCLIIntegration:
             "prompt_variants": [...],
             "test_dataset": [...]
         }))
-        
+
         # Run command
         result = runner.invoke(app, [
             'evaluation', 'ab-test', str(config_file),
             '--statistical-testing'
         ])
-        
+
         assert result.exit_code == 0
         assert "A/B testing pipeline completed" in result.output
 ```
@@ -865,7 +865,7 @@ TestCraft provides several extension points for customization.
 # Create custom LLM adapter
 class CustomLLMAdapter(LLMPort):
     """Custom LLM provider implementation."""
-    
+
     async def generate_tests(self, source_files, analysis, config):
         """Custom test generation logic."""
         # Your implementation here
@@ -881,15 +881,15 @@ llm_router.register("custom", CustomLLMAdapter())
 # Create custom evaluation adapter
 class CustomEvaluationAdapter(EvaluationPort):
     """Custom evaluation metrics."""
-    
+
     def evaluate_single(self, test_content, source_file, config):
         """Add custom evaluation criteria."""
         base_result = super().evaluate_single(test_content, source_file, config)
-        
+
         # Add custom metrics
         custom_score = self._calculate_business_logic_coverage(test_content)
         base_result.custom_metrics = {'business_logic_coverage': custom_score}
-        
+
         return base_result
 ```
 
@@ -913,15 +913,15 @@ def custom_analysis(
 # Plugin interface
 class TestcraftPlugin(Protocol):
     """Interface for TestCraft plugins."""
-    
+
     def name(self) -> str:
         """Plugin name."""
         ...
-    
+
     def initialize(self, container: DependencyContainer) -> None:
         """Initialize plugin with dependency container."""
         ...
-    
+
     def register_adapters(self, container: DependencyContainer) -> None:
         """Register plugin adapters."""
         ...

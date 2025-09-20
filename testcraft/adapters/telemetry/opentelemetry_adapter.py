@@ -96,6 +96,12 @@ class OtelSpanContextManager:
         self.span_context = span_context
         self.anonymize_paths = anonymize_paths
 
+        # Protocol properties - delegate to span_context
+        self.trace_id = span_context.trace_id
+        self.span_id = span_context.span_id
+        self.parent_span_id = span_context.parent_span_id
+        self.baggage = span_context.baggage
+
     def set_attribute(self, key: str, value: Any) -> None:
         """Set an attribute on the current span."""
         # Sanitize sensitive data
@@ -137,6 +143,10 @@ class OtelSpanContextManager:
         if hasattr(self.span, "record_exception"):
             self.span.record_exception(exception)
         self.set_status("ERROR", str(exception))
+
+    def get_trace_context(self) -> SpanContext:
+        """Get the trace context for this span."""
+        return self.span_context
 
     def _sanitize_value(self, key: str, value: Any) -> AttributeValue | None:
         """Sanitize attribute values for privacy and OpenTelemetry compatibility."""
@@ -374,7 +384,7 @@ class OpenTelemetryAdapter:
         kind: SpanKind = SpanKind.INTERNAL,
         attributes: dict[str, Any] | None = None,
         parent_context: SpanContext | None = None,
-    ) -> AbstractContextManager[OtelSpanContextManager]:
+    ) -> AbstractContextManager[SpanContext]:
         """
         Create a new telemetry span.
 
@@ -537,7 +547,7 @@ class OpenTelemetryAdapter:
         name: str,
         kind: SpanKind = SpanKind.INTERNAL,
         attributes: dict[str, Any] | None = None,
-    ) -> AbstractContextManager[OtelSpanContextManager]:
+    ) -> AbstractContextManager[SpanContext]:
         """Create a child span from the current active span."""
         # The OpenTelemetry SDK automatically handles parent-child relationships
         # when using start_as_current_span within an existing span context

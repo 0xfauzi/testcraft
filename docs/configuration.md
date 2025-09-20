@@ -16,7 +16,7 @@ This document provides a comprehensive reference for all TestCraft configuration
 10. [Quality Analysis](#quality-analysis)
 11. [Prompt Engineering](#prompt-engineering)
 12. [Context Retrieval](#context-retrieval)
-13. [Context Enrichment](#context-enrichment)  
+13. [Context Enrichment](#context-enrichment)
 14. [Enhanced Import System](#enhanced-import-system)
 15. [Telemetry & Observability](#telemetry--observability)
 16. [LLM Providers](#llm-providers)
@@ -889,7 +889,7 @@ TestCraft includes an enhanced import system that provides recursive directory t
 ```toml
 [context_budgets.directory_tree]
 max_depth = 4                 # Maximum directory depth for recursive tree (1-10)
-max_entries_per_dir = 200     # Maximum files/dirs per directory (10-1000)  
+max_entries_per_dir = 200     # Maximum files/dirs per directory (10-1000)
 include_py_only = true        # Only include .py files and directories
 
 [context_enrichment]
@@ -898,7 +898,7 @@ enable_usage_examples = true  # Use enhanced module-qualified usage examples
 
 ### How It Works
 
-1. **During Context Assembly**: 
+1. **During Context Assembly**:
    - Builds recursive directory tree with safety limits
    - Provides comprehensive project structure to LLM
 
@@ -908,7 +908,7 @@ enable_usage_examples = true  # Use enhanced module-qualified usage examples
    - Enhances usage examples with module-qualified imports
 
 3. **During Test Execution**:
-   - Configures `PYTHONPATH` to include project root and `src/` 
+   - Configures `PYTHONPATH` to include project root and `src/`
    - Ensures imports work correctly in both coverage and refinement
 
 ### Benefits
@@ -924,7 +924,7 @@ enable_usage_examples = true  # Use enhanced module-qualified usage examples
 The system tracks module path derivation success rates:
 
 - `module_path_derived_total`: Total attempts
-- `module_path_derived_success`: Successful validations  
+- `module_path_derived_success`: Successful validations
 - `module_path_status_*`: Breakdown by validation status
 - `module_path_fallback_used`: When fallback paths are used
 - `module_path_has_src`: Whether `src/` is in the path

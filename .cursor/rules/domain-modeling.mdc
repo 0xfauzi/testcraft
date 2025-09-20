@@ -24,15 +24,15 @@ class TestCase:
     content: str
     file_path: Path
     framework: str = "pytest"
-    
+
     def validate(self) -> None:
         """Domain validation logic."""
         if not self.name:
             raise ValueError("Test name cannot be empty")
-        
+
         if not self.content.strip():
             raise ValueError("Test content cannot be empty")
-    
+
     def to_file_content(self) -> str:
         """Convert to file format."""
         return f"def {self.name}():\n{self.content}"
@@ -46,7 +46,7 @@ class FileContext:
     file_path: Path
     content: str
     language: str
-    
+
     def __post_init__(self):
         if not self.file_path.exists():
             raise ValueError(f"File does not exist: {self.file_path}")
@@ -57,7 +57,7 @@ class FileContext:
 # ✅ DO: Domain services for complex business logic
 class TestGenerationService:
     """Domain service for test generation business rules."""
-    
+
     def determine_test_strategy(self, context: FileContext) -> str:
         """Business logic for choosing test approach."""
         if context.language == "python":
@@ -97,11 +97,11 @@ from abc import ABC, abstractmethod
 
 class TestCaseRepository(ABC):
     """Repository interface defined in domain layer."""
-    
+
     @abstractmethod
     async def save(self, test_case: TestCase) -> None:
         pass
-    
+
     @abstractmethod
     async def find_by_file(self, file_path: Path) -> List[TestCase]:
         pass

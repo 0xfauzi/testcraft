@@ -17,7 +17,7 @@ class OpenAIAdapter(LLMPort):
     def __init__(self, api_key: str, model: str = "gpt-4"):
         self._client = OpenAI(api_key=api_key)
         self._model = model
-    
+
     async def generate_test(self, context: str) -> TestCase:
         # Implementation
         pass
@@ -30,7 +30,7 @@ class OpenAIAdapter(LLMPort):
 - Purpose: AI model integrations (OpenAI, Anthropic, etc.)
 - Interface: [testcraft/ports/llm_port.py](mdc:testcraft/ports/llm_port.py)
 
-### IO Adapters  
+### IO Adapters
 - Location: [testcraft/adapters/io/](mdc:testcraft/adapters/io/)
 - Purpose: File system and output operations
 - Examples: [testcraft/adapters/io/file_adapter.py](mdc:testcraft/adapters/io/file_adapter.py)

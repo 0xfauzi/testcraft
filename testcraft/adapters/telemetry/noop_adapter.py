@@ -16,10 +16,10 @@ class NoOpSpanContext:
 
     def __init__(self, name: str):
         self.name = name
-        self.trace_id = "noop-trace"
-        self.span_id = "noop-span"
-        self.parent_span_id = None
-        self.baggage = None
+        self.trace_id: str = "noop-trace"
+        self.span_id: str = "noop-span"
+        self.parent_span_id: str | None = None
+        self.baggage: dict[str, Any] | None = None
 
     def set_attribute(self, key: str, value: Any) -> None:
         """No-op attribute setting."""
@@ -41,21 +41,14 @@ class NoOpSpanContext:
         """No-op exception recording."""
         pass
 
-    def get_trace_context(self) -> SpanContext | None:
+    def get_trace_context(self) -> SpanContext:
         """
         Get the trace context for this span.
 
         Returns:
-            SpanContext with trace information for consistency with OpenTelemetry adapter
+            Self since NoOpSpanContext implements SpanContext protocol
         """
-        from ...ports.telemetry_port import SpanContext
-
-        return SpanContext(
-            trace_id=self.trace_id,
-            span_id=self.span_id,
-            parent_span_id=self.parent_span_id,
-            baggage=self.baggage,
-        )
+        return self
 
 
 class NoOpTelemetryAdapter:
@@ -83,7 +76,7 @@ class NoOpTelemetryAdapter:
         kind: SpanKind = SpanKind.INTERNAL,
         attributes: dict[str, Any] | None = None,
         parent_context: SpanContext | None = None,
-    ) -> AbstractContextManager[NoOpSpanContext]:
+    ) -> AbstractContextManager[SpanContext]:
         """
         Create a no-op span.
 
@@ -210,7 +203,7 @@ class NoOpTelemetryAdapter:
         name: str,
         kind: SpanKind = SpanKind.INTERNAL,
         attributes: dict[str, Any] | None = None,
-    ) -> AbstractContextManager[NoOpSpanContext]:
+    ) -> AbstractContextManager[SpanContext]:
         """
         Create a child span (no-op).
 

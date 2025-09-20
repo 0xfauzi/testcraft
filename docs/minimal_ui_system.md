@@ -25,7 +25,7 @@ You can explicitly choose a UI style using:
 # Force minimal UI
 testcraft generate --ui minimal
 
-# Force classic UI  
+# Force classic UI
 testcraft generate --ui classic
 
 # Environment variable
@@ -59,7 +59,7 @@ done 5/7 • tests 23 • Δcov +15.0% • time 45.3s
 
 file                 status  progress  tests  time
 example.py          done    ●●●●      5      8.2s
-helper.py           active  ●●○○      3      4.1s  
+helper.py           active  ●●○○      3      4.1s
 utils.py            waiting ○○○○      —      —
 ```
 
@@ -105,16 +105,16 @@ def detect_ui_style(ui_flag: str | None) -> UIStyle:
     # Priority 1: Explicit --ui flag
     if ui_flag:
         return UIStyle.MINIMAL if ui_flag.lower() == "minimal" else UIStyle.CLASSIC
-    
+
     # Priority 2: Environment variable
     env_ui = os.getenv("TESTCRAFT_UI")
     if env_ui:
         return UIStyle.MINIMAL if env_ui.lower() == "minimal" else UIStyle.CLASSIC
-    
+
     # Priority 3: Auto-detect
     if os.getenv("CI") == "true" or not sys.stdout.isatty():
         return UIStyle.MINIMAL
-    
+
     # Default: Classic for interactive terminals
     return UIStyle.CLASSIC
 ```
@@ -124,7 +124,7 @@ def detect_ui_style(ui_flag: str | None) -> UIStyle:
 The minimal theme uses a restricted color palette:
 
 - `success`: green (completed operations)
-- `error`: red (failed operations) 
+- `error`: red (failed operations)
 - `status_working`: yellow (active operations)
 - `accent`: cyan (highlights and progress)
 - `muted`: dim white (secondary text)
@@ -184,7 +184,7 @@ ui = EnhancedUIAdapter(console, ui_style=UIStyle.MINIMAL)
 The minimal UI system includes comprehensive tests:
 
 - UI style detection logic
-- Theme color restrictions  
+- Theme color restrictions
 - Minimal renderer output format
 - Live tracking layout verification
 - Integration with existing workflows
@@ -203,9 +203,9 @@ pytest tests/test_minimal_ui.py -v
 ┌─────────────────────────────────────────────────────────┐
 │                     📈 Project Summary                    │
 ├─────────────────────────────────────────────────────────┤
-│ 📁 Files Analyzed:      5                               │  
+│ 📁 Files Analyzed:      5                               │
 │ 🧪 Files with Tests:    3 📊 (60%)                       │
-│ 📊 Overall Coverage:    🟢 85.0%                         │  
+│ 📊 Overall Coverage:    🟢 85.0%                         │
 │ 🧪 Tests Generated:     23                              │
 │ 🎯 Success Rate:        ✅ 100%                          │
 └─────────────────────────────────────────────────────────┘
@@ -215,7 +215,7 @@ pytest tests/test_minimal_ui.py -v
 │ Source File                 │ Test File       │ Status   │ Tests  │ Time    │
 ├─────────────────────────────┼─────────────────┼──────────┼────────┼─────────┤
 │ example.py                  │ test_example.py │ 🎉 Success │ 8      │ 12.3s   │
-│ helper.py                   │ test_helper.py  │ 🎉 Success │ 5      │ 8.1s    │ 
+│ helper.py                   │ test_helper.py  │ 🎉 Success │ 5      │ 8.1s    │
 │ utils.py                    │ test_utils.py   │ 🎉 Success │ 10     │ 15.2s   │
 └─────────────────────────────┴─────────────────┴──────────┴────────┴─────────┘
 
@@ -223,7 +223,7 @@ pytest tests/test_minimal_ui.py -v
 ```
 
 ### After (Minimal)
-```  
+```
 done 5/5 • tests 23 • Δcov +15.0% • time 35.6s
 
 file        status  progress  tests  time

@@ -51,7 +51,9 @@ class SafetyPolicies:
     }
 
     @staticmethod
-    def validate_file_path(file_path: Path, project_root: Path | None = None) -> None:
+    def validate_file_path(
+        file_path: str | Path, project_root: Path | None = None
+    ) -> None:
         """
         Validate that a file path is safe for writing.
 

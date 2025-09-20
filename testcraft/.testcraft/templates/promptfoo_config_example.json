@@ -10,7 +10,7 @@
       "tags": ["baseline", "v1"]
     },
     {
-      "id": "enhanced_v1", 
+      "id": "enhanced_v1",
       "name": "Enhanced Test Generation",
       "prompt": "Generate comprehensive unit tests for the following Python function:\n\n{{ source_code }}\n\nRequirements:\n- Test normal cases, edge cases, and error conditions\n- Use descriptive test names that explain the scenario\n- Include docstrings explaining the purpose of each test\n- Add proper assertions with meaningful error messages\n- Follow pytest best practices and conventions\n- Consider boundary values and invalid inputs\n\nGenerate high-quality, maintainable test code:",
       "version": "1.0.0",
@@ -19,7 +19,7 @@
     },
     {
       "id": "cot_reasoning_v1",
-      "name": "Chain-of-Thought Test Generation", 
+      "name": "Chain-of-Thought Test Generation",
       "prompt": "Generate comprehensive unit tests for the following Python function:\n\n{{ source_code }}\n\nThink step by step:\n\n1. **Function Analysis**: What does this function do? What are its inputs and outputs?\n2. **Edge Cases**: What edge cases should be tested (empty inputs, boundary values, etc.)?\n3. **Error Conditions**: What can go wrong? What exceptions should be tested?\n4. **Test Design**: What test cases will provide good coverage?\n5. **Implementation**: Write clear, maintainable test code\n\nNow generate the tests following your analysis:",
       "version": "1.0.0",
       "description": "Uses chain-of-thought reasoning for systematic test generation",
@@ -34,7 +34,7 @@
         "source_code": "def add_numbers(a: int, b: int) -> int:\n    \"\"\"Add two numbers together.\"\"\"\n    if not isinstance(a, int) or not isinstance(b, int):\n        raise TypeError(\"Both arguments must be integers\")\n    return a + b",
         "expected_behaviors": [
           "Handle normal positive integers",
-          "Handle negative integers", 
+          "Handle negative integers",
           "Handle zero values",
           "Raise TypeError for non-integers"
         ]
@@ -59,7 +59,7 @@
         "expected_behaviors": [
           "Handle normal text input with default parameters",
           "Apply lowercase transformation when requested",
-          "Strip whitespace when requested", 
+          "Strip whitespace when requested",
           "Handle empty strings appropriately",
           "Raise ValueError for non-string input",
           "Handle parameter combinations correctly"
@@ -80,7 +80,7 @@
     {
       "vars": {
         "name": "complex_data_processor",
-        "source_file": "data_processor.py", 
+        "source_file": "data_processor.py",
         "source_code": "from typing import List, Dict, Optional, Union\n\ndef process_data_batch(\n    data: List[Dict[str, Union[str, int, float]]], \n    filter_key: Optional[str] = None,\n    filter_value: Optional[Union[str, int, float]] = None,\n    sort_key: Optional[str] = None,\n    limit: Optional[int] = None\n) -> List[Dict[str, Union[str, int, float]]]:\n    \"\"\"Process a batch of data with filtering, sorting, and limiting.\"\"\"\n    if not isinstance(data, list):\n        raise TypeError(\"Data must be a list of dictionaries\")\n    \n    if not data:\n        return []\n    \n    for item in data:\n        if not isinstance(item, dict):\n            raise ValueError(\"Each item must be a dictionary\")\n    \n    result = data.copy()\n    \n    if filter_key and filter_value is not None:\n        result = [item for item in result if item.get(filter_key) == filter_value]\n    \n    if sort_key:\n        try:\n            result = sorted(result, key=lambda x: x.get(sort_key, ''))\n        except TypeError:\n            result = sorted(result, key=lambda x: str(x.get(sort_key, '')))\n    \n    if limit and limit > 0:\n        result = result[:limit]\n    \n    return result",
         "expected_behaviors": [
           "Process normal list of dictionaries",
@@ -88,7 +88,7 @@
           "Sort by specified key when requested",
           "Limit results when limit specified",
           "Handle empty input appropriately",
-          "Raise appropriate errors for invalid input types", 
+          "Raise appropriate errors for invalid input types",
           "Handle mixed data types in sorting",
           "Handle missing keys during filtering/sorting"
         ]
@@ -99,7 +99,7 @@
           "rubric": {
             "correctness": "Tests validate all processing operations and parameter combinations",
             "coverage": "Comprehensive coverage of normal cases, edge cases, and error conditions",
-            "clarity": "Test structure clearly demonstrates complex function behavior", 
+            "clarity": "Test structure clearly demonstrates complex function behavior",
             "safety": "Tests verify robust error handling and data validation"
           }
         }
@@ -111,7 +111,7 @@
       "type": "llm-rubric",
       "rubric": {
         "correctness": "Does the test accurately validate the intended behavior?",
-        "coverage": "Does the test provide adequate coverage of scenarios?", 
+        "coverage": "Does the test provide adequate coverage of scenarios?",
         "clarity": "Is the test code clear, readable, and maintainable?",
         "safety": "Does the test verify proper error handling and edge cases?"
       },

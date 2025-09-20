@@ -32,7 +32,7 @@ from testcraft.adapters.io.file_adapter import FileAdapter
 ```python
 # ✅ DO: Clear type hints
 def process_files(
-    file_paths: List[Path], 
+    file_paths: List[Path],
     config: Dict[str, Any]
 ) -> Optional[TestCase]:
     pass

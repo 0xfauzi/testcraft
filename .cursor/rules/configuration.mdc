@@ -50,7 +50,7 @@ class GenerationConfig(BaseModel):
     model: str = Field(default="gpt-4")
     max_tokens: int = Field(default=2000, gt=0)
     temperature: float = Field(default=0.1, ge=0.0, le=2.0)
-    
+
     class Config:
         env_prefix = "TESTCRAFT_"
 ```

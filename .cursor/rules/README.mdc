@@ -76,7 +76,7 @@ This directory contains comprehensive coding standards and architectural guideli
 
 ### Key Directories
 - `testcraft/domain/` - Core business logic
-- `testcraft/ports/` - Interface definitions  
+- `testcraft/ports/` - Interface definitions
 - `testcraft/adapters/` - External integrations
 - `testcraft/application/` - Use cases
 - `testcraft/cli/` - Command-line interface
@@ -84,7 +84,7 @@ This directory contains comprehensive coding standards and architectural guideli
 
 ### Core Principles
 1. **Reuse existing abstractions** - Don't reinvent the wheel
-2. **AST parsing preferred** - Over regex-based parsing  
+2. **AST parsing preferred** - Over regex-based parsing
 3. **TOML configuration** - Not YAML
 4. **Dependency injection** - Follow established patterns
 5. **Professional UI** - Minimalist, clean design
