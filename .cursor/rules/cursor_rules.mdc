@@ -45,6 +45,10 @@ alwaysApply: true
   - Remove outdated patterns
   - Cross-reference related rules
 
+- **Sessioned Workflows in Cursor:**
+  - When workflows span multiple chat sessions, define them in a dedicated rule and link it here
+  - See [two_session_workflow.mdc](mdc:.cursor/rules/taskmaster/two_session_workflow.mdc) for Taskmaster two-session planning→implementation process
+
 - **Best Practices:**
   - Use bullet points for clarity
   - Keep descriptions concise

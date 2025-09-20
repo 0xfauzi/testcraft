@@ -332,61 +332,123 @@ Adapters implement ports and handle integration with external systems.
 
 ### LLM Adapters
 
+TestCraft's LLM adapters provide a **unified interface** across all AI providers with consistent token budgeting and metadata schemas.
+
+#### Unified API Contract
+
+All LLM adapters implement the same 4-method interface defined in `LLMPort`:
+
 ```python
-# testcraft/adapters/llm/openai.py
-class OpenAIAdapter(LLMPort):
-    """OpenAI implementation of LLM port."""
-
-    def __init__(self, api_key: str, model: str):
-        self.client = OpenAI(api_key=api_key)
-        self.model = model
-
-    async def generate_tests(
-        self,
-        source_files: List[Path],
-        analysis: CodeAnalysis,
-        config: LLMConfig
-    ) -> List[GeneratedTest]:
-        """Generate tests using OpenAI GPT models."""
-        # Implementation using OpenAI API
-        pass
+# testcraft/ports/llm_port.py
+class LLMPort(Protocol):
+    def generate_tests(self, code_content: str, context: str | None = None,
+                      test_framework: str = "pytest", **kwargs) -> dict[str, Any]: ...
+    def analyze_code(self, code_content: str, analysis_type: str = "comprehensive",
+                    **kwargs) -> dict[str, Any]: ...
+    def refine_content(self, original_content: str, refinement_instructions: str,
+                      *, system_prompt: str | None = None, **kwargs) -> dict[str, Any]: ...
+    def generate_test_plan(self, code_content: str, context: str | None = None,
+                          **kwargs) -> dict[str, Any]: ...
 ```
 
-### Adapter Router Pattern
+#### Centralized Token Budgeting
+
+All adapters use `TokenCalculator` for intelligent per-request token allocation:
+
+```python
+# Example from ClaudeAdapter
+def generate_tests(self, code_content: str, context: str | None = None, **kwargs):
+    # Calculate optimal tokens for this specific request
+    input_length = self.token_calculator.estimate_input_tokens(code_content + (context or ""))
+    max_tokens = self.token_calculator.calculate_max_tokens(
+        use_case="test_generation", input_length=input_length
+    )
+
+    # Calculate thinking tokens for Claude's configurable thinking mode
+    thinking_tokens = None
+    if self.token_calculator.supports_thinking_mode():
+        complexity = self._estimate_complexity(code_content)
+        thinking_tokens = self.token_calculator.calculate_thinking_tokens(
+            use_case="test_generation", complexity_level=complexity
+        )
+```
+
+#### Uniform Metadata Schema
+
+All adapters return normalized metadata using `normalize_metadata()` helper:
+
+```python
+# Consistent metadata across all providers
+{
+    "provider": "openai",              # Provider identifier
+    "model_identifier": "gpt-4.1",     # Model/deployment name
+    "parsed": true,                    # JSON parsing success
+    "usage": {                         # Normalized token usage
+        "prompt_tokens": 150,
+        "completion_tokens": 89,
+        "total_tokens": 239
+    },
+    "extras": {                        # Provider-specific metadata
+        "reasoning": "...",             # Optional reasoning data
+        "deployment": "my-deployment",  # Azure-specific
+        "api_version": "2024-02-15",    # Azure-specific
+        "thinking_budget": 1000         # Claude-specific
+    }
+}
+```
+
+#### Provider-Specific Capabilities
+
+**OpenAI Adapters:**
+- **o-series models** (o4-mini, o3, o4): Use Responses API with built-in reasoning
+- **GPT models** (GPT-4.1, GPT-5): Use Chat Completions API
+- Automatic temperature handling (reasoning models ignore custom temperature)
+- Support for both `max_tokens` and `max_completion_tokens` parameters
+
+**Claude Adapters:**
+- **Thinking mode**: Configurable thinking budget for extended reasoning
+- **Models supported**: Claude 3.7 Sonnet, Claude Sonnet 4, Claude Opus 4
+- Best-effort thinking parameter application with graceful degradation
+
+**Azure OpenAI Adapters:**
+- **Deployment mapping**: Maps Azure deployment names to standard model identifiers
+- **Consistent interface**: Same API as OpenAI but with Azure-specific configuration
+- **Metadata preservation**: Azure deployment and API version info in extras
+
+**AWS Bedrock Adapters:**
+- **Model mapping**: Maps Bedrock model IDs to normalized identifiers
+- **LangChain integration**: Uses ChatBedrock for consistent message handling
+- **Claude on AWS**: Access to Claude models through AWS infrastructure
+
+#### LLM Router (Unified Interface)
+
+The `LLMRouter` strictly conforms to `LLMPort` and provides provider selection:
 
 ```python
 # testcraft/adapters/llm/router.py
-class LLMRouter:
-    """Router for multiple LLM providers."""
+class LLMRouter(LLMPort):
+    """Router for multiple LLM providers using user configuration."""
 
-    def __init__(self):
-        self.providers: Dict[str, LLMPort] = {}
+    def __init__(self, config: dict[str, Any] | None = None):
+        self.default_provider = config.get("default_provider", "openai")
 
-    def register(self, name: str, provider: LLMPort) -> None:
-        """Register an LLM provider."""
-        self.providers[name] = provider
+    def generate_tests(self, code_content: str, **kwargs) -> dict[str, Any]:
+        """Generate tests using configured provider."""
+        adapter = self._get_adapter(self.default_provider)
+        return adapter.generate_tests(code_content, **kwargs)  # Sync pass-through
 
-    def get_provider(self, name: str) -> LLMPort:
-        """Get provider by name."""
-        if name not in self.providers:
-            raise ValueError(f"Unknown provider: {name}")
-        return self.providers[name]
-
-    @classmethod
-    def from_config(cls, config: LLMConfig) -> LLMPort:
-        """Create router from configuration."""
-        router = cls()
-
-        # Register available providers
-        if config.openai_api_key:
-            router.register("openai", OpenAIAdapter(config.openai_api_key, config.openai_model))
-
-        if config.anthropic_api_key:
-            router.register("anthropic", ClaudeAdapter(config.anthropic_api_key, config.anthropic_model))
-
-        # Return default provider
-        return router.get_provider(config.default_provider)
+    # All methods are sync (not async) and pass-through to underlying adapters
 ```
+
+#### Key Features
+
+- **🔄 Unified Interface**: All providers implement identical 4-method contract (`generate_tests`, `analyze_code`, `refine_content`, `generate_test_plan`)
+- **🎯 Per-Request Budgeting**: Dynamic token allocation based on input size, use-case, and safety margins
+- **📊 Normalized Metadata**: Consistent response structure with provider-specific extras preserved
+- **🧠 Provider Capabilities**: Preserves unique features (o-series reasoning, Claude thinking mode)
+- **🎛️ Centralized Configuration**: All prompts sourced from `PromptRegistry`, config-based provider selection
+- **🛡️ Robust Error Handling**: Comprehensive error handling with retries, fallbacks, and graceful degradation
+- **✅ Sync Router**: `LLMRouter` strictly conforms to `LLMPort` with synchronous pass-through methods
 
 ## Evaluation Harness Architecture
 

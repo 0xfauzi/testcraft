@@ -120,7 +120,7 @@ class LLMRouter(LLMPort):
                 raise ValueError(f"Unknown provider: {provider}")
         return self._adapters[provider]
 
-    async def generate_tests(
+    def generate_tests(
         self,
         code_content: str,
         context: str | None = None,
@@ -131,42 +131,36 @@ class LLMRouter(LLMPort):
         adapter = self._get_adapter(self.default_provider)
         return adapter.generate_tests(code_content, context, test_framework, **kwargs)
 
-    async def analyze_code(
+    def analyze_code(
         self, code_content: str, analysis_type: str = "comprehensive", **kwargs: Any
     ) -> dict[str, Any]:
         """Analyze code using configured provider."""
         adapter = self._get_adapter(self.default_provider)
         return adapter.analyze_code(code_content, analysis_type, **kwargs)
 
-    async def refine_tests(self, tests: str, feedback: str) -> str:
-        """Refine tests using configured provider."""
-        adapter = self._get_adapter(self.default_provider)
-        # Note: The actual adapters have refine_content method, not refine_tests
-        # This might need to be updated based on the actual adapter interface
-        if hasattr(adapter, "refine_content"):
-            result = adapter.refine_content(tests, feedback)
-            return result.get("refined_content", tests)
-        else:
-            # Fallback for adapters that don't support refinement
-            return tests
-
     def refine_content(
-        self, original_content: str, refinement_instructions: str, **kwargs: Any
+        self,
+        original_content: str,
+        refinement_instructions: str,
+        *,
+        system_prompt: str | None = None,
+        **kwargs: Any,
     ) -> dict[str, Any]:
         """Refine existing content based on specific instructions."""
         adapter = self._get_adapter(self.default_provider)
-        if hasattr(adapter, "refine_content"):
-            return adapter.refine_content(
-                original_content, refinement_instructions, **kwargs
-            )
-        else:
-            # Fallback for adapters that don't support refinement
-            logger.warning(
-                f"Provider {self.default_provider} adapter does not support refine_content method"
-            )
-            return {
-                "refined_content": original_content,
-                "changes_made": "No refinement available",
-                "confidence": 0.0,
-                "metadata": {"error": "refine_content not supported"},
-            }
+        return adapter.refine_content(
+            original_content,
+            refinement_instructions,
+            system_prompt=system_prompt,
+            **kwargs,
+        )
+
+    def generate_test_plan(
+        self,
+        code_content: str,
+        context: str | None = None,
+        **kwargs: Any,
+    ) -> dict[str, Any]:
+        """Generate a comprehensive test plan for the provided code content."""
+        adapter = self._get_adapter(self.default_provider)
+        return adapter.generate_test_plan(code_content, context, **kwargs)

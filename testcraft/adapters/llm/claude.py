@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from typing import Any
+from typing import Any, Literal
 
 import anthropic
 from anthropic import Anthropic
@@ -186,6 +186,22 @@ class ClaudeAdapter(LLMPort):
     ) -> dict[str, Any]:
         """Generate test cases for the provided code content."""
 
+        # Calculate optimal max_tokens and thinking_tokens for this specific request
+        input_length = self.token_calculator.estimate_input_tokens(
+            code_content + (context or "")
+        )
+        max_tokens = self.token_calculator.calculate_max_tokens(
+            use_case="test_generation", input_length=input_length
+        )
+
+        # Calculate thinking tokens for Claude's configurable thinking mode
+        thinking_tokens = None
+        if self.token_calculator.supports_thinking_mode():
+            complexity_level = self._estimate_complexity(code_content)
+            thinking_tokens = self.token_calculator.calculate_thinking_tokens(
+                use_case="test_generation", complexity_level=complexity_level
+            )
+
         # Get prompts from registry
         system_prompt = self.prompt_registry.get_system_prompt(
             prompt_type="llm_test_generation", test_framework=test_framework
@@ -201,7 +217,11 @@ class ClaudeAdapter(LLMPort):
 
         def call() -> dict[str, Any]:
             return self._create_message(
-                system=system_prompt, user_message=user_prompt, **kwargs
+                system=system_prompt,
+                user_message=user_prompt,
+                max_tokens=max_tokens,
+                thinking_tokens=thinking_tokens,
+                **kwargs,
             )
 
         try:
@@ -212,30 +232,41 @@ class ClaudeAdapter(LLMPort):
             parsed = parse_json_response(content)
 
             if parsed.success and parsed.data:
+                # Use normalized metadata
+                from .common import normalize_metadata
+
+                metadata = normalize_metadata(
+                    provider="anthropic",
+                    model_identifier=self.model,
+                    usage_data=result.get("usage"),
+                    parsed=True,
+                    extras={"reasoning": parsed.data.get("reasoning", "")},
+                )
+
                 return {
                     "tests": parsed.data.get("tests", content),
                     "coverage_focus": parsed.data.get("coverage_focus", []),
                     "confidence": parsed.data.get("confidence", 0.5),
-                    "metadata": {
-                        "model": self.model,
-                        "parsed": True,
-                        "reasoning": parsed.data.get("reasoning", ""),
-                        **result.get("usage", {}),
-                    },
+                    "metadata": metadata,
                 }
             else:
                 # Fallback if JSON parsing fails
                 logger.warning(f"Failed to parse JSON response: {parsed.error}")
+                from .common import normalize_metadata
+
+                metadata = normalize_metadata(
+                    provider="anthropic",
+                    model_identifier=self.model,
+                    usage_data=result.get("usage"),
+                    parsed=False,
+                    extras={"parse_error": parsed.error},
+                )
+
                 return {
                     "tests": content,
                     "coverage_focus": ["functions", "edge_cases", "error_handling"],
                     "confidence": 0.3,
-                    "metadata": {
-                        "model": self.model,
-                        "parsed": False,
-                        "parse_error": parsed.error,
-                        **result.get("usage", {}),
-                    },
+                    "metadata": metadata,
                 }
 
         except Exception as e:
@@ -246,6 +277,20 @@ class ClaudeAdapter(LLMPort):
         self, code_content: str, analysis_type: str = "comprehensive", **kwargs: Any
     ) -> dict[str, Any]:
         """Analyze code for testability, complexity, and potential issues."""
+
+        # Calculate optimal max_tokens and thinking_tokens for this specific request
+        input_length = self.token_calculator.estimate_input_tokens(code_content)
+        max_tokens = self.token_calculator.calculate_max_tokens(
+            use_case="code_analysis", input_length=input_length
+        )
+
+        # Calculate thinking tokens for Claude's configurable thinking mode
+        thinking_tokens = None
+        if self.token_calculator.supports_thinking_mode():
+            complexity_level = self._estimate_complexity(code_content)
+            thinking_tokens = self.token_calculator.calculate_thinking_tokens(
+                use_case="code_analysis", complexity_level=complexity_level
+            )
 
         # Get prompts from registry
         system_prompt = self.prompt_registry.get_system_prompt(
@@ -260,7 +305,11 @@ class ClaudeAdapter(LLMPort):
 
         def call() -> dict[str, Any]:
             return self._create_message(
-                system=system_prompt, user_message=user_prompt, **kwargs
+                system=system_prompt,
+                user_message=user_prompt,
+                max_tokens=max_tokens,
+                thinking_tokens=thinking_tokens,
+                **kwargs,
             )
 
         try:
@@ -271,34 +320,48 @@ class ClaudeAdapter(LLMPort):
             parsed = parse_json_response(content)
 
             if parsed.success and parsed.data:
+                from .common import normalize_metadata
+
+                metadata = normalize_metadata(
+                    provider="anthropic",
+                    model_identifier=self.model,
+                    usage_data=result.get("usage"),
+                    parsed=True,
+                    extras={
+                        "analysis_type": analysis_type,
+                        "summary": parsed.data.get("analysis_summary", ""),
+                    },
+                )
+
                 return {
                     "testability_score": parsed.data.get("testability_score", 5.0),
                     "complexity_metrics": parsed.data.get("complexity_metrics", {}),
                     "recommendations": parsed.data.get("recommendations", []),
                     "potential_issues": parsed.data.get("potential_issues", []),
-                    "metadata": {
-                        "model": self.model,
-                        "analysis_type": analysis_type,
-                        "parsed": True,
-                        "summary": parsed.data.get("analysis_summary", ""),
-                        **result.get("usage", {}),
-                    },
+                    "metadata": metadata,
                 }
             else:
                 # Fallback if JSON parsing fails
+                from .common import normalize_metadata
+
+                metadata = normalize_metadata(
+                    provider="anthropic",
+                    model_identifier=self.model,
+                    usage_data=result.get("usage"),
+                    parsed=False,
+                    extras={
+                        "analysis_type": analysis_type,
+                        "raw_content": content,
+                        "parse_error": parsed.error,
+                    },
+                )
+
                 return {
                     "testability_score": 5.0,
                     "complexity_metrics": {},
                     "recommendations": [],
                     "potential_issues": [],
-                    "metadata": {
-                        "model": self.model,
-                        "analysis_type": analysis_type,
-                        "parsed": False,
-                        "raw_content": content,
-                        "parse_error": parsed.error,
-                        **result.get("usage", {}),
-                    },
+                    "metadata": metadata,
                 }
 
         except Exception as e:
@@ -315,6 +378,22 @@ class ClaudeAdapter(LLMPort):
     ) -> dict[str, Any]:
         """Refine existing content based on specific instructions."""
 
+        # Calculate optimal max_tokens and thinking_tokens for this specific request
+        input_length = self.token_calculator.estimate_input_tokens(
+            original_content + refinement_instructions
+        )
+        max_tokens = self.token_calculator.calculate_max_tokens(
+            use_case="refinement", input_length=input_length
+        )
+
+        # Calculate thinking tokens for Claude's configurable thinking mode
+        thinking_tokens = None
+        if self.token_calculator.supports_thinking_mode():
+            complexity_level = self._estimate_complexity(original_content)
+            thinking_tokens = self.token_calculator.calculate_thinking_tokens(
+                use_case="refinement", complexity_level=complexity_level
+            )
+
         # Use pre-rendered instructions built by the caller (RefineAdapter) or fallback to registry
         if system_prompt is None:
             system_prompt = self.prompt_registry.get_system_prompt(
@@ -325,7 +404,11 @@ class ClaudeAdapter(LLMPort):
 
         def call() -> dict[str, Any]:
             return self._create_message(
-                system=system_prompt, user_message=user_prompt, **kwargs
+                system=system_prompt,
+                user_message=user_prompt,
+                max_tokens=max_tokens,
+                thinking_tokens=thinking_tokens,
+                **kwargs,
             )
 
         try:
@@ -393,56 +476,229 @@ class ClaudeAdapter(LLMPort):
                 # Return consistent response structure
                 if validation_result.is_valid and validation_result.data:
                     response_data = validation_result.data
+
+                    from .common import normalize_metadata
+
+                    metadata = normalize_metadata(
+                        provider="anthropic",
+                        model_identifier=self.model,
+                        usage_data=result.get("usage"),
+                        parsed=True,
+                        extras={
+                            "repaired": validation_result.repaired,
+                            "repair_type": validation_result.repair_type,
+                        },
+                    )
+
                     return {
                         "refined_content": response_data["refined_content"],
                         "changes_made": response_data["changes_made"],
                         "confidence": response_data["confidence"],
                         "improvement_areas": response_data["improvement_areas"],
                         "suspected_prod_bug": response_data.get("suspected_prod_bug"),
-                        "metadata": {
-                            "model": self.model,
-                            "parsed": True,
-                            "repaired": validation_result.repaired,
-                            "repair_type": validation_result.repair_type,
-                            **result.get("usage", {}),
-                        },
+                        "metadata": metadata,
                     }
                 else:
                     # Schema validation failed even after repair
                     logger.error(
                         f"Claude schema validation failed: {validation_result.error}"
                     )
+
+                    from .common import normalize_metadata
+
+                    metadata = normalize_metadata(
+                        provider="anthropic",
+                        model_identifier=self.model,
+                        usage_data=result.get("usage"),
+                        parsed=False,
+                        extras={"schema_error": validation_result.error},
+                    )
+
                     return {
                         "refined_content": original_content,  # Safe fallback
                         "changes_made": f"Schema validation failed: {validation_result.error}",
                         "confidence": 0.0,
                         "improvement_areas": ["schema_error"],
                         "suspected_prod_bug": None,
-                        "metadata": {
-                            "model": self.model,
-                            "parsed": False,
-                            "schema_error": validation_result.error,
-                            **result.get("usage", {}),
-                        },
+                        "metadata": metadata,
                     }
             else:
                 # Fallback if JSON parsing fails
+                from .common import normalize_metadata
+
+                metadata = normalize_metadata(
+                    provider="anthropic",
+                    model_identifier=self.model,
+                    usage_data=result.get("usage"),
+                    parsed=False,
+                    extras={"raw_content": content, "parse_error": parsed.error},
+                )
+
                 return {
                     "refined_content": content or original_content,
                     "changes_made": "Refinement applied (JSON parse failed)",
                     "confidence": 0.3,
-                    "metadata": {
-                        "model": self.model,
-                        "parsed": False,
-                        "raw_content": content,
-                        "parse_error": parsed.error,
-                        **result.get("usage", {}),
-                    },
+                    "metadata": metadata,
                 }
 
         except Exception as e:
             logger.error(f"Claude content refinement failed: {e}")
             raise ClaudeError(f"Content refinement failed: {e}") from e
+
+    def generate_test_plan(
+        self,
+        code_content: str,
+        context: str | None = None,
+        **kwargs: Any,
+    ) -> dict[str, Any]:
+        """Generate a comprehensive test plan for the provided code content."""
+
+        # Calculate optimal max_tokens and thinking_tokens for this specific request
+        input_length = self.token_calculator.estimate_input_tokens(
+            code_content + (context or "")
+        )
+        max_tokens = self.token_calculator.calculate_max_tokens(
+            use_case="test_generation", input_length=input_length
+        )
+
+        # Calculate thinking tokens for Claude's configurable thinking mode
+        thinking_tokens = None
+        if self.token_calculator.supports_thinking_mode():
+            complexity_level = self._estimate_complexity(code_content)
+            thinking_tokens = self.token_calculator.calculate_thinking_tokens(
+                use_case="test_generation", complexity_level=complexity_level
+            )
+
+        # Get prompts from registry
+        system_prompt = self.prompt_registry.get_system_prompt(
+            prompt_type="llm_test_plan_generation"
+        )
+
+        additional_context = {"context": context} if context else {}
+        user_prompt = self.prompt_registry.get_user_prompt(
+            prompt_type="llm_test_plan_generation",
+            code_content=code_content,
+            additional_context=additional_context,
+        )
+
+        def call() -> dict[str, Any]:
+            return self._create_message(
+                system=system_prompt,
+                user_message=user_prompt,
+                max_tokens=max_tokens,
+                thinking_tokens=thinking_tokens,
+                **kwargs,
+            )
+
+        try:
+            result = with_retries(call, retries=self.max_retries)
+            content = result.get("content", "")
+
+            # Parse JSON response
+            parsed = parse_json_response(content)
+
+            if parsed.success and parsed.data:
+                from .common import normalize_metadata
+
+                metadata = normalize_metadata(
+                    provider="anthropic",
+                    model_identifier=self.model,
+                    usage_data=result.get("usage"),
+                    parsed=True,
+                    extras={"reasoning": parsed.data.get("reasoning", "")},
+                )
+
+                return {
+                    "test_plan": parsed.data.get("test_plan", ""),
+                    "test_coverage_areas": parsed.data.get("test_coverage_areas", []),
+                    "test_priorities": parsed.data.get("test_priorities", []),
+                    "estimated_complexity": parsed.data.get(
+                        "estimated_complexity", "moderate"
+                    ),
+                    "confidence": parsed.data.get("confidence", 0.5),
+                    "metadata": metadata,
+                }
+            else:
+                # Fallback if JSON parsing fails
+                logger.warning(f"Failed to parse JSON response: {parsed.error}")
+                from .common import normalize_metadata
+
+                metadata = normalize_metadata(
+                    provider="anthropic",
+                    model_identifier=self.model,
+                    usage_data=result.get("usage"),
+                    parsed=False,
+                    extras={"parse_error": parsed.error},
+                )
+
+                return {
+                    "test_plan": content or "Could not generate test plan",
+                    "test_coverage_areas": [
+                        "functions",
+                        "edge_cases",
+                        "error_handling",
+                    ],
+                    "test_priorities": ["high", "medium", "low"],
+                    "estimated_complexity": "moderate",
+                    "confidence": 0.3,
+                    "metadata": metadata,
+                }
+
+        except Exception as e:
+            logger.error(f"Claude test plan generation failed: {e}")
+            raise ClaudeError(f"Test plan generation failed: {e}") from e
+
+    def _estimate_complexity(
+        self, code_content: str
+    ) -> Literal["simple", "moderate", "complex"]:
+        """Estimate code complexity for thinking token calculation.
+
+        Args:
+            code_content: Code to analyze
+
+        Returns:
+            Complexity level estimate
+        """
+        lines = code_content.split("\n")
+        line_count = len([line for line in lines if line.strip()])
+
+        # Count potential complexity indicators
+        complexity_indicators = [
+            "class ",
+            "def ",
+            "async ",
+            "await ",
+            "try:",
+            "except:",
+            "finally:",
+            "with ",
+            "for ",
+            "while ",
+            "if ",
+            "elif ",
+            "lambda",
+            "yield",
+            "import ",
+            "from ",
+            "@",
+            "raise ",
+            "assert ",
+        ]
+
+        indicator_count = sum(
+            1
+            for line in lines
+            for indicator in complexity_indicators
+            if indicator in line
+        )
+
+        # Simple heuristic based on lines and complexity indicators
+        if line_count < 50 and indicator_count < 10:
+            return "simple"
+        elif line_count < 200 and indicator_count < 30:
+            return "moderate"
+        else:
+            return "complex"
 
     def _is_invalid_refined_content(self, content: Any) -> bool:
         """Check if refined_content is invalid (None, empty, or literal 'None'/'null')."""
@@ -457,18 +713,38 @@ class ClaudeAdapter(LLMPort):
         return False
 
     def _create_message(
-        self, system: str, user_message: str, **kwargs: Any
+        self,
+        system: str,
+        user_message: str,
+        max_tokens: int | None = None,
+        thinking_tokens: int | None = None,
+        **kwargs: Any,
     ) -> dict[str, Any]:
         """Create a message using Claude's messages API."""
 
+        # Use provided max_tokens or fallback to instance default
+        tokens_to_use = max_tokens if max_tokens is not None else self.max_tokens
+
         request_kwargs = {
             "model": self.model,
-            "max_tokens": self.max_tokens,
+            "max_tokens": tokens_to_use,
             "temperature": self.temperature,
             "system": system,
             "messages": [{"role": "user", "content": user_message}],
             **kwargs,
         }
+
+        # Add thinking tokens if supported and provided
+        if (
+            thinking_tokens is not None
+            and self.token_calculator.supports_thinking_mode()
+        ):
+            # Note: As of late 2024, Claude thinking mode is still in beta
+            # and may use different parameter names. This is best-effort.
+            # Check Anthropic's latest API documentation for exact parameter names
+            if "thinking_budget" not in kwargs and "thinking_tokens" not in kwargs:
+                # Try common parameter names for thinking mode
+                request_kwargs["thinking_budget"] = thinking_tokens
 
         try:
             response: Message = self.client.messages.create(**request_kwargs)
