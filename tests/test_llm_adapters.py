@@ -19,10 +19,13 @@ def test_openai_generate_tests():
     assert "confidence" in out
     assert "metadata" in out
 
-    # Verify metadata contains expected keys
+    # Verify metadata contains expected keys (normalized schema)
     metadata = out["metadata"]
-    assert "model" in metadata
+    assert "provider" in metadata
+    assert "model_identifier" in metadata
     assert "parsed" in metadata
+    assert "usage" in metadata
+    assert metadata["provider"] == "openai"
 
 
 def test_claude_analyze_code():
@@ -37,9 +40,13 @@ def test_claude_analyze_code():
     assert "potential_issues" in out
     assert "metadata" in out
 
-    # Verify metadata contains expected keys
+    # Verify metadata contains expected keys (normalized schema)
     metadata = out["metadata"]
-    assert "model" in metadata
+    assert "provider" in metadata
+    assert "model_identifier" in metadata
+    assert "parsed" in metadata
+    assert "usage" in metadata
+    assert metadata["provider"] == "anthropic"
     assert "parsed" in metadata
 
 
@@ -54,9 +61,16 @@ def test_azure_refine_content():
     assert "confidence" in out
     assert "metadata" in out
 
-    # Verify metadata contains expected keys
+    # Verify metadata contains expected keys (normalized schema)
     metadata = out["metadata"]
-    assert "deployment" in metadata
+    assert "provider" in metadata
+    assert "model_identifier" in metadata
+    assert "parsed" in metadata
+    assert "usage" in metadata
+    assert metadata["provider"] == "azure-openai"
+    # Deployment info is in extras
+    assert "extras" in metadata
+    assert "deployment" in metadata["extras"]
     assert "parsed" in metadata
 
 
@@ -89,9 +103,16 @@ def test_azure_analyze_code():
     assert "potential_issues" in out
     assert "metadata" in out
 
-    # Verify metadata contains expected keys
+    # Verify metadata contains expected keys (normalized schema)
     metadata = out["metadata"]
-    assert "deployment" in metadata
+    assert "provider" in metadata
+    assert "model_identifier" in metadata
+    assert "parsed" in metadata
+    assert "usage" in metadata
+    assert metadata["provider"] == "azure-openai"
+    # Deployment info is in extras
+    assert "extras" in metadata
+    assert "deployment" in metadata["extras"]
     assert "parsed" in metadata
 
 
@@ -124,9 +145,13 @@ def test_claude_refine_content():
     assert "confidence" in out
     assert "metadata" in out
 
-    # Verify metadata contains expected keys
+    # Verify metadata contains expected keys (normalized schema)
     metadata = out["metadata"]
-    assert "model" in metadata
+    assert "provider" in metadata
+    assert "model_identifier" in metadata
+    assert "parsed" in metadata
+    assert "usage" in metadata
+    assert metadata["provider"] == "anthropic"
     assert "parsed" in metadata
 
 

@@ -13,6 +13,7 @@ from ...ports.cost_port import CostPort
 from ...ports.llm_port import LLMPort
 from ...prompts.registry import PromptRegistry
 from .common import parse_json_response, with_retries
+from .token_calculator import TokenCalculator
 
 logger = logging.getLogger(__name__)
 
@@ -79,6 +80,15 @@ class BedrockAdapter(LLMPort):
         # Initialize cost tracking
         self.cost_port = cost_port
 
+        # Initialize token calculator - map model_id to normalized model name
+        model_name = self._map_model_id_to_model(model_id)
+        self.token_calculator = TokenCalculator(provider="bedrock", model=model_name)
+
+        # Set max_tokens (use provided value or calculate automatically)
+        self.max_tokens = max_tokens or self.token_calculator.calculate_max_tokens(
+            "test_generation"
+        )
+
         # Initialize ChatBedrock client
         self._client: ChatBedrock | None = None
         self._initialize_client(**kwargs)
@@ -131,6 +141,32 @@ class BedrockAdapter(LLMPort):
                     return _Resp()
 
             self._client = _StubClient()  # type: ignore[assignment]
+
+    def _map_model_id_to_model(self, model_id: str) -> str:
+        """Map Bedrock model ID to normalized model identifier.
+
+        Args:
+            model_id: Bedrock model ID
+
+        Returns:
+            Normalized model identifier for TokenCalculator
+        """
+        model_lower = model_id.lower()
+
+        # Map common Bedrock model IDs to standard model names
+        if "claude-3-7-sonnet" in model_lower:
+            return "anthropic.claude-3-7-sonnet-v1:0"
+        elif "claude-sonnet-4" in model_lower:
+            return "anthropic.claude-sonnet-4-v1:0"
+        elif "claude-opus-4" in model_lower:
+            return "anthropic.claude-opus-4-v1:0"
+        elif "claude-3-sonnet" in model_lower:
+            return "anthropic.claude-3-sonnet-20240229-v1:0"
+        elif "claude-3-haiku" in model_lower:
+            return "anthropic.claude-3-haiku-20240307-v1:0"
+        else:
+            # Return the model_id as-is if no mapping found
+            return model_id
 
     @property
     def client(self) -> ChatBedrock:
@@ -402,10 +438,111 @@ class BedrockAdapter(LLMPort):
             logger.error(f"Bedrock content refinement failed: {e}")
             raise BedrockError(f"Content refinement failed: {e}") from e
 
+    def generate_test_plan(
+        self,
+        code_content: str,
+        context: str | None = None,
+        **kwargs: Any,
+    ) -> dict[str, Any]:
+        """Generate a comprehensive test plan for the provided code content."""
+
+        # Calculate optimal max_tokens for this specific request
+        input_length = self.token_calculator.estimate_input_tokens(
+            code_content + (context or "")
+        )
+        max_tokens = self.token_calculator.calculate_max_tokens(
+            use_case="test_generation", input_length=input_length
+        )
+
+        # Get prompts from registry
+        system_message = self.prompt_registry.get_system_prompt(
+            prompt_type="llm_test_plan_generation"
+        )
+
+        additional_context = {"context": context} if context else {}
+        user_content = self.prompt_registry.get_user_prompt(
+            prompt_type="llm_test_plan_generation",
+            code_content=code_content,
+            additional_context=additional_context,
+        )
+
+        def call() -> dict[str, Any]:
+            return self._invoke_chat(
+                system_message=system_message,
+                user_content=user_content,
+                max_tokens=max_tokens,
+                **kwargs,
+            )
+
+        try:
+            result = with_retries(call, retries=self.max_retries)
+            content = result.get("content", "")
+
+            # Parse JSON response
+            parsed = parse_json_response(content)
+
+            if parsed.success and parsed.data:
+                from .common import normalize_metadata
+
+                metadata = normalize_metadata(
+                    provider="bedrock",
+                    model_identifier=self.model_id,
+                    usage_data=result.get("usage"),
+                    parsed=True,
+                    extras={"reasoning": parsed.data.get("reasoning", "")},
+                )
+
+                return {
+                    "test_plan": parsed.data.get("test_plan", ""),
+                    "test_coverage_areas": parsed.data.get("test_coverage_areas", []),
+                    "test_priorities": parsed.data.get("test_priorities", []),
+                    "estimated_complexity": parsed.data.get(
+                        "estimated_complexity", "moderate"
+                    ),
+                    "confidence": parsed.data.get("confidence", 0.5),
+                    "metadata": metadata,
+                }
+            else:
+                # Fallback if JSON parsing fails
+                logger.warning(f"Failed to parse JSON response: {parsed.error}")
+                from .common import normalize_metadata
+
+                metadata = normalize_metadata(
+                    provider="bedrock",
+                    model_identifier=self.model_id,
+                    usage_data=result.get("usage"),
+                    parsed=False,
+                    extras={"parse_error": parsed.error},
+                )
+
+                return {
+                    "test_plan": content or "Could not generate test plan",
+                    "test_coverage_areas": [
+                        "functions",
+                        "edge_cases",
+                        "error_handling",
+                    ],
+                    "test_priorities": ["high", "medium", "low"],
+                    "estimated_complexity": "moderate",
+                    "confidence": 0.3,
+                    "metadata": metadata,
+                }
+
+        except Exception as e:
+            logger.error(f"Bedrock test plan generation failed: {e}")
+            raise BedrockError(f"Test plan generation failed: {e}") from e
+
     def _invoke_chat(
-        self, system_message: str, user_content: str, **kwargs: Any
+        self,
+        system_message: str,
+        user_content: str,
+        max_tokens: int | None = None,
+        **kwargs: Any,
     ) -> dict[str, Any]:
         """Invoke ChatBedrock with system and user messages."""
+
+        # Use provided max_tokens or fallback to instance default
+        tokens_to_use = max_tokens if max_tokens is not None else self.max_tokens
 
         # Create LangChain messages
         messages = [
@@ -413,9 +550,17 @@ class BedrockAdapter(LLMPort):
             HumanMessage(content=user_content),
         ]
 
+        # Update model kwargs with the calculated max_tokens
+        updated_kwargs = kwargs.copy()
+        if "model_kwargs" not in updated_kwargs:
+            updated_kwargs["model_kwargs"] = {}
+
+        # Override max_tokens in model_kwargs
+        updated_kwargs["model_kwargs"]["max_tokens"] = tokens_to_use
+
         try:
             # Invoke the ChatBedrock client
-            response = self.client.invoke(messages, **kwargs)
+            response = self.client.invoke(messages, **updated_kwargs)
 
             # Extract content from LangChain AIMessage response
             content = (

@@ -95,3 +95,31 @@ class LLMPort(Protocol):
             LLMError: If refinement fails
         """
         ...
+
+    def generate_test_plan(
+        self,
+        code_content: str,
+        context: str | None = None,
+        **kwargs: Any,
+    ) -> dict[str, Any]:
+        """
+        Generate a comprehensive test plan for the provided code content.
+
+        Args:
+            code_content: The source code to generate a test plan for
+            context: Optional context information about the code
+            **kwargs: Additional parameters for test plan generation
+
+        Returns:
+            Dictionary containing:
+                - 'test_plan': Structured test plan with categories and descriptions
+                - 'test_coverage_areas': List of specific areas to test
+                - 'test_priorities': Priority ordering of test categories
+                - 'estimated_complexity': Complexity assessment for testing
+                - 'confidence': Confidence score (0.0 to 1.0)
+                - 'metadata': Additional generation metadata
+
+        Raises:
+            LLMError: If test plan generation fails
+        """
+        ...

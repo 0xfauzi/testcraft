@@ -353,6 +353,106 @@ Return ONLY the corrected JSON object, no additional text.
 """
 
 
+def normalize_usage(usage_data: dict[str, Any] | Any) -> dict[str, Any]:
+    """
+    Normalize usage data from different LLM providers to a consistent format.
+
+    Args:
+        usage_data: Raw usage data from provider (dict or object with attributes)
+
+    Returns:
+        Normalized usage dict with consistent field names
+    """
+    normalized = {
+        "prompt_tokens": 0,
+        "completion_tokens": 0,
+        "total_tokens": 0,
+    }
+
+    if usage_data is None:
+        return normalized
+
+    # Handle dict-style usage data
+    if isinstance(usage_data, dict):
+        # OpenAI/Azure style
+        normalized["prompt_tokens"] = usage_data.get("prompt_tokens", 0)
+        normalized["completion_tokens"] = usage_data.get("completion_tokens", 0)
+        normalized["total_tokens"] = usage_data.get("total_tokens", 0)
+
+        # Anthropic style (input_tokens, output_tokens)
+        if "input_tokens" in usage_data:
+            normalized["prompt_tokens"] = usage_data.get("input_tokens", 0)
+        if "output_tokens" in usage_data:
+            normalized["completion_tokens"] = usage_data.get("output_tokens", 0)
+
+        # Calculate total if not provided
+        if normalized["total_tokens"] == 0:
+            normalized["total_tokens"] = (
+                normalized["prompt_tokens"] + normalized["completion_tokens"]
+            )
+
+    # Handle object-style usage data (from SDK responses)
+    elif hasattr(usage_data, "__dict__") or hasattr(usage_data, "__slots__"):
+        # Try OpenAI/Azure attribute names
+        normalized["prompt_tokens"] = getattr(usage_data, "prompt_tokens", 0)
+        normalized["completion_tokens"] = getattr(usage_data, "completion_tokens", 0)
+        normalized["total_tokens"] = getattr(usage_data, "total_tokens", 0)
+
+        # Try Anthropic attribute names
+        if normalized["prompt_tokens"] == 0:
+            normalized["prompt_tokens"] = getattr(usage_data, "input_tokens", 0)
+        if normalized["completion_tokens"] == 0:
+            normalized["completion_tokens"] = getattr(usage_data, "output_tokens", 0)
+
+        # Calculate total if not provided
+        if normalized["total_tokens"] == 0:
+            normalized["total_tokens"] = (
+                normalized["prompt_tokens"] + normalized["completion_tokens"]
+            )
+
+    return normalized
+
+
+def normalize_metadata(
+    provider: str,
+    model_identifier: str,
+    usage_data: dict[str, Any] | Any | None = None,
+    parsed: bool = True,
+    extras: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """
+    Create normalized metadata structure for consistent LLM responses.
+
+    Args:
+        provider: Provider name (openai, anthropic, azure-openai, bedrock)
+        model_identifier: Model or deployment identifier
+        usage_data: Raw usage data from provider
+        parsed: Whether the response was successfully parsed as JSON
+        extras: Provider-specific extra metadata
+
+    Returns:
+        Normalized metadata dict with consistent top-level keys
+    """
+    extras = extras or {}
+
+    # Normalize usage data
+    normalized_usage = normalize_usage(usage_data)
+
+    # Build base metadata
+    metadata = {
+        "provider": provider,
+        "model_identifier": model_identifier,
+        "parsed": parsed,
+        "usage": normalized_usage,
+    }
+
+    # Add provider-specific extras under metadata.extras
+    if extras:
+        metadata["extras"] = extras
+
+    return metadata
+
+
 def normalize_refinement_response(response: dict[str, Any]) -> SchemaValidationResult:
     """
     Normalize and validate refinement response from any LLM provider.

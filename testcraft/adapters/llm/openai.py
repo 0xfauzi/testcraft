@@ -350,30 +350,41 @@ class OpenAIAdapter(LLMPort):
             parsed = parse_json_response(content)
 
             if parsed.success and parsed.data:
+                # Use normalized metadata
+                from .common import normalize_metadata
+
+                metadata = normalize_metadata(
+                    provider="openai",
+                    model_identifier=self.model,
+                    usage_data=result.get("usage"),
+                    parsed=True,
+                    extras={"reasoning": parsed.data.get("reasoning", "")},
+                )
+
                 return {
                     "tests": parsed.data.get("tests", content),
                     "coverage_focus": parsed.data.get("coverage_focus", []),
                     "confidence": parsed.data.get("confidence", 0.5),
-                    "metadata": {
-                        "model": self.model,
-                        "parsed": True,
-                        "reasoning": parsed.data.get("reasoning", ""),
-                        **result.get("usage", {}),
-                    },
+                    "metadata": metadata,
                 }
             else:
                 # Fallback if JSON parsing fails
                 logger.warning(f"Failed to parse JSON response: {parsed.error}")
+                from .common import normalize_metadata
+
+                metadata = normalize_metadata(
+                    provider="openai",
+                    model_identifier=self.model,
+                    usage_data=result.get("usage"),
+                    parsed=False,
+                    extras={"parse_error": parsed.error},
+                )
+
                 return {
                     "tests": content,
                     "coverage_focus": ["functions", "edge_cases", "error_handling"],
                     "confidence": 0.3,
-                    "metadata": {
-                        "model": self.model,
-                        "parsed": False,
-                        "parse_error": parsed.error,
-                        **result.get("usage", {}),
-                    },
+                    "metadata": metadata,
                 }
 
         except Exception as e:
@@ -428,18 +439,25 @@ class OpenAIAdapter(LLMPort):
             parsed = parse_json_response(content)
 
             if parsed.success and parsed.data:
+                from .common import normalize_metadata
+
+                metadata = normalize_metadata(
+                    provider="openai",
+                    model_identifier=self.model,
+                    usage_data=result.get("usage"),
+                    parsed=True,
+                    extras={
+                        "analysis_type": analysis_type,
+                        "summary": parsed.data.get("analysis_summary", ""),
+                    },
+                )
+
                 return {
                     "testability_score": parsed.data.get("testability_score", 5.0),
                     "complexity_metrics": parsed.data.get("complexity_metrics", {}),
                     "recommendations": parsed.data.get("recommendations", []),
                     "potential_issues": parsed.data.get("potential_issues", []),
-                    "metadata": {
-                        "model": self.model,
-                        "analysis_type": analysis_type,
-                        "parsed": True,
-                        "summary": parsed.data.get("analysis_summary", ""),
-                        **result.get("usage", {}),
-                    },
+                    "metadata": metadata,
                 }
             else:
                 # Fallback if JSON parsing fails
@@ -625,6 +643,111 @@ class OpenAIAdapter(LLMPort):
         except Exception as e:
             logger.error(f"OpenAI content refinement failed: {e}")
             raise OpenAIError(f"Content refinement failed: {e}") from e
+
+    def generate_test_plan(
+        self,
+        code_content: str,
+        context: str | None = None,
+        **kwargs: Any,
+    ) -> dict[str, Any]:
+        """Generate a comprehensive test plan for the provided code content."""
+
+        # Calculate optimal max_tokens and thinking_tokens for this specific request
+        input_length = self.token_calculator.estimate_input_tokens(
+            code_content + (context or "")
+        )
+        max_tokens = self.token_calculator.calculate_max_tokens(
+            use_case="test_generation", input_length=input_length
+        )
+
+        # Calculate thinking tokens only for models that support configurable thinking
+        # (OpenAI reasoning models like o4-mini handle reasoning internally)
+        thinking_tokens = None
+        if self.token_calculator.supports_thinking_mode():
+            complexity_level = self._estimate_complexity(code_content)
+            thinking_tokens = self.token_calculator.calculate_thinking_tokens(
+                use_case="test_generation", complexity_level=complexity_level
+            )
+
+        # Get prompts from registry
+        system_prompt = self.prompt_registry.get_system_prompt(
+            prompt_type="llm_test_plan_generation"
+        )
+
+        additional_context = {"context": context} if context else {}
+        user_prompt = self.prompt_registry.get_user_prompt(
+            prompt_type="llm_test_plan_generation",
+            code_content=code_content,
+            additional_context=additional_context,
+        )
+
+        def call() -> dict[str, Any]:
+            return self._chat_completion(
+                system_prompt=system_prompt,
+                user_prompt=user_prompt,
+                max_tokens=max_tokens,
+                thinking_tokens=thinking_tokens,
+                **kwargs,
+            )
+
+        try:
+            result = with_retries(call, retries=self.max_retries)
+            content = result.get("content", "")
+
+            # Parse JSON response
+            parsed = parse_json_response(content)
+
+            if parsed.success and parsed.data:
+                # Use normalized metadata
+                from .common import normalize_metadata
+
+                metadata = normalize_metadata(
+                    provider="openai",
+                    model_identifier=self.model,
+                    usage_data=result.get("usage"),
+                    parsed=True,
+                    extras={"reasoning": parsed.data.get("reasoning", "")},
+                )
+
+                return {
+                    "test_plan": parsed.data.get("test_plan", ""),
+                    "test_coverage_areas": parsed.data.get("test_coverage_areas", []),
+                    "test_priorities": parsed.data.get("test_priorities", []),
+                    "estimated_complexity": parsed.data.get(
+                        "estimated_complexity", "moderate"
+                    ),
+                    "confidence": parsed.data.get("confidence", 0.5),
+                    "metadata": metadata,
+                }
+            else:
+                # Fallback if JSON parsing fails
+                logger.warning(f"Failed to parse JSON response: {parsed.error}")
+                from .common import normalize_metadata
+
+                metadata = normalize_metadata(
+                    provider="openai",
+                    model_identifier=self.model,
+                    usage_data=result.get("usage"),
+                    parsed=False,
+                    extras={"parse_error": parsed.error},
+                )
+
+                return {
+                    "test_plan": content or "Could not generate test plan",
+                    "test_coverage_areas": [
+                        "functions",
+                        "edge_cases",
+                        "error_handling",
+                    ],
+                    "test_priorities": ["high", "medium", "low"],
+                    "estimated_complexity": "moderate",
+                    "confidence": 0.3,
+                    "metadata": metadata,
+                }
+
+        except Exception as e:
+            logger.error(f"OpenAI test plan generation failed: {e}")
+            raise OpenAIError(f"Test plan generation failed: {e}") from e
 
     def _is_invalid_refined_content(self, content: Any) -> bool:
         """Check if refined_content is invalid (None, empty, or literal 'None'/'null')."""
