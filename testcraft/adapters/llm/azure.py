@@ -12,6 +12,7 @@ from openai.types.chat import ChatCompletion
 from ...config.credentials import CredentialError, CredentialManager
 from ...ports.cost_port import CostPort
 from ...ports.llm_port import LLMPort
+from ...prompts.registry import PromptRegistry
 from .common import parse_json_response, with_retries
 
 logger = logging.getLogger(__name__)
@@ -45,6 +46,7 @@ class AzureOpenAIAdapter(LLMPort):
         temperature: float = 0.1,
         max_retries: int = 3,
         credential_manager: CredentialManager | None = None,
+        prompt_registry: PromptRegistry | None = None,
         cost_port: CostPort | None = None,
         **kwargs: Any,
     ):
@@ -58,6 +60,7 @@ class AzureOpenAIAdapter(LLMPort):
             temperature: Response randomness (0.0-2.0, lower = more deterministic)
             max_retries: Maximum retry attempts
             credential_manager: Custom credential manager (optional)
+            prompt_registry: Custom prompt registry (optional)
             cost_port: Optional cost tracking port (optional)
             **kwargs: Additional Azure OpenAI client parameters
         """
@@ -70,6 +73,9 @@ class AzureOpenAIAdapter(LLMPort):
 
         # Initialize credential manager
         self.credential_manager = credential_manager or CredentialManager()
+
+        # Initialize prompt registry
+        self.prompt_registry = prompt_registry or PromptRegistry()
 
         # Initialize cost tracking
         self.cost_port = cost_port
@@ -237,28 +243,18 @@ class AzureOpenAIAdapter(LLMPort):
     ) -> dict[str, Any]:
         """Generate test cases for the provided code content."""
 
-        # Construct the prompt for test generation
-        system_prompt = f"""You are an expert Python test generator. Generate comprehensive {test_framework} tests for the provided code.
+        # Get prompts from registry
+        system_prompt = self.prompt_registry.get_system_prompt(
+            prompt_type="llm_test_generation", test_framework=test_framework
+        )
 
-Requirements:
-- Use {test_framework} testing framework
-- Generate tests that cover edge cases, error conditions, and normal usage
-- Include appropriate fixtures, mocks, and test data
-- Focus on achieving high code coverage
-- Return results as valid JSON with the following structure:
-{{
-  "tests": "# Generated test code here",
-  "coverage_focus": ["list", "of", "areas", "to", "focus", "testing"],
-  "confidence": 0.85,
-  "reasoning": "Brief explanation of test strategy"
-}}
-
-Generate clean, production-ready test code."""
-
-        user_prompt = f"Code to test:\n```python\n{code_content}\n```"
-
-        if context:
-            user_prompt += f"\n\nAdditional context:\n{context}"
+        additional_context = {"context": context} if context else {}
+        user_prompt = self.prompt_registry.get_user_prompt(
+            prompt_type="llm_test_generation",
+            code_content=code_content,
+            additional_context=additional_context,
+            test_framework=test_framework,
+        )
 
         def call() -> dict[str, Any]:
             return self._chat_completion(
@@ -310,29 +306,16 @@ Generate clean, production-ready test code."""
     ) -> dict[str, Any]:
         """Analyze code for testability, complexity, and potential issues."""
 
-        system_prompt = f"""You are an expert Python code analyst. Perform a {analysis_type} analysis of the provided code.
+        # Get prompts from registry
+        system_prompt = self.prompt_registry.get_system_prompt(
+            prompt_type="llm_code_analysis", analysis_type=analysis_type
+        )
 
-Analyze the code for:
-- Testability score (0-10, where 10 is most testable)
-- Complexity metrics (cyclomatic complexity, nesting depth, etc.)
-- Recommendations for improving testability
-- Potential issues or code smells
-- Dependencies and coupling analysis
-
-Return results as valid JSON with this structure:
-{{
-  "testability_score": 8.5,
-  "complexity_metrics": {{
-    "cyclomatic_complexity": 5,
-    "nesting_depth": 3,
-    "function_count": 10
-  }},
-  "recommendations": ["suggestion1", "suggestion2"],
-  "potential_issues": ["issue1", "issue2"],
-  "analysis_summary": "Brief summary of findings"
-}}"""
-
-        user_prompt = f"Code to analyze:\n```python\n{code_content}\n```"
+        user_prompt = self.prompt_registry.get_user_prompt(
+            prompt_type="llm_code_analysis",
+            code_content=code_content,
+            analysis_type=analysis_type,
+        )
 
         def call() -> dict[str, Any]:
             return self._chat_completion(
@@ -393,9 +376,11 @@ Return results as valid JSON with this structure:
     ) -> dict[str, Any]:
         """Refine existing content based on specific instructions."""
 
-        # Use pre-rendered instructions built by the caller (RefineAdapter)
+        # Use pre-rendered instructions built by the caller (RefineAdapter) or fallback to registry
         if system_prompt is None:
-            system_prompt = ""
+            system_prompt = self.prompt_registry.get_system_prompt(
+                prompt_type="llm_content_refinement"
+            )
         user_prompt = refinement_instructions
 
         def call() -> dict[str, Any]:

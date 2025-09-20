@@ -11,6 +11,7 @@ from langchain_core.messages import HumanMessage, SystemMessage
 from ...config.credentials import CredentialError, CredentialManager
 from ...ports.cost_port import CostPort
 from ...ports.llm_port import LLMPort
+from ...prompts.registry import PromptRegistry
 from .common import parse_json_response, with_retries
 
 logger = logging.getLogger(__name__)
@@ -44,6 +45,7 @@ class BedrockAdapter(LLMPort):
         temperature: float = 0.1,
         max_retries: int = 3,
         credential_manager: CredentialManager | None = None,
+        prompt_registry: PromptRegistry | None = None,
         cost_port: CostPort | None = None,
         **kwargs: Any,
     ):
@@ -57,6 +59,7 @@ class BedrockAdapter(LLMPort):
             temperature: Response randomness (0.0-1.0, lower = more deterministic)
             max_retries: Maximum retry attempts
             credential_manager: Custom credential manager (optional)
+            prompt_registry: Custom prompt registry (optional)
             cost_port: Optional cost tracking port (optional)
             **kwargs: Additional ChatBedrock parameters
         """
@@ -69,6 +72,9 @@ class BedrockAdapter(LLMPort):
 
         # Initialize credential manager
         self.credential_manager = credential_manager or CredentialManager()
+
+        # Initialize prompt registry
+        self.prompt_registry = prompt_registry or PromptRegistry()
 
         # Initialize cost tracking
         self.cost_port = cost_port
@@ -142,30 +148,18 @@ class BedrockAdapter(LLMPort):
     ) -> dict[str, Any]:
         """Generate test cases for the provided code content."""
 
-        system_message = f"""You are an expert Python test generator specializing in {test_framework} tests. Your task is to generate comprehensive, production-ready test cases for the provided Python code.
+        # Get prompts from registry
+        system_message = self.prompt_registry.get_system_prompt(
+            prompt_type="llm_test_generation", test_framework=test_framework
+        )
 
-Requirements:
-- Use {test_framework} testing framework
-- Generate tests covering normal usage, edge cases, and error conditions
-- Include appropriate fixtures, mocks, and test data as needed
-- Focus on achieving high code coverage and testing all logical paths
-- Write clean, readable, and maintainable test code
-- Include descriptive test method names and docstrings where helpful
-
-Please return your response as valid JSON in this exact format:
-{{
-  "tests": "# Your complete test code here",
-  "coverage_focus": ["list", "of", "specific", "areas", "to", "test"],
-  "confidence": 0.85,
-  "reasoning": "Brief explanation of your test strategy and approach"
-}}
-
-Generate thorough, professional-quality test code."""
-
-        user_content = f"Code to generate tests for:\n\n```python\n{code_content}\n```"
-
-        if context:
-            user_content += f"\n\nAdditional context:\n{context}"
+        additional_context = {"context": context} if context else {}
+        user_content = self.prompt_registry.get_user_prompt(
+            prompt_type="llm_test_generation",
+            code_content=code_content,
+            additional_context=additional_context,
+            test_framework=test_framework,
+        )
 
         def call() -> dict[str, Any]:
             return self._invoke_chat(
@@ -215,32 +209,16 @@ Generate thorough, professional-quality test code."""
     ) -> dict[str, Any]:
         """Analyze code for testability, complexity, and potential issues."""
 
-        system_message = f"""You are an expert Python code analyst. Perform a {analysis_type} analysis of the provided code to assess its quality, testability, and potential issues.
+        # Get prompts from registry
+        system_message = self.prompt_registry.get_system_prompt(
+            prompt_type="llm_code_analysis", analysis_type=analysis_type
+        )
 
-Your analysis should cover:
-- Testability assessment (score from 0-10, where 10 is most testable)
-- Code complexity metrics (cyclomatic complexity, nesting depth, function count, etc.)
-- Specific recommendations for improving testability and code quality
-- Identification of potential issues, code smells, or anti-patterns
-- Assessment of dependencies, coupling, and overall architecture
-
-Please return your analysis as valid JSON in this exact format:
-{{
-  "testability_score": 8.5,
-  "complexity_metrics": {{
-    "cyclomatic_complexity": 5,
-    "nesting_depth": 3,
-    "function_count": 10,
-    "lines_of_code": 150
-  }},
-  "recommendations": ["specific suggestion 1", "specific suggestion 2"],
-  "potential_issues": ["identified issue 1", "identified issue 2"],
-  "analysis_summary": "Brief overall summary of findings and key insights"
-}}
-
-Provide actionable, specific recommendations."""
-
-        user_content = f"Code to analyze:\n\n```python\n{code_content}\n```"
+        user_content = self.prompt_registry.get_user_prompt(
+            prompt_type="llm_code_analysis",
+            code_content=code_content,
+            analysis_type=analysis_type,
+        )
 
         def call() -> dict[str, Any]:
             return self._invoke_chat(
@@ -290,29 +268,22 @@ Provide actionable, specific recommendations."""
             raise BedrockError(f"Code analysis failed: {e}") from e
 
     def refine_content(
-        self, original_content: str, refinement_instructions: str, **kwargs: Any
+        self,
+        original_content: str,
+        refinement_instructions: str,
+        *,
+        system_prompt: str | None = None,
+        **kwargs: Any,
     ) -> dict[str, Any]:
         """Refine existing content based on specific instructions."""
 
-        system_message = """You are an expert Python developer with deep knowledge of testing best practices, code quality, and software engineering principles. Your task is to refine the provided content according to the specific instructions given.
-
-Focus on:
-- Improving code quality, readability, and maintainability
-- Fixing any bugs, issues, or potential problems
-- Enhancing test coverage and test quality
-- Following Python best practices and modern conventions
-- Maintaining or improving functionality while enhancing structure
-- Ensuring code is production-ready and robust
-
-Please return your refined content as valid JSON in this exact format:
-{{
-  "refined_content": "# Your improved content here",
-  "changes_made": "Detailed summary of all changes and improvements applied",
-  "confidence": 0.9,
-  "improvement_areas": ["area1", "area2", "area3"]
-}}
-
-Provide clear explanations of your improvements."""
+        # Use pre-rendered instructions built by the caller (RefineAdapter) or fallback to registry
+        if system_prompt is None:
+            system_message = self.prompt_registry.get_system_prompt(
+                prompt_type="llm_content_refinement"
+            )
+        else:
+            system_message = system_prompt
 
         user_content = refinement_instructions
 

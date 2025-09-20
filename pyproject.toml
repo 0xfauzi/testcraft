@@ -11,6 +11,7 @@ dependencies = [
     "pydantic>=2.0.0",
     "pydantic-settings>=2.0.0",
     "tomli-w>=1.0.0", # TOML writing support (reading via built-in tomllib)
+    "pyyaml>=6.0", # YAML parsing for config handling in tests
     # AI/LLM SDKs - Latest versions as of September 2025
     "openai>=1.106.1", # OpenAI SDK v1.106.1
     "anthropic>=0.66.0", # Anthropic Claude SDK v0.66.0
