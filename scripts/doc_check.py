@@ -11,7 +11,11 @@ class PlaceholderClass:
 
 
 def placeholder_function() -> None:
-    """Placeholder function."""
+    """
+    No-op placeholder that reserves an API spot for future implementation.
+    
+    This function intentionally performs no action; replace or extend it with real behavior when the module's functionality is implemented.
+    """
     pass
 
 

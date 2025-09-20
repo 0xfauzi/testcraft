@@ -13,5 +13,12 @@ class IndexerAdapter:
         pass
 
     def placeholder_method(self) -> Any:
-        """Placeholder method that needs implementation."""
+        """
+        Placeholder for a future implementation.
+        
+        This method is a stub and must be implemented by subclasses or concrete adapters.
+        
+        Raises:
+            NotImplementedError: Always raised until an implementation is provided.
+        """
         raise NotImplementedError("This method needs to be implemented")

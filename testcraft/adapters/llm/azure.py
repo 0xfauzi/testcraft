@@ -14,5 +14,10 @@ class AzureAdapter:
         pass
 
     def placeholder_method(self) -> Any:
-        """Placeholder method that needs implementation."""
+        """
+        Placeholder for future implementation.
+        
+        Raises:
+            NotImplementedError: Always raised; this method is not yet implemented.
+        """
         raise NotImplementedError("This method needs to be implemented")

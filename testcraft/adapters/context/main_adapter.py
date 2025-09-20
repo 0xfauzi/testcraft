@@ -14,5 +14,12 @@ class MainAdapter:
         pass
 
     def placeholder_method(self) -> Any:
-        """Placeholder method that needs implementation."""
+        """
+        Placeholder method reserved for future implementation.
+        
+        Always raises NotImplementedError to indicate the method must be implemented before use.
+        
+        Raises:
+            NotImplementedError: Always raised with message "This method needs to be implemented".
+        """
         raise NotImplementedError("This method needs to be implemented")

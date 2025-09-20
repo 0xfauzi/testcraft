@@ -10,7 +10,11 @@ class Token_CalculatorAdapter:
     """Adapter implementation for token_calculator operations."""
 
     def __init__(self) -> None:
-        """Initialize the adapter."""
+        """
+        Create a Token_CalculatorAdapter instance.
+        
+        This constructor currently performs no initialization and exists to preserve the adapter's public interface.
+        """
         pass
 
     def placeholder_method(self) -> Any:

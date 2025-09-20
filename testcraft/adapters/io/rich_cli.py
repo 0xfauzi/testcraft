@@ -10,7 +10,11 @@ __version__ = "0.1.0"
 
 
 def placeholder_function() -> None:
-    """Placeholder function."""
+    """
+    No-op placeholder kept for API compatibility.
+    
+    This function intentionally performs no action; it exists to reserve a stable public symbol (e.g., for future implementation or to preserve backwards compatibility).
+    """
     pass
 
 
@@ -18,11 +22,20 @@ class Rich_CliAdapter:
     """Adapter implementation for rich_cli operations."""
 
     def __init__(self) -> None:
-        """Initialize the adapter."""
+        """
+        Create a new Rich_CliAdapter instance.
+        
+        This initializer performs no runtime initialization and exists to allow explicit construction of the adapter.
+        """
         pass
 
     def placeholder_method(self) -> Any:
-        """Placeholder method that needs implementation."""
+        """
+        Placeholder method intended to be implemented by subclasses or concrete implementations.
+        
+        Raises:
+            NotImplementedError: Always raised to indicate the method must be implemented.
+        """
         raise NotImplementedError("This method needs to be implemented")
 
 

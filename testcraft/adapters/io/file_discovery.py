@@ -14,5 +14,12 @@ class File_DiscoveryAdapter:
         pass
 
     def placeholder_method(self) -> Any:
-        """Placeholder method that needs implementation."""
+        """
+        Placeholder for an adapter operation that has not yet been implemented.
+        
+        This stub exists to reserve the method on File_DiscoveryAdapter; callers should not invoke it until a concrete implementation is provided.
+        
+        Raises:
+            NotImplementedError: always raised until the method is implemented.
+        """
         raise NotImplementedError("This method needs to be implemented")

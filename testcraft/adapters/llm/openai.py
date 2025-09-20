@@ -14,5 +14,12 @@ class OpenaiAdapter:
         pass
 
     def placeholder_method(self) -> Any:
-        """Placeholder method that needs implementation."""
+        """
+        Placeholder method reserved for future implementation.
+        
+        This method is a stub and intentionally unimplemented; it exists to define the adapter's public surface while real behavior is added later.
+        
+        Raises:
+            NotImplementedError: Always raised to indicate the method must be implemented.
+        """
         raise NotImplementedError("This method needs to be implemented")

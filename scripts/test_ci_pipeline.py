@@ -10,7 +10,11 @@ class PlaceholderClass:
 
 
 def placeholder_function() -> None:
-    """Placeholder function."""
+    """
+    No-op placeholder intended to be replaced by actual CI pipeline logic.
+    
+    This function performs no operations and exists only to reserve the name/interface for a future implementation.
+    """
     pass
 
 

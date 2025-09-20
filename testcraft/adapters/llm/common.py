@@ -7,7 +7,11 @@ __version__ = "0.1.0"
 
 
 def placeholder_function() -> None:
-    """Placeholder function."""
+    """
+    No-op placeholder function reserved for future implementation.
+    
+    This function intentionally performs no operation and returns None. Use as a stable stub in places where an implementation will be provided later; it has no side effects.
+    """
     pass
 
 
@@ -19,5 +23,14 @@ class CommonAdapter:
         pass
 
     def placeholder_method(self) -> Any:
-        """Placeholder method that needs implementation."""
+        """
+        Placeholder method that must be implemented by subclasses or concrete adapters.
+        
+        This base implementation is intentionally unimplemented and acts as a contract:
+        calling it will always raise a NotImplementedError to indicate the caller
+        should provide a concrete implementation.
+        
+        Raises:
+            NotImplementedError: Always raised to indicate the method must be implemented.
+        """
         raise NotImplementedError("This method needs to be implemented")

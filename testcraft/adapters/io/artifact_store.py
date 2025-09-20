@@ -13,11 +13,25 @@ class Artifact_StoreAdapter:
         pass
 
     def placeholder_method(self) -> Any:
-        """Placeholder method that needs implementation."""
+        """
+        Placeholder method intended to be implemented by concrete adapters.
+        
+        This method currently has no implementation and serves as a required entry point
+        for adapter behavior that subclasses or concrete implementations must provide.
+        
+        Raises:
+            NotImplementedError: Always raised until an implementation is provided.
+        """
         raise NotImplementedError("This method needs to be implemented")
 
 
 # Convenience functions for common use cases
 def placeholder_function() -> None:
-    """Placeholder function."""
+    """
+    No-op placeholder function reserved for future common utilities.
+    
+    This function intentionally performs no action and exists to provide a stable symbol
+    while the module's implementation is incomplete. Replace or implement this function
+    with concrete behaviour when common, module-level functionality is required.
+    """
     pass

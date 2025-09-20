@@ -13,5 +13,12 @@ class Ui_RichAdapter:
         pass
 
     def placeholder_method(self) -> Any:
-        """Placeholder method that needs implementation."""
+        """
+        Placeholder for a future UI adapter method.
+        
+        This method is intentionally unimplemented and must be provided by a concrete adapter.
+        
+        Raises:
+            NotImplementedError: Always raised to indicate the method requires implementation.
+        """
         raise NotImplementedError("This method needs to be implemented")

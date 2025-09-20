@@ -13,5 +13,12 @@ class Writer_AppendAdapter:
         pass
 
     def placeholder_method(self) -> Any:
-        """Placeholder method that needs implementation."""
+        """
+        Placeholder method intended to be implemented by concrete adapters.
+        
+        Subclasses must override this method to perform the adapter-specific append/write operation and return an implementation-specific result.
+        
+        Raises:
+            NotImplementedError: Always in the base class; subclasses must override.
+        """
         raise NotImplementedError("This method needs to be implemented")
