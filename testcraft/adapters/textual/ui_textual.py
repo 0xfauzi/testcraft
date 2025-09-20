@@ -10,6 +10,7 @@ import logging
 import time
 from contextlib import contextmanager
 from pathlib import Path
+from typing import Any
 
 from rich.console import Console
 from textual.app import ComposeResult

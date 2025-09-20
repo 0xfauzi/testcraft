@@ -5,6 +5,8 @@ Provides a DataTable-based widget for showing real-time file processing
 status, including progress indicators, test counts, and duration.
 """
 
+from typing import Any
+
 from textual.reactive import reactive
 from textual.widgets import DataTable
 

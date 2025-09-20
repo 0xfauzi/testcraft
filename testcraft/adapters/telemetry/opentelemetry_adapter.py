@@ -8,6 +8,7 @@ for distributed tracing and metrics collection.
 import hashlib
 import os
 from contextlib import AbstractContextManager, contextmanager
+from typing import Any
 
 from ...ports.telemetry_port import MetricValue, SpanContext, SpanKind
 

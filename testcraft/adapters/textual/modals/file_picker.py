@@ -5,7 +5,9 @@ Provides a dialog for selecting files or directories with
 navigation and filtering capabilities.
 """
 
+from collections.abc import Callable
 from pathlib import Path
+from typing import Any
 
 from textual.app import ComposeResult
 from textual.binding import Binding

@@ -5,6 +5,9 @@ Provides a dialog for getting text input from the user with
 optional validation.
 """
 
+from collections.abc import Callable
+from typing import Any
+
 from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical

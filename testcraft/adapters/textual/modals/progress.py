@@ -6,6 +6,7 @@ with cancellation support.
 """
 
 from collections.abc import Callable
+from typing import Any
 
 from textual.app import ComposeResult
 from textual.binding import Binding

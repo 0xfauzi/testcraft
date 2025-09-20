@@ -1,5 +1,7 @@
 """Dependency injection container for CLI commands."""
 
+from typing import Any
+
 from ..adapters.context.main_adapter import TestcraftContextAdapter
 
 # Import adapters
