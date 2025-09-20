@@ -286,6 +286,14 @@ def format_with_black_only(content: str, timeout: int = 30) -> str:
     return run_black_safe(content, timeout)
 
 
+def format_with_black_isort(content: str, timeout: int = 30) -> str:
+    """Legacy function to format with isort first, then Black (for compatibility)."""
+    # First apply isort
+    isort_formatted = run_isort_safe(content, timeout)
+    # Then apply black
+    return run_black_safe(isort_formatted, timeout)
+
+
 def format_python_content(
     content: str, timeout: int = 15, disable_ruff: bool = False
 ) -> str:
