@@ -94,7 +94,7 @@ MINIMAL_THEME = Theme(
 )
 
 
-def get_theme(ui_style: UIStyle) -> Theme:
+def get_theme(ui_style: "UIStyle") -> Theme:
     """Get the appropriate theme for the UI style."""
     # Import here to avoid circular import
     from .ui_rich import UIStyle
