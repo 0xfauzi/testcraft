@@ -3,6 +3,7 @@
 from typing import Any
 
 from ..adapters.context.main_adapter import TestcraftContextAdapter
+
 # Import adapters
 from ..adapters.io.file_discovery import FileDiscoveryService
 from ..adapters.io.state_json import StateJsonAdapter
@@ -79,20 +80,21 @@ def create_dependency_container(config: TestCraftConfig) -> dict[str, Any]:
 
             # Refine adapter
             from ..config.models import RefineConfig
+
             refine_config = RefineConfig(
                 refinement_guardrails={
                     "reject_empty": True,
                     "reject_literal_none": True,
                     "reject_identical": True,
                     "validate_syntax": True,
-                    "format_on_refine": True
+                    "format_on_refine": True,
                 }
             )
             container["refine_adapter"] = RefineAdapter(
                 llm=container["llm_adapter"],
                 config=refine_config,
                 writer_port=container["writer_adapter"],
-                telemetry_port=container["telemetry_adapter"]
+                telemetry_port=container["telemetry_adapter"],
             )
 
         except Exception as e:

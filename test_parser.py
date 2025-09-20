@@ -8,8 +8,7 @@ from pathlib import Path
 sys.path.insert(0, "/Users/wumpinihussein/Documents/code/ai/testcraft/testcraft")
 
 from testcraft.adapters.parsing.codebase_parser import CodebaseParser
-from testcraft.domain.models import (TestElement, TestElementType,
-                                     TestGenerationPlan)
+from testcraft.domain.models import TestElement, TestGenerationPlan
 
 
 def test_parser():
@@ -27,7 +26,7 @@ def test_parser():
     try:
         result = parser.parse_file(test_file)
 
-        print(f"\nParsing result:")
+        print("\nParsing result:")
         print(f"- Language: {result.get('language')}")
         print(f"- Parse errors: {result.get('parse_errors', [])}")
         print(f"- Number of elements: {len(result.get('elements', []))}")
@@ -35,9 +34,9 @@ def test_parser():
 
         elements = result.get("elements", [])
         if elements:
-            print(f"\nFound elements:")
+            print("\nFound elements:")
             for i, elem in enumerate(elements):
-                print(f"  {i+1}. {elem.name} ({elem.type}) - lines {elem.line_range}")
+                print(f"  {i + 1}. {elem.name} ({elem.type}) - lines {elem.line_range}")
                 if elem.docstring:
                     print(f"     Docstring: {elem.docstring[:100]}...")
 
@@ -49,7 +48,7 @@ def test_parser():
             print("\n❌ No elements found!")
 
         # Test TestGenerationPlan creation with the elements
-        print(f"\n=== Testing TestGenerationPlan creation ===")
+        print("\n=== Testing TestGenerationPlan creation ===")
         try:
             if elements:
                 plan = TestGenerationPlan(
@@ -57,7 +56,7 @@ def test_parser():
                     existing_tests=[],
                     coverage_before=None,
                 )
-                print(f"✅ TestGenerationPlan created successfully!")
+                print("✅ TestGenerationPlan created successfully!")
                 print(f"   - Elements in plan: {len(plan.elements_to_test)}")
             else:
                 print("❌ Cannot create plan - no elements!")
@@ -69,7 +68,7 @@ def test_parser():
 
         imports = result.get("imports", [])
         if imports:
-            print(f"\nFound imports:")
+            print("\nFound imports:")
             for imp in imports[:5]:  # Show first 5
                 print(f"  - {imp}")
 

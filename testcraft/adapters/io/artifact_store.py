@@ -461,9 +461,9 @@ class ArtifactStoreAdapter:
                     }
 
                 stats["artifacts_by_type"][type_name]["count"] += 1
-                stats["artifacts_by_type"][type_name][
-                    "size_bytes"
-                ] += metadata.size_bytes
+                stats["artifacts_by_type"][type_name]["size_bytes"] += (
+                    metadata.size_bytes
+                )
 
                 # Count expired
                 if metadata.expires_at and current_time > metadata.expires_at:

@@ -388,10 +388,14 @@ class AnalyzeUseCase:
         """
         try:
             # Ensure we have candidate test files discovered
-            if self._cached_test_files is None and self._current_project_path is not None:
+            if (
+                self._cached_test_files is None
+                and self._current_project_path is not None
+            ):
                 # Cache not initialized, discover test files once
                 test_files = self._file_discovery.discover_test_files(
-                    self._current_project_path, quiet=True  # Reduce log noise during analysis
+                    self._current_project_path,
+                    quiet=True,  # Reduce log noise during analysis
                 )
                 self._cached_test_files = test_files
             else:

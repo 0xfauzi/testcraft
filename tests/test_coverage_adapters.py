@@ -11,9 +11,11 @@ from unittest.mock import Mock, patch
 
 import pytest
 
-from testcraft.adapters.coverage import (AstFallbackAdapter,
-                                         CompositeCoverageAdapter,
-                                         TestcraftCoverageAdapter)
+from testcraft.adapters.coverage import (
+    AstFallbackAdapter,
+    CompositeCoverageAdapter,
+    TestcraftCoverageAdapter,
+)
 from testcraft.domain.models import CoverageResult
 
 

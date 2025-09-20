@@ -18,6 +18,7 @@ from .rich_cli import TESTCRAFT_THEME, RichCliComponents
 
 class UIStyle(str, Enum):
     """UI style options for controlling visual complexity and theming."""
+
     MINIMAL = "minimal"
     CLASSIC = "classic"
 
@@ -75,7 +76,9 @@ class RichUIAdapter(UIPort):
                     self._active_status.stop()
 
                 # Minimal mode: transient spinner that does not persist
-                if hasattr(self.console, "quiet") and getattr(self.console, "quiet", False):
+                if hasattr(self.console, "quiet") and getattr(
+                    self.console, "quiet", False
+                ):
                     return
                 self._active_status = self.rich_cli.create_status_spinner(message)
                 try:
@@ -86,7 +89,9 @@ class RichUIAdapter(UIPort):
 
             elif progress_type == "bar" or progress_type == "general":
                 # Use progress bar for determinate progress
-                if hasattr(self.console, "quiet") and getattr(self.console, "quiet", False):
+                if hasattr(self.console, "quiet") and getattr(
+                    self.console, "quiet", False
+                ):
                     return
                 if not self._active_progress:
                     self._active_progress = self.rich_cli.create_progress_tracker()

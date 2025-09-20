@@ -20,7 +20,7 @@ async def test_exact_files():
     project_path = Path("/Users/wumpinihussein/Documents/code/ai/weather-collector")
     os.chdir(project_path)
 
-    print(f"🔍 Testing exact files that real generate command processes")
+    print("🔍 Testing exact files that real generate command processes")
 
     try:
         # Load config exactly as CLI does
@@ -42,7 +42,7 @@ async def test_exact_files():
         # Test each file that the real command is trying to process
         for i, file_path_str in enumerate(discovered_files):
             file_path = Path(file_path_str)  # Convert to Path object
-            print(f"\n🔍 File {i+1}: {file_path}")
+            print(f"\n🔍 File {i + 1}: {file_path}")
             print(f"   File exists: {file_path.exists()}")
 
             try:
@@ -55,14 +55,14 @@ async def test_exact_files():
 
                 if not elements:
                     print(
-                        f"   ❌ NO ELEMENTS - would be skipped! (This matches the real command)"
+                        "   ❌ NO ELEMENTS - would be skipped! (This matches the real command)"
                     )
                     print(f"   Parse result keys: {list(parse_result.keys())}")
                     print(f"   Parse errors: {parse_result.get('parse_errors', [])}")
                 else:
-                    print(f"   ✅ Elements found:")
+                    print("   ✅ Elements found:")
                     for j, element in enumerate(elements):
-                        print(f"      Element {j+1}: {element.name} ({element.type})")
+                        print(f"      Element {j + 1}: {element.name} ({element.type})")
 
             except Exception as parse_exception:
                 print(f"   ❌ Parse exception: {parse_exception}")

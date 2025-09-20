@@ -225,9 +225,9 @@ class UtilityUseCase:
                         sync_results["operations_performed"].append(
                             "persist_to_storage"
                         )
-                        sync_results["state_changes"][
-                            "persisted_keys"
-                        ] = persist_result.get("persisted_keys", [])
+                        sync_results["state_changes"]["persisted_keys"] = (
+                            persist_result.get("persisted_keys", [])
+                        )
                         span.set_attribute(
                             "keys_persisted",
                             len(persist_result.get("persisted_keys", [])),

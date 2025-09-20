@@ -25,11 +25,11 @@ async def test_generate_usecase_method():
     try:
         # Load config exactly as CLI does
         config = load_config()
-        print(f"✅ Config loaded successfully")
+        print("✅ Config loaded successfully")
 
         # Create DI container exactly as CLI does
         container = create_dependency_container(config)
-        print(f"✅ DI container created successfully")
+        print("✅ DI container created successfully")
 
         # Get the generate usecase from DI
         generate_usecase = container["generate_usecase"]
@@ -42,10 +42,10 @@ async def test_generate_usecase_method():
         # Call the actual method that's failing
         try:
             result = await generate_usecase._create_generation_plan_for_file(test_file)
-            print(f"✅ _create_generation_plan_for_file completed")
+            print("✅ _create_generation_plan_for_file completed")
 
             if result is None:
-                print(f"❌ Result is None - no testable elements found!")
+                print("❌ Result is None - no testable elements found!")
             else:
                 print(f"✅ Result type: {type(result)}")
                 print(f"   Elements to test: {len(result.elements_to_test)}")
@@ -53,7 +53,7 @@ async def test_generate_usecase_method():
                 print(f"   Coverage before: {result.coverage_before}")
 
                 for i, element in enumerate(result.elements_to_test):
-                    print(f"   Element {i+1}: {element.name} ({element.type})")
+                    print(f"   Element {i + 1}: {element.name} ({element.type})")
 
         except Exception as method_exception:
             print(

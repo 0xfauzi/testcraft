@@ -14,10 +14,10 @@ class LLMRouter(LLMPort):
     """Router for multiple LLM providers using user configuration."""
 
     def __init__(
-        self, 
-        config: dict[str, Any] | None = None, 
+        self,
+        config: dict[str, Any] | None = None,
         cost_port: CostPort | None = None,
-        prompt_registry: PromptRegistry | None = None
+        prompt_registry: PromptRegistry | None = None,
     ):
         """Initialize LLM Router with configuration, optional cost tracking, and prompt registry."""
         self.config = config or {}
@@ -55,7 +55,9 @@ class LLMRouter(LLMPort):
             }
         elif provider == "azure-openai":
             provider_config = {
-                "deployment": self.config.get("azure_openai_deployment", "claude-sonnet-4"),
+                "deployment": self.config.get(
+                    "azure_openai_deployment", "claude-sonnet-4"
+                ),
                 "api_version": self.config.get(
                     "azure_openai_api_version", "2024-02-15-preview"
                 ),
@@ -86,33 +88,33 @@ class LLMRouter(LLMPort):
                 from .openai import OpenAIAdapter
 
                 self._adapters[provider] = OpenAIAdapter(
-                    cost_port=self.cost_port, 
+                    cost_port=self.cost_port,
                     prompt_registry=self.prompt_registry,
-                    **provider_config
+                    **provider_config,
                 )
             elif provider == "anthropic":
                 from .claude import ClaudeAdapter
 
                 self._adapters[provider] = ClaudeAdapter(
-                    cost_port=self.cost_port, 
+                    cost_port=self.cost_port,
                     prompt_registry=self.prompt_registry,
-                    **provider_config
+                    **provider_config,
                 )
             elif provider == "azure-openai":
                 from .azure import AzureOpenAIAdapter
 
                 self._adapters[provider] = AzureOpenAIAdapter(
-                    cost_port=self.cost_port, 
+                    cost_port=self.cost_port,
                     prompt_registry=self.prompt_registry,
-                    **provider_config
+                    **provider_config,
                 )
             elif provider == "bedrock":
                 from .bedrock import BedrockAdapter
 
                 self._adapters[provider] = BedrockAdapter(
-                    cost_port=self.cost_port, 
+                    cost_port=self.cost_port,
                     prompt_registry=self.prompt_registry,
-                    **provider_config
+                    **provider_config,
                 )
             else:
                 raise ValueError(f"Unknown provider: {provider}")
@@ -129,7 +131,9 @@ class LLMRouter(LLMPort):
         adapter = self._get_adapter(self.default_provider)
         return adapter.generate_tests(code_content, context, test_framework, **kwargs)
 
-    async def analyze_code(self, code_content: str, analysis_type: str = "comprehensive", **kwargs: Any) -> dict[str, Any]:
+    async def analyze_code(
+        self, code_content: str, analysis_type: str = "comprehensive", **kwargs: Any
+    ) -> dict[str, Any]:
         """Analyze code using configured provider."""
         adapter = self._get_adapter(self.default_provider)
         return adapter.analyze_code(code_content, analysis_type, **kwargs)
@@ -145,14 +149,16 @@ class LLMRouter(LLMPort):
         else:
             # Fallback for adapters that don't support refinement
             return tests
-    
+
     def refine_content(
         self, original_content: str, refinement_instructions: str, **kwargs: Any
     ) -> dict[str, Any]:
         """Refine existing content based on specific instructions."""
         adapter = self._get_adapter(self.default_provider)
         if hasattr(adapter, "refine_content"):
-            return adapter.refine_content(original_content, refinement_instructions, **kwargs)
+            return adapter.refine_content(
+                original_content, refinement_instructions, **kwargs
+            )
         else:
             # Fallback for adapters that don't support refinement
             logger.warning(
@@ -162,5 +168,5 @@ class LLMRouter(LLMPort):
                 "refined_content": original_content,
                 "changes_made": "No refinement available",
                 "confidence": 0.0,
-                "metadata": {"error": "refine_content not supported"}
+                "metadata": {"error": "refine_content not supported"},
             }

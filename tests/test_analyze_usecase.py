@@ -9,8 +9,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from testcraft.application.analyze_usecase import (AnalyzeUseCase,
-                                                   AnalyzeUseCaseError)
+from testcraft.application.analyze_usecase import AnalyzeUseCase, AnalyzeUseCaseError
 from testcraft.domain.models import AnalysisReport
 
 

@@ -12,10 +12,11 @@ import tempfile
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 from testcraft.application.generation.services.context_assembler import ContextAssembler
-from testcraft.application.generation.services.structure import DirectoryTreeBuilder, ModulePathDeriver
+from testcraft.application.generation.services.structure import (
+    DirectoryTreeBuilder,
+    ModulePathDeriver,
+)
 from testcraft.domain.models import TestElement, TestElementType, TestGenerationPlan
 
 
@@ -27,7 +28,7 @@ class TestEnhancedContextIntegration:
         self.temp_dir = None
         self.mock_context_port = MagicMock()
         self.mock_parser_port = MagicMock()
-        
+
         # Default config with enhanced features enabled
         self.config = {
             "enable_context": True,
@@ -51,7 +52,7 @@ class TestEnhancedContextIntegration:
                 },
             },
         }
-        
+
         self.context_assembler = ContextAssembler(
             context_port=self.mock_context_port,
             parser_port=self.mock_parser_port,
@@ -62,12 +63,13 @@ class TestEnhancedContextIntegration:
         """Clean up test environment."""
         if self.temp_dir:
             import shutil
+
             shutil.rmtree(self.temp_dir, ignore_errors=True)
 
     def create_test_project(self, structure: dict) -> Path:
         """Create a temporary project with given structure."""
         self.temp_dir = Path(tempfile.mkdtemp())
-        
+
         def create_path(current_path: Path, struct: dict):
             for name, content in struct.items():
                 path = current_path / name
@@ -77,71 +79,73 @@ class TestEnhancedContextIntegration:
                     create_path(path, content)
                 else:
                     # File
-                    path.write_text(content or "# Test file\n", encoding='utf-8')
-        
+                    path.write_text(content or "# Test file\n", encoding="utf-8")
+
         create_path(self.temp_dir, structure)
-        
+
         # Add project markers
         (self.temp_dir / "pyproject.toml").write_text(
-            '[project]\nname = "test-project"\n', encoding='utf-8'
+            '[project]\nname = "test-project"\n', encoding="utf-8"
         )
-        
+
         return self.temp_dir
 
     def test_recursive_directory_tree_integration(self):
         """Test recursive directory tree building with realistic project structure."""
-        project_root = self.create_test_project({
-            "src": {
-                "myapi": {
-                    "__init__.py": "",
-                    "handlers": {
+        project_root = self.create_test_project(
+            {
+                "src": {
+                    "myapi": {
                         "__init__.py": "",
-                        "users.py": "class UserHandler: pass\n",
-                        "auth.py": "class AuthHandler: pass\n",
-                    },
-                    "models": {
-                        "__init__.py": "",
-                        "user.py": "class User: pass\n",
-                    },
-                    "utils.py": "def helper(): pass\n",
-                }
-            },
-            "tests": {
-                "__init__.py": "",
-                "test_handlers": {
-                    "__init__.py": "",
-                    "test_users.py": "def test_user_handler(): pass\n",
+                        "handlers": {
+                            "__init__.py": "",
+                            "users.py": "class UserHandler: pass\n",
+                            "auth.py": "class AuthHandler: pass\n",
+                        },
+                        "models": {
+                            "__init__.py": "",
+                            "user.py": "class User: pass\n",
+                        },
+                        "utils.py": "def helper(): pass\n",
+                    }
                 },
-                "fixtures": {
-                    "users.py": "@pytest.fixture\ndef user(): pass\n",
-                }
-            },
-            "docs": {
-                "api.md": "# API Documentation\n",
+                "tests": {
+                    "__init__.py": "",
+                    "test_handlers": {
+                        "__init__.py": "",
+                        "test_users.py": "def test_user_handler(): pass\n",
+                    },
+                    "fixtures": {
+                        "users.py": "@pytest.fixture\ndef user(): pass\n",
+                    },
+                },
+                "docs": {
+                    "api.md": "# API Documentation\n",
+                },
             }
-        })
-        
+        )
+
         files_to_process = [project_root / "src" / "myapi" / "handlers" / "users.py"]
-        
+
         # Test gather_project_context with recursive tree
         context = self.context_assembler.gather_project_context(
             project_root, files_to_process
         )
-        
+
         # Verify project structure is recursive and detailed
         project_structure = context.get("project_structure", {})
         assert project_structure["name"] == project_root.name
         assert project_structure["type"] == "directory"
-        
+
         # Should have children with nested structure
         children = project_structure.get("children", [])
         assert len(children) > 0
-        
+
         # Find src directory
         src_dir = next((c for c in children if c["name"] == "src"), None)
         assert src_dir is not None
         assert src_dir["type"] == "directory"
-        
+
         # Should have nested myapi structure
         src_children = src_dir.get("children", [])
         myapi_dir = next((c for c in src_children if c["name"] == "myapi"), None)
@@ -149,22 +153,24 @@ class TestEnhancedContextIntegration:
 
     def test_module_path_derivation_integration(self):
         """Test module path derivation integration with context assembly."""
-        project_root = self.create_test_project({
-            "src": {
-                "mypackage": {
-                    "__init__.py": "",
-                    "core.py": """
+        project_root = self.create_test_project(
+            {
+                "src": {
+                    "mypackage": {
+                        "__init__.py": "",
+                        "core.py": """
 class CoreService:
     def process(self): pass
 
 def utility_function(): pass
 """,
+                    }
                 }
             }
-        })
-        
+        )
+
         source_file = project_root / "src" / "mypackage" / "core.py"
-        
+
         # Create test plan
         plan = TestGenerationPlan(
             file_path=str(source_file),
@@ -185,38 +191,42 @@ def utility_function(): pass
             existing_tests=[],
             coverage_info={},
         )
-        
+
         # Mock successful module path derivation
-        with patch.object(ModulePathDeriver, 'derive_module_path') as mock_derive:
+        with patch.object(ModulePathDeriver, "derive_module_path") as mock_derive:
             mock_derive.return_value = {
                 "module_path": "mypackage.core",
                 "validation_status": "validated",
                 "import_suggestion": "from mypackage.core import {ClassName}",
             }
-            
+
             # Test context_for_generation
             context = self.context_assembler.context_for_generation(plan, source_file)
-            
+
             # Verify module path info is included in context
             assert context is not None
             # Context should contain module path information
-            assert "Module Path: mypackage.core" in context or "mypackage.core" in context
+            assert (
+                "Module Path: mypackage.core" in context or "mypackage.core" in context
+            )
 
     def test_enhanced_usage_examples_integration(self):
         """Test enhanced usage examples with module-qualified imports."""
-        project_root = self.create_test_project({
-            "mylib": {
-                "__init__.py": "",
-                "calculator.py": """
+        project_root = self.create_test_project(
+            {
+                "mylib": {
+                    "__init__.py": "",
+                    "calculator.py": """
 class Calculator:
     def add(self, a, b): return a + b
     def multiply(self, a, b): return a * b
 """,
+                }
             }
-        })
-        
+        )
+
         source_file = project_root / "mylib" / "calculator.py"
-        
+
         # Create test plan
         plan = TestGenerationPlan(
             file_path=str(source_file),
@@ -231,7 +241,7 @@ class Calculator:
             existing_tests=[],
             coverage_info={},
         )
-        
+
         # Mock context port to return usage examples
         self.mock_context_port.retrieve.return_value = {
             "results": [
@@ -245,30 +255,34 @@ class Calculator:
                 },
             ]
         }
-        
+
         # Mock module path derivation
-        with patch.object(ModulePathDeriver, 'derive_module_path') as mock_derive:
+        with patch.object(ModulePathDeriver, "derive_module_path") as mock_derive:
             mock_derive.return_value = {
                 "module_path": "mylib.calculator",
                 "validation_status": "validated",
             }
-            
+
             # Test context generation with enhanced usage examples
             context = self.context_assembler.context_for_generation(plan, source_file)
-            
+
             # Verify usage examples prioritize module-qualified imports
             assert context is not None
-            assert "from mylib.calculator import" in context or "mylib.calculator" in context
+            assert (
+                "from mylib.calculator import" in context
+                or "mylib.calculator" in context
+            )
 
     def test_comprehensive_context_assembly_pipeline(self):
         """Test the complete context assembly pipeline with all enhancements."""
-        project_root = self.create_test_project({
-            "src": {
-                "webapp": {
-                    "__init__.py": "",
-                    "api": {
+        project_root = self.create_test_project(
+            {
+                "src": {
+                    "webapp": {
                         "__init__.py": "",
-                        "endpoints.py": """
+                        "api": {
+                            "__init__.py": "",
+                            "endpoints.py": """
 import os
 from typing import Dict
 from fastapi import FastAPI
@@ -285,15 +299,15 @@ class UserService:
         # Implementation here
         return {'id': 1, 'email': user_data['email']}
 """,
-                    },
-                    "models": {
-                        "__init__.py": "",
-                        "user.py": "class User: pass\n",
-                    },
-                }
-            },
-            "tests": {
-                "conftest.py": """
+                        },
+                        "models": {
+                            "__init__.py": "",
+                            "user.py": "class User: pass\n",
+                        },
+                    }
+                },
+                "tests": {
+                    "conftest.py": """
 import pytest
 
 @pytest.fixture
@@ -305,12 +319,13 @@ def user_service():
 def sample_user_data():
     return {'email': 'test@example.com', 'name': 'Test User'}
 """,
-                "test_endpoints.py": "# existing tests\n",
+                    "test_endpoints.py": "# existing tests\n",
+                },
             }
-        })
-        
+        )
+
         source_file = project_root / "src" / "webapp" / "api" / "endpoints.py"
-        
+
         # Create comprehensive test plan
         plan = TestGenerationPlan(
             file_path=str(source_file),
@@ -331,12 +346,14 @@ def sample_user_data():
             existing_tests=[],
             coverage_info={},
         )
-        
+
         # Mock comprehensive context port responses
         self.mock_context_port.build_context_graph.return_value = {"graph": "mock"}
         self.mock_context_port.index.return_value = {"indexed": True}
         self.mock_context_port.get_related_context.return_value = {
-            "related_files": [str(project_root / "src" / "webapp" / "models" / "user.py")],
+            "related_files": [
+                str(project_root / "src" / "webapp" / "models" / "user.py")
+            ],
             "relationships": ["imports", "usage"],
         }
         self.mock_context_port.retrieve.return_value = {
@@ -347,7 +364,7 @@ def sample_user_data():
                 },
             ]
         }
-        
+
         # Mock parser port
         self.mock_parser_port.parse_file.return_value = {
             "ast": None,  # Would be actual AST
@@ -361,47 +378,55 @@ def sample_user_data():
             ],
             "internal_deps": ["webapp.models.user"],
         }
-        
+
         # Test complete context assembly
         files_to_process = [source_file]
-        
+
         # Test gather_project_context
         project_context = self.context_assembler.gather_project_context(
             project_root, files_to_process
         )
-        
+
         # Verify comprehensive project context
         assert "context_graph" in project_context
         assert "indexed_files" in project_context
         assert "project_structure" in project_context
-        
+
         # Project structure should be recursive and include all relevant files
         project_structure = project_context["project_structure"]
         assert project_structure["type"] == "directory"
         assert len(project_structure.get("children", [])) > 0
-        
+
         # Test context_for_generation with comprehensive features
-        with patch.object(ModulePathDeriver, 'derive_module_path') as mock_derive:
+        with patch.object(ModulePathDeriver, "derive_module_path") as mock_derive:
             mock_derive.return_value = {
                 "module_path": "webapp.api.endpoints",
                 "validation_status": "validated",
                 "import_suggestion": "from webapp.api.endpoints import {ClassName}",
             }
-            
-            generation_context = self.context_assembler.context_for_generation(plan, source_file)
-            
+
+            generation_context = self.context_assembler.context_for_generation(
+                plan, source_file
+            )
+
             # Verify comprehensive context
             assert generation_context is not None
             assert len(generation_context) > 100  # Should be substantial context
-            
+
             # Should include module path information
             assert "webapp.api.endpoints" in generation_context
-            
+
             # Should include environment variable detection
-            assert "DATABASE_URL" in generation_context or "env" in generation_context.lower()
-            
+            assert (
+                "DATABASE_URL" in generation_context
+                or "env" in generation_context.lower()
+            )
+
             # Should include fixture information
-            assert "fixture" in generation_context.lower() or "pytest" in generation_context.lower()
+            assert (
+                "fixture" in generation_context.lower()
+                or "pytest" in generation_context.lower()
+            )
 
     def test_context_budgets_enforcement(self):
         """Test that context budgets are properly enforced."""
@@ -413,11 +438,13 @@ def sample_user_data():
                 }
             }
         }
-        
+
         # Add many files to test directory traversal limits
         for i in range(20):
-            large_structure["src"]["bigpackage"][f"module_{i}.py"] = f"class Module{i}: pass\n"
-        
+            large_structure["src"]["bigpackage"][f"module_{i}.py"] = (
+                f"class Module{i}: pass\n"
+            )
+
         # Add nested directories
         for i in range(5):
             dir_name = f"subpackage_{i}"
@@ -425,55 +452,63 @@ def sample_user_data():
                 "__init__.py": "",
             }
             for j in range(10):
-                large_structure["src"]["bigpackage"][dir_name][f"submodule_{j}.py"] = f"class SubModule{j}: pass\n"
-        
+                large_structure["src"]["bigpackage"][dir_name][f"submodule_{j}.py"] = (
+                    f"class SubModule{j}: pass\n"
+                )
+
         project_root = self.create_test_project(large_structure)
-        
+
         # Test with restrictive budgets
         restrictive_config = self.config.copy()
-        restrictive_config["context_budgets"]["directory_tree"].update({
-            "max_depth": 2,
-            "max_entries_per_dir": 10,
-        })
-        
+        restrictive_config["context_budgets"]["directory_tree"].update(
+            {
+                "max_depth": 2,
+                "max_entries_per_dir": 10,
+            }
+        )
+
         context_assembler = ContextAssembler(
             context_port=self.mock_context_port,
             parser_port=self.mock_parser_port,
             config=restrictive_config,
         )
-        
+
         files_to_process = [project_root / "src" / "bigpackage" / "module_0.py"]
-        
+
         # Mock context port
         self.mock_context_port.build_context_graph.return_value = {"graph": "mock"}
         self.mock_context_port.index.return_value = {"indexed": True}
-        
-        context = context_assembler.gather_project_context(project_root, files_to_process)
-        
+
+        context = context_assembler.gather_project_context(
+            project_root, files_to_process
+        )
+
         # Verify project structure respects budgets
         project_structure = context.get("project_structure", {})
-        
+
         # Should be truncated due to budget limits
         def count_total_entries(structure):
             count = 1  # Count the structure itself
             for child in structure.get("children", []):
                 count += count_total_entries(child)
             return count
-        
+
         total_entries = count_total_entries(project_structure)
         # Should be limited by budget constraints
         assert total_entries < 100  # Much less than the 200+ files we created
 
     def test_error_handling_and_graceful_degradation(self):
         """Test error handling and graceful degradation of enhanced features."""
-        project_root = self.create_test_project({
-            "mypackage": {
-                "module.py": "def test(): pass\n",
+        project_root = self.create_test_project(
+            {
+                "mypackage": {
+                    "module.py": "def test(): pass\n",
+                }
             }
-        })
-        
+        )
+
         source_file = project_root / "mypackage" / "module.py"
-        
+
         plan = TestGenerationPlan(
             file_path=str(source_file),
             elements_to_test=[
@@ -487,38 +522,42 @@ def sample_user_data():
             existing_tests=[],
             coverage_info={},
         )
-        
+
         # Test with failing module path derivation
-        with patch.object(ModulePathDeriver, 'derive_module_path') as mock_derive:
+        with patch.object(ModulePathDeriver, "derive_module_path") as mock_derive:
             mock_derive.side_effect = Exception("Module path derivation failed")
-            
+
             # Should still work without module path enhancement
             context = self.context_assembler.context_for_generation(plan, source_file)
-            
+
             # Context should still be generated, just without module path enhancements
             assert context is not None or context == ""  # Either works or returns empty
-        
+
         # Test with failing directory tree building
-        with patch.object(DirectoryTreeBuilder, 'build_tree_recursive') as mock_build:
+        with patch.object(DirectoryTreeBuilder, "build_tree_recursive") as mock_build:
             mock_build.side_effect = Exception("Directory tree building failed")
-            
+
             # Should fallback gracefully
             files_to_process = [source_file]
-            context = self.context_assembler.gather_project_context(project_root, files_to_process)
-            
+            context = self.context_assembler.gather_project_context(
+                project_root, files_to_process
+            )
+
             # Should have some context even if directory tree fails
             assert "context_graph" in context or "indexed_files" in context
 
     def test_configuration_driven_feature_toggling(self):
         """Test that features can be toggled via configuration."""
-        project_root = self.create_test_project({
-            "mypackage": {
-                "module.py": "def test(): pass\n",
+        project_root = self.create_test_project(
+            {
+                "mypackage": {
+                    "module.py": "def test(): pass\n",
+                }
             }
-        })
-        
+        )
+
         source_file = project_root / "mypackage" / "module.py"
-        
+
         plan = TestGenerationPlan(
             file_path=str(source_file),
             elements_to_test=[
@@ -532,38 +571,38 @@ def sample_user_data():
             existing_tests=[],
             coverage_info={},
         )
-        
+
         # Test with features disabled
         disabled_config = self.config.copy()
         disabled_config["context_enrichment"]["enable_usage_examples"] = False
         disabled_config["enable_context"] = False
-        
+
         context_assembler = ContextAssembler(
             context_port=self.mock_context_port,
             parser_port=self.mock_parser_port,
             config=disabled_config,
         )
-        
+
         context = context_assembler.context_for_generation(plan, source_file)
-        
+
         # Should return None when context is disabled
         assert context is None
-        
+
         # Test with selective feature disabling
         selective_config = self.config.copy()
         selective_config["context_enrichment"]["enable_usage_examples"] = False
-        
+
         selective_assembler = ContextAssembler(
             context_port=self.mock_context_port,
             parser_port=self.mock_parser_port,
             config=selective_config,
         )
-        
+
         # Mock some context responses
         self.mock_context_port.retrieve.return_value = {"results": []}
-        
+
         context = selective_assembler.context_for_generation(plan, source_file)
-        
+
         # Should still generate context but without usage examples
         # The exact behavior depends on other available context
         assert context is not None or context == ""

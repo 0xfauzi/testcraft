@@ -25,11 +25,11 @@ async def test_real_pipeline():
     try:
         # Load config exactly as CLI does
         config = load_config()
-        print(f"✅ Config loaded successfully")
+        print("✅ Config loaded successfully")
 
         # Create DI container exactly as CLI does
         container = create_dependency_container(config)
-        print(f"✅ DI container created successfully")
+        print("✅ DI container created successfully")
 
         # Get the parser from DI
         parser = container["parser_adapter"]
@@ -43,7 +43,7 @@ async def test_real_pipeline():
 
         # Parse using the exact same parser instance
         result = parser.parse_file(test_file)
-        print(f"✅ Parsing completed")
+        print("✅ Parsing completed")
         print(f"   Result type: {type(result)}")
         print(
             f"   Result keys: {list(result.keys()) if isinstance(result, dict) else 'Not a dict'}"
@@ -54,7 +54,7 @@ async def test_real_pipeline():
 
         if elements:
             for i, element in enumerate(elements):
-                print(f"   Element {i+1}: {element.name} ({element.type})")
+                print(f"   Element {i + 1}: {element.name} ({element.type})")
         else:
             print("   ❌ NO ELEMENTS FOUND!")
             print(f"   Raw result: {result}")

@@ -11,8 +11,12 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from ...domain.models import (AnalysisReport, CoverageResult, GenerationResult,
-                              TestGenerationPlan)
+from ...domain.models import (
+    AnalysisReport,
+    CoverageResult,
+    GenerationResult,
+    TestGenerationPlan,
+)
 from ...ports.report_port import ReportPort
 
 
@@ -111,9 +115,9 @@ class JsonReportAdapter(ReportPort):
             }
 
             if include_recommendations:
-                report_content[
-                    "recommendations"
-                ] = self._generate_analysis_recommendations(analysis_data)
+                report_content["recommendations"] = (
+                    self._generate_analysis_recommendations(analysis_data)
+                )
 
             summary = (
                 f"Analysis of {len(analysis_data.files_to_process)} files: "

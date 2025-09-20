@@ -1,0 +1,17 @@
+# Task ID: 32
+# Title: Implement Planning Stage in Generation/Refinement Pipeline
+# Status: pending
+# Dependencies: 2, 3, 4, 11, 14, 17, 28
+# Priority: high
+# Description: Introduce a configurable planning step before generate/refine, with LLM-driven plan creation, user acceptance flow, and integration into CLI and Textual UI.
+# Details:
+1. Add a new application-level orchestration class `PlanUseCase` in `testcraft/application/`, leveraging existing LLM adapters and the context pipeline. 2. Define new domain models: `PlanningRequest`, `PlanOption`, and `PlanningResult` in the domain layer, including metadata (model, params, prompt hash, timestamps). 3. Create new ports in `testcraft/ports/` for planning (`PlanningPort`, `PlanningPresenterPort`), following the adapter pattern; implement an LLM adapter in `testcraft/adapters/llm/` that reuses existing clients. 4. Implement robust prompt management for planning: structured templates, variable substitution, and response parsing per LLM integration rules, including retries, validation, and error handling. 5. Persist accepted plans in the run context/artifact store, with plan hashing for deduplication; ensure generate/refine steps can read accepted plans. 6. Extend the CLI with a `plan` command and integrate planning gating into `generate`/`refine` flows, supporting `--plan-first`, `--auto-accept-plan`, and interactive acceptance/rejection. 7. Update the Textual UI to add a "Plan Review" screen for previewing, accepting/rejecting, and editing planning prompts, maintaining a minimalist, professional design. 8. Add TOML configuration keys for planning prompt, model, and parameters, defaulting to the main LLM if unset. 9. Integrate telemetry for planning durations, acceptance decisions, and plan hashes. 10. Ensure backward compatibility: when planning is disabled, the pipeline remains unchanged.
+
+# Test Strategy:
+- Unit tests for `PlanUseCase` and planning adapter, covering prompt management, retries, error handling, and correct LLM invocation.
+- Integration tests to verify that only accepted plans are injected into generate/refine, and that rejection/edit flows work as intended.
+- CLI tests for the new `plan` command and gating flags, ensuring correct user interaction and plan persistence.
+- UI tests for the Plan Review screen, including acceptance, rejection, and prompt editing scenarios.
+- Configuration tests for TOML keys and default behaviors.
+- Telemetry tests to confirm correct event recording.
+- Documentation review to ensure README and user docs are updated with planning usage and configuration.

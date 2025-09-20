@@ -115,10 +115,10 @@ def try_parse_json(text: str) -> tuple[dict[str, Any] | None, Exception | None]:
             try:
                 repaired = strategy(cleaned)
                 result = json.loads(repaired)
-                logger.debug(f"JSON repair strategy {i+1} succeeded")
+                logger.debug(f"JSON repair strategy {i + 1} succeeded")
                 return result, None
             except Exception as repair_err:
-                logger.debug(f"JSON repair strategy {i+1} failed: {repair_err}")
+                logger.debug(f"JSON repair strategy {i + 1} failed: {repair_err}")
                 continue
 
         # If all strategies fail, return the original error
@@ -192,6 +192,7 @@ def enforce_timeout(start_time: float, timeout_s: float) -> None:
 @dataclass
 class SchemaValidationResult:
     """Result of schema validation and repair attempt."""
+
     is_valid: bool
     data: dict[str, Any] | None
     error: str | None
@@ -204,45 +205,43 @@ def validate_and_repair_schema(
     required_fields: list[str],
     optional_fields: list[str] | None = None,
     field_types: dict[str, type] | None = None,
-    attempt_repair: bool = True
+    attempt_repair: bool = True,
 ) -> SchemaValidationResult:
     """
     Validate and optionally repair LLM response schema.
-    
+
     Args:
         data: Parsed JSON data from LLM response
         required_fields: List of required field names
         optional_fields: List of optional field names (defaults added if missing)
         field_types: Expected types for fields (for validation/coercion)
         attempt_repair: Whether to attempt single-shot repairs
-        
+
     Returns:
         SchemaValidationResult with validation status and potentially repaired data
     """
     optional_fields = optional_fields or []
     field_types = field_types or {}
-    
+
     if not isinstance(data, dict):
         return SchemaValidationResult(
-            is_valid=False, 
-            data=None, 
-            error=f"Expected dict, got {type(data).__name__}"
+            is_valid=False, data=None, error=f"Expected dict, got {type(data).__name__}"
         )
-    
+
     # Check for missing required fields
     missing_required = [field for field in required_fields if field not in data]
     if missing_required and not attempt_repair:
         return SchemaValidationResult(
             is_valid=False,
             data=None,
-            error=f"Missing required fields: {missing_required}"
+            error=f"Missing required fields: {missing_required}",
         )
-    
+
     # Attempt repairs if enabled
     repaired_data = data.copy()
     repair_performed = False
     repair_type = None
-    
+
     if attempt_repair:
         # Add missing required fields with defaults
         for field in missing_required:
@@ -251,7 +250,7 @@ def validate_and_repair_schema(
                 return SchemaValidationResult(
                     is_valid=False,
                     data=None,
-                    error=f"Critical field '{field}' missing and cannot be defaulted"
+                    error=f"Critical field '{field}' missing and cannot be defaulted",
                 )
             elif field == "changes_made":
                 repaired_data[field] = "Changes made but not specified"
@@ -265,7 +264,7 @@ def validate_and_repair_schema(
                 repaired_data[field] = ["general"]  # Generic default
                 repair_performed = True
                 repair_type = "added_missing_fields"
-        
+
         # Add missing optional fields with defaults
         for field in optional_fields:
             if field not in repaired_data:
@@ -273,16 +272,16 @@ def validate_and_repair_schema(
                     repaired_data[field] = None  # Explicit null for consistency
                     repair_performed = True
                     repair_type = "added_optional_defaults"
-    
+
     # Type validation and coercion
     for field, expected_type in field_types.items():
         if field in repaired_data:
             current_value = repaired_data[field]
-            
+
             # Skip None values for optional fields
             if current_value is None and field in optional_fields:
                 continue
-                
+
             if not isinstance(current_value, expected_type):
                 # Attempt type coercion
                 try:
@@ -310,9 +309,9 @@ def validate_and_repair_schema(
                         data=repaired_data if repair_performed else data,
                         error=f"Field '{field}' has invalid type: expected {expected_type.__name__}, got {type(current_value).__name__}",
                         repaired=repair_performed,
-                        repair_type=repair_type
+                        repair_type=repair_type,
                     )
-    
+
     # Final validation after repairs
     final_missing = [field for field in required_fields if field not in repaired_data]
     if final_missing:
@@ -321,26 +320,26 @@ def validate_and_repair_schema(
             data=repaired_data if repair_performed else data,
             error=f"Still missing required fields after repair: {final_missing}",
             repaired=repair_performed,
-            repair_type=repair_type
+            repair_type=repair_type,
         )
-    
+
     return SchemaValidationResult(
         is_valid=True,
         data=repaired_data,
         error=None,
         repaired=repair_performed,
-        repair_type=repair_type
+        repair_type=repair_type,
     )
 
 
 def create_repair_prompt(original_error: str, missing_fields: list[str]) -> str:
     """
     Create a minimal repair prompt for schema issues.
-    
+
     Args:
         original_error: The original validation error
         missing_fields: List of missing required fields
-        
+
     Returns:
         Short repair instruction prompt
     """
@@ -348,7 +347,7 @@ def create_repair_prompt(original_error: str, missing_fields: list[str]) -> str:
 Your previous response had a schema issue: {original_error}
 
 Please provide a valid JSON response with these required fields:
-{', '.join(missing_fields)}
+{", ".join(missing_fields)}
 
 Return ONLY the corrected JSON object, no additional text.
 """
@@ -357,29 +356,34 @@ Return ONLY the corrected JSON object, no additional text.
 def normalize_refinement_response(response: dict[str, Any]) -> SchemaValidationResult:
     """
     Normalize and validate refinement response from any LLM provider.
-    
+
     This is the main entry point for refinement schema enforcement.
-    
+
     Args:
         response: Raw response dict from LLM adapter
-        
+
     Returns:
         SchemaValidationResult with normalized, validated response
     """
-    required_fields = ["refined_content", "changes_made", "confidence", "improvement_areas"]
+    required_fields = [
+        "refined_content",
+        "changes_made",
+        "confidence",
+        "improvement_areas",
+    ]
     optional_fields = ["suspected_prod_bug"]
     field_types = {
         "refined_content": str,
-        "changes_made": str, 
+        "changes_made": str,
         "confidence": float,
         "improvement_areas": list,
-        "suspected_prod_bug": str  # Note: None values handled separately
+        "suspected_prod_bug": str,  # Note: None values handled separately
     }
-    
+
     return validate_and_repair_schema(
         data=response,
         required_fields=required_fields,
         optional_fields=optional_fields,
         field_types=field_types,
-        attempt_repair=True
+        attempt_repair=True,
     )

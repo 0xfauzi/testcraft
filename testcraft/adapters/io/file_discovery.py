@@ -141,7 +141,9 @@ class FileDiscoveryService:
             logger.debug(
                 f"Total files scanned: {total_found}, included: {len(source_files)}"
             )
-            logger.info(f"Discovered {len(source_files)} source files in {project_path} (patterns: {patterns})")
+            logger.info(
+                f"Discovered {len(source_files)} source files in {project_path} (patterns: {patterns})"
+            )
             return source_files
 
         except Exception as e:
@@ -151,7 +153,10 @@ class FileDiscoveryService:
             raise FileDiscoveryError(f"Source file discovery failed: {e}", cause=e)
 
     def discover_test_files(
-        self, project_path: str | Path, test_patterns: list[str] | None = None, quiet: bool = False
+        self,
+        project_path: str | Path,
+        test_patterns: list[str] | None = None,
+        quiet: bool = False,
     ) -> list[str]:
         """
         Discover test files in a project using test-specific patterns.
@@ -210,9 +215,13 @@ class FileDiscoveryService:
                 f"Total test files scanned: {total_found}, included: {len(test_files)}"
             )
             if quiet:
-                logger.debug(f"Discovered {len(test_files)} test files in {project_path} (patterns: {patterns})")
+                logger.debug(
+                    f"Discovered {len(test_files)} test files in {project_path} (patterns: {patterns})"
+                )
             else:
-                logger.info(f"Discovered {len(test_files)} test files in {project_path} (patterns: {patterns})")
+                logger.info(
+                    f"Discovered {len(test_files)} test files in {project_path} (patterns: {patterns})"
+                )
             return test_files
 
         except Exception as e:

@@ -301,44 +301,53 @@ class BedrockAdapter(LLMPort):
 
             if parsed.success and parsed.data:
                 # Use common schema validation and repair
-                from .common import normalize_refinement_response, create_repair_prompt
-                
+                from .common import create_repair_prompt, normalize_refinement_response
+
                 validation_result = normalize_refinement_response(parsed.data)
-                
+
                 if not validation_result.is_valid:
                     logger.warning(
                         "Bedrock returned invalid schema: %s. Attempting repair...",
-                        validation_result.error
+                        validation_result.error,
                     )
-                    
+
                     # Attempt single-shot repair with minimal prompt
                     repair_prompt = create_repair_prompt(
                         validation_result.error,
-                        ["refined_content", "changes_made", "confidence", "improvement_areas"]
+                        [
+                            "refined_content",
+                            "changes_made",
+                            "confidence",
+                            "improvement_areas",
+                        ],
                     )
-                    
+
                     try:
                         repair_result = self._invoke_chat(
                             system_message=system_message,
                             user_content=f"{user_content}\n\n{repair_prompt}",
                             temperature=0.0,  # Deterministic repair
-                            **kwargs
+                            **kwargs,
                         )
-                        
+
                         repair_content = repair_result.get("content", "")
                         repair_parsed = parse_json_response(repair_content)
-                        
+
                         if repair_parsed.success and repair_parsed.data:
-                            repair_validation = normalize_refinement_response(repair_parsed.data)
+                            repair_validation = normalize_refinement_response(
+                                repair_parsed.data
+                            )
                             if repair_validation.is_valid:
                                 logger.info("Bedrock schema repair successful.")
                                 validation_result = repair_validation
                             else:
-                                logger.error(f"Bedrock repair failed: {repair_validation.error}")
-                        
+                                logger.error(
+                                    f"Bedrock repair failed: {repair_validation.error}"
+                                )
+
                     except Exception as repair_e:
                         logger.error(f"Bedrock repair attempt failed: {repair_e}")
-                
+
                 # Return consistent response structure
                 if validation_result.is_valid and validation_result.data:
                     response_data = validation_result.data
@@ -358,7 +367,9 @@ class BedrockAdapter(LLMPort):
                     }
                 else:
                     # Schema validation failed even after repair
-                    logger.error(f"Bedrock schema validation failed: {validation_result.error}")
+                    logger.error(
+                        f"Bedrock schema validation failed: {validation_result.error}"
+                    )
                     return {
                         "refined_content": original_content,  # Safe fallback
                         "changes_made": f"Schema validation failed: {validation_result.error}",

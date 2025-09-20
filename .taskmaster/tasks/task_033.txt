@@ -1,0 +1,23 @@
+# Task ID: 33
+# Title: Implement Manual Fix Guidance Feature for Post-Refinement Failures
+# Status: pending
+# Dependencies: 4, 11, 14, 28, 29, 32
+# Priority: high
+# Description: Introduce a Manual Fix Guidance step that triggers after failed test refinement, leveraging a dedicated LLM prompt to generate actionable manual fix instructions for the user.
+# Details:
+1. Create `ManualFixGuidanceUseCase` in `testcraft/application/` to orchestrate the manual fix flow, activating only after the final refinement iteration fails or aborts.
+2. Define domain models: `ManualFixRequest`, `ManualFixRecommendation` (ordered, granular steps), and `ManualFixContextAttachment` with metadata (model, params, prompt hash, timestamps).
+3. Implement `ManualFixGuidancePort` and `ManualFixPresenterPort` in `testcraft/ports/`, ensuring clear separation of concerns and adherence to protocol standards.
+4. Develop an LLM adapter in `testcraft/adapters/llm/` using existing provider-unification patterns, supporting prompt templating, strict response schema validation, retries with backoff, and error wrapping.
+5. Build context assembly logic to gather failing test names/paths, error messages/tracebacks, last run coverage/telemetry, diffs, code-under-test summaries, prior generation/refine messages, and accepted plan (if any), preferring AST-based code excerpts for precision.
+6. On user acceptance, annotate failing test files with structured comments/docstrings adjacent to failing functions and persist a Markdown artifact to `.testcraft/manual_fixes/<runId>.md`, including run metadata and hashes; deduplicate by plan/prompt hash.
+7. Extend CLI with `--manual-fix-on-fail`, `--auto-accept-fixes`, `--fixes-output <path>`, and a standalone `manual-fix` command; update Textual UI to add a "Manual Fix Guidance" review screen for preview, acceptance/rejection, and prompt editing.
+8. Add TOML config keys under `[manual_fix]` for enabling, prompt, model, max_tokens, and parameters, with sensible defaults.
+9. Emit telemetry for durations, acceptance, files touched, and recommendation hash; ensure backward compatibility when disabled.
+
+# Test Strategy:
+- Unit tests for `ManualFixGuidanceUseCase`, domain models, ports, and LLM adapter, covering context assembly, prompt validation, retry logic, and error handling.
+- Integration tests simulating failed refinement to verify correct triggering, context completeness, acceptance gating, file annotation, and artifact persistence.
+- CLI tests for new flags and commands; UI tests for the review screen, acceptance/rejection, and prompt editing flows.
+- Configuration tests for TOML keys and defaults; telemetry tests for event emission and metadata accuracy.
+- Documentation updates for README, config keys, CLI/UI workflows, and examples.

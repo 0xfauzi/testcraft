@@ -8,17 +8,17 @@ including project context gathering, snippet retrieval, and enrichment integrati
 from __future__ import annotations
 
 import ast
+import logging
 import re
 import tomllib
-import logging
 from pathlib import Path
 from typing import Any
 
 from ....domain.models import TestGenerationPlan
 from ....ports.context_port import ContextPort
 from ....ports.parser_port import ParserPort
-from .enrichment_detectors import EnrichmentDetectors
 from .enhanced_context_builder import EnrichedContextBuilder
+from .enrichment_detectors import EnrichmentDetectors
 from .structure import DirectoryTreeBuilder, ModulePathDeriver
 
 logger = logging.getLogger(__name__)
@@ -82,7 +82,9 @@ class ContextAssembler:
                     logger.warning("Failed to index %s: %s", file_path, e)
 
             # Use recursive directory tree with configuration-based limits
-            directory_config = self._config.get("context_budgets", {}).get("directory_tree", {})
+            directory_config = self._config.get("context_budgets", {}).get(
+                "directory_tree", {}
+            )
             max_depth = directory_config.get("max_depth", 4)
             max_entries_per_dir = directory_config.get("max_entries_per_dir", 200)
             include_py_only = directory_config.get("include_py_only", True)
@@ -140,13 +142,29 @@ class ContextAssembler:
             deps_cfg_fixture_items = self._get_deps_config_fixtures(source_path)
 
             # 6) Get individual advanced context types for proper section capping
-            coverage_hints = self._get_coverage_hints(source_path) if source_path else []
-            callgraph_items = self._get_callgraph_neighbors(source_path) if source_path else []
-            error_items = self._get_error_paths(source_path, plan) if source_path else []
-            usage_items = self._get_usage_examples(source_path, plan) if source_path else []
-            pytest_settings = self._get_pytest_settings_context(source_path) if source_path else []
-            side_effects = self._get_side_effects_context(source_path) if source_path else []
-            path_constraints = self._get_path_constraints_context(source_path, plan) if source_path else []
+            coverage_hints = (
+                self._get_coverage_hints(source_path) if source_path else []
+            )
+            callgraph_items = (
+                self._get_callgraph_neighbors(source_path) if source_path else []
+            )
+            error_items = (
+                self._get_error_paths(source_path, plan) if source_path else []
+            )
+            usage_items = (
+                self._get_usage_examples(source_path, plan) if source_path else []
+            )
+            pytest_settings = (
+                self._get_pytest_settings_context(source_path) if source_path else []
+            )
+            side_effects = (
+                self._get_side_effects_context(source_path) if source_path else []
+            )
+            path_constraints = (
+                self._get_path_constraints_context(source_path, plan)
+                if source_path
+                else []
+            )
 
             # 7) Assemble bounded context with deterministic ordering and de-dupe
             # 8) Build enriched context with packaging and safety information
@@ -166,9 +184,11 @@ class ContextAssembler:
                     path_constraints,
                 ]
             )
-            
+
             # 9) Enhance with packaging and safety information
-            return self._build_enriched_context_for_generation(source_path, base_context)
+            return self._build_enriched_context_for_generation(
+                source_path, base_context
+            )
 
         except Exception as e:
             logger.warning("Failed to retrieve context: %s", e)
@@ -339,15 +359,21 @@ class ContextAssembler:
                     if test_file.parent != test_file.parent.parent
                     else test_file.parent
                 )
-                
+
                 # Use recursive directory tree with configuration-based limits
-                directory_config = self._config.get("context_budgets", {}).get("directory_tree", {})
-                max_depth = directory_config.get("max_depth", 3)  # Slightly smaller for refinement
+                directory_config = self._config.get("context_budgets", {}).get(
+                    "directory_tree", {}
+                )
+                max_depth = directory_config.get(
+                    "max_depth", 3
+                )  # Slightly smaller for refinement
                 max_entries_per_dir = directory_config.get("max_entries_per_dir", 150)
                 include_py_only = directory_config.get("include_py_only", True)
-                
-                context["project_structure"] = self._structure_builder.build_tree_recursive(
-                    project_root, max_depth, max_entries_per_dir, include_py_only
+
+                context["project_structure"] = (
+                    self._structure_builder.build_tree_recursive(
+                        project_root, max_depth, max_entries_per_dir, include_py_only
+                    )
                 )
             except Exception as e:
                 logger.warning("Failed to build project structure context: %s", e)
@@ -379,11 +405,25 @@ class ContextAssembler:
             mod = mod.strip()
             if not mod:
                 return
-            top = mod.split('.')[0]
+            top = mod.split(".")[0]
             filtered = {
-                "pytest", "unittest", "json", "re", "os", "sys", "pathlib", "typing",
-                "datetime", "time", "collections", "itertools", "functools", "math",
-                "rich", "logging", "schedule",
+                "pytest",
+                "unittest",
+                "json",
+                "re",
+                "os",
+                "sys",
+                "pathlib",
+                "typing",
+                "datetime",
+                "time",
+                "collections",
+                "itertools",
+                "functools",
+                "math",
+                "rich",
+                "logging",
+                "schedule",
             }
             if top in filtered:
                 return
@@ -392,11 +432,13 @@ class ContextAssembler:
 
         for node in ast.walk(tree):
             if isinstance(node, ast.ImportFrom):
-                if getattr(node, 'level', 0) == 0 and isinstance(getattr(node, 'module', None), str):
+                if getattr(node, "level", 0) == 0 and isinstance(
+                    getattr(node, "module", None), str
+                ):
                     add_module(node.module)
             elif isinstance(node, ast.Import):
-                for alias in getattr(node, 'names', []) or []:
-                    name = getattr(alias, 'name', None)
+                for alias in getattr(node, "names", []) or []:
+                    name = getattr(alias, "name", None)
                     if isinstance(name, str):
                         add_module(name)
 
@@ -696,7 +738,6 @@ class ContextAssembler:
 
         return deps_cfg_fixture_items
 
-
     def _assemble_final_context(self, context_sections: list[list[str]]) -> str | None:
         """Assemble bounded context with deterministic ordering and de-dupe."""
         # Respect section caps from config
@@ -718,33 +759,43 @@ class ContextAssembler:
 
         # Build section keys dynamically from configuration for maintainability
         default_section_order = [
-            "snippets", "neighbors", "test_exemplars", "contracts",
-            "deps_config_fixtures", "coverage_hints", "callgraph",
-            "error_paths", "usage_examples", "pytest_settings", "side_effects"
+            "snippets",
+            "neighbors",
+            "test_exemplars",
+            "contracts",
+            "deps_config_fixtures",
+            "coverage_hints",
+            "callgraph",
+            "error_paths",
+            "usage_examples",
+            "pytest_settings",
+            "side_effects",
         ]
-        
+
         # Get configured sections and their order (allows for customization)
         section_caps = caps if isinstance(caps, dict) else {}
         configured_sections = set(section_caps.keys()) if section_caps else set()
-        
+
         # Use configured sections if available, fall back to defaults
         section_keys = []
         for section in default_section_order:
             if not configured_sections or section in configured_sections:
                 section_keys.append(section)
-        
+
         # Add any additional configured sections not in default order
         for section in configured_sections:
             if section not in section_keys:
                 section_keys.append(section)
                 logger.debug("Adding configured section '%s' to ordering", section)
-        
+
         # Validate that we have the right number of sections
         if len(context_sections) != len(section_keys):
             logger.warning(
                 "Section count mismatch: expected %d sections %s, got %d context_sections. "
                 "Some context may be miscategorized.",
-                len(section_keys), section_keys[:5], len(context_sections)
+                len(section_keys),
+                section_keys[:5],
+                len(context_sections),
             )
 
         ordered_sections = []
@@ -771,29 +822,29 @@ class ContextAssembler:
         total = []
         acc = 0
         separator = "\n\n"
-        
+
         for i, block in enumerate(ordered):
             if acc >= total_cap:
                 break
-                
+
             # Account for separator length (except for first item)
             sep_len = len(separator) if i > 0 else 0
             available = total_cap - acc - sep_len
-            
+
             if available <= 0:
                 break
-                
+
             if len(block) <= available:
                 piece = block
             else:
                 # Ensure we have room for truncation marker
                 marker = "\n# [snipped]"
                 if available > len(marker):
-                    piece = block[:available - len(marker)] + marker
+                    piece = block[: available - len(marker)] + marker
                 else:
                     # Not enough room for even a truncated version
                     break
-                    
+
             total.append(piece)
             acc += len(piece) + sep_len
 
@@ -1192,7 +1243,7 @@ class ContextAssembler:
             enrichment_cfg = self._config.get("context_enrichment", {})
             if not enrichment_cfg.get("enable_coverage_hints", True):
                 return coverage_hints
-                
+
             # Note: This would need integration with CoverageEvaluator to get per-file data
             # For now, return placeholder that could be wired to actual coverage data
             # Future: Pass coverage data from CoverageEvaluator to context assembler
@@ -1209,20 +1260,22 @@ class ContextAssembler:
             enrichment_cfg = self._config.get("context_enrichment", {})
             if not enrichment_cfg.get("enable_callgraph", True):
                 return callgraph_items
-                
-            rel = self._context.get_related_context(source_path, relationship_type="all")
-            
+
+            rel = self._context.get_related_context(
+                source_path, relationship_type="all"
+            )
+
             # Extract structured relationship information
             relationships = rel.get("relationships", [])
             related_files = rel.get("related_files", [])
-            
+
             if relationships or related_files:
                 edges = []
-                
+
                 # Add relationship edges if available
                 if isinstance(relationships, list):
                     edges.extend(str(r)[:100] for r in relationships[:5])
-                
+
                 # Add import neighbors from related files
                 for rf in related_files[:3]:
                     try:
@@ -1231,14 +1284,16 @@ class ContextAssembler:
                             edges.append(f"import:{rf_path.name}")
                     except Exception:
                         continue
-                
+
                 if edges:
                     callgraph_items.append(f"# Call-graph edges: {edges[:8]}")
         except Exception:
             pass
         return callgraph_items
 
-    def _get_error_paths(self, source_path: Path, plan: TestGenerationPlan) -> list[str]:
+    def _get_error_paths(
+        self, source_path: Path, plan: TestGenerationPlan
+    ) -> list[str]:
         """Get error paths combining docstring analysis with AST scanning."""
         error_items = []
         try:
@@ -1246,25 +1301,25 @@ class ContextAssembler:
             enrichment_cfg = self._config.get("context_enrichment", {})
             if not enrichment_cfg.get("enable_error_paths", True):
                 return error_items
-                
+
             # Combine docstring raises with AST-detected exceptions
             docstring_raises = set()
             ast_raises = set()
-            
+
             # Get raises from element docstrings
             for element in plan.elements_to_test[:3]:
                 doc = getattr(element, "docstring", "") or ""
                 if doc:
                     doc_info = self._parse_docstring(doc)
                     docstring_raises.update(doc_info.get("raises", []))
-            
+
             # Get raises from source code AST
             try:
                 text = source_path.read_text(encoding="utf-8")
                 ast_raises.update(re.findall(r"raise\s+([A-Za-z_][A-Za-z0-9_]*)", text))
             except Exception:
                 pass
-            
+
             # Combine and format
             all_raises = sorted(list(docstring_raises | ast_raises))[:8]
             if all_raises:
@@ -1273,7 +1328,9 @@ class ContextAssembler:
             pass
         return error_items
 
-    def _get_usage_examples(self, source_path: Path, plan: TestGenerationPlan) -> list[str]:
+    def _get_usage_examples(
+        self, source_path: Path, plan: TestGenerationPlan
+    ) -> list[str]:
         """Get usage examples with enhanced module-qualified queries and deduplication."""
         usage_items = []
         try:
@@ -1281,10 +1338,10 @@ class ContextAssembler:
             enrichment_cfg = self._config.get("context_enrichment", {})
             if not enrichment_cfg.get("enable_usage_examples", True):
                 return usage_items
-                
+
             seen_snippets = set()
             file_snippet_count = {}
-            
+
             # Derive module path for better import pattern queries
             module_path_info = {}
             if source_path:
@@ -1293,69 +1350,77 @@ class ContextAssembler:
                     logger.debug(
                         "Derived module path for usage examples: %s -> %s",
                         source_path,
-                        module_path_info.get("module_path", "none")
+                        module_path_info.get("module_path", "none"),
                     )
                 except Exception as e:
-                    logger.debug("Could not derive module path for usage examples: %s", e)
+                    logger.debug(
+                        "Could not derive module path for usage examples: %s", e
+                    )
                     module_path_info = {}
-            
+
             # Build enhanced queries from plan elements using module path
             for element in plan.elements_to_test[:3]:
                 name = element.name.split(".")[-1]  # Get base name
                 module_path = module_path_info.get("module_path", "")
-                
+
                 # Build module-qualified query strategies (prioritized)
                 queries = []
-                
+
                 # Strategy 1: Module-qualified import patterns (highest priority)
                 if module_path:
-                    queries.extend([
-                        f"from {module_path} import {name}",  # Exact module import
-                        f"from {module_path} import",  # Module import context
-                        f"{module_path}.{name}(",  # Qualified call pattern
-                        f"import {module_path}",  # Module import
-                    ])
-                
-                # Strategy 2: Fallback to file-based patterns  
-                queries.extend([
-                    f"from {source_path.stem} import {name}",  # File-based import
-                    f"{name}(",  # Function call pattern
-                    f"{name} usage",  # Usage context
-                    f"{name} example",  # Example usage
-                ])
-                
+                    queries.extend(
+                        [
+                            f"from {module_path} import {name}",  # Exact module import
+                            f"from {module_path} import",  # Module import context
+                            f"{module_path}.{name}(",  # Qualified call pattern
+                            f"import {module_path}",  # Module import
+                        ]
+                    )
+
+                # Strategy 2: Fallback to file-based patterns
+                queries.extend(
+                    [
+                        f"from {source_path.stem} import {name}",  # File-based import
+                        f"{name}(",  # Function call pattern
+                        f"{name} usage",  # Usage context
+                        f"{name} example",  # Example usage
+                    ]
+                )
+
                 # Strategy 3: Class/method specific patterns
                 if "." in element.name:
                     class_name = element.name.split(".")[0]
-                    queries.extend([
-                        f"{class_name}().{name}(",  # Method call pattern
-                        f"{class_name}.{name}",  # Static method pattern
-                    ])
-                
+                    queries.extend(
+                        [
+                            f"{class_name}().{name}(",  # Method call pattern
+                            f"{class_name}.{name}",  # Static method pattern
+                        ]
+                    )
+
                 # Execute queries in priority order
                 for query in queries:
                     try:
                         res = self._context.retrieve(
                             query=query, context_type="usage", limit=3
                         )
-                        
+
                         # Look for high-quality usage examples
                         found_good_example = False
                         for item in res.get("results", [])[:2]:
                             if not isinstance(item, dict):
                                 continue
-                                
+
                             snippet = item.get("snippet", "")
                             item_path = item.get("path", "unknown")
-                            
+
                             if not snippet or snippet in seen_snippets:
                                 continue
-                                
+
                             # Limit snippets per file for diversity
                             file_count = file_snippet_count.get(item_path, 0)
                             if file_count >= 2:
                                 continue
-                            
+
                             # Score snippets for quality
                             snippet_score = 0
                             if module_path and module_path in snippet:
@@ -1366,32 +1431,42 @@ class ContextAssembler:
                                 snippet_score += 2  # Call with assignment
                             elif "(" in snippet:
                                 snippet_score += 1  # Function call
-                                
+
                             # Only include high-quality examples
                             if snippet_score >= 1:
                                 # Format with quality indicator
-                                quality_indicator = "module-qualified" if snippet_score >= 3 else "standard"
-                                usage_items.append(f"# Usage {name} ({quality_indicator}): {snippet[:200]}")
+                                quality_indicator = (
+                                    "module-qualified"
+                                    if snippet_score >= 3
+                                    else "standard"
+                                )
+                                usage_items.append(
+                                    f"# Usage {name} ({quality_indicator}): {snippet[:200]}"
+                                )
                                 seen_snippets.add(snippet)
                                 file_snippet_count[item_path] = file_count + 1
                                 found_good_example = True
                                 break  # One good example per query
-                                
+
                         # If we found a good example from a high-priority query, move on
-                        if found_good_example and len(queries) > 4 and queries.index(query) < 4:
+                        if (
+                            found_good_example
+                            and len(queries) > 4
+                            and queries.index(query) < 4
+                        ):
                             break  # Prioritize module-qualified results
-                            
+
                     except Exception:
                         continue
-                        
+
                 # Limit total usage examples
                 if len(usage_items) >= 5:
                     break
-                    
+
         except Exception:
             pass
         return usage_items
-    
+
     def _get_pytest_settings_context(self, source_path: Path) -> list[str]:
         """Get pytest settings context with configuration check."""
         pytest_context = []
@@ -1399,10 +1474,10 @@ class ContextAssembler:
             # Check if pytest settings context is needed based on feature flags
             enrichment_cfg = self._config.get("context_enrichment", {})
             context_cats = self._config.get("context_categories", {})
-            
+
             if not context_cats.get("pytest_settings", True):
                 return pytest_context
-                
+
             pytest_settings = self._get_pytest_settings(source_path)
             if pytest_settings:
                 header = f"# pytest settings: {pytest_settings[:5]}"
@@ -1410,7 +1485,7 @@ class ContextAssembler:
         except Exception:
             pass
         return pytest_context
-    
+
     def _get_side_effects_context(self, source_path: Path) -> list[str]:
         """Get side effects context with configuration check."""
         side_effects_context = []
@@ -1419,7 +1494,7 @@ class ContextAssembler:
             enrichment_cfg = self._config.get("context_enrichment", {})
             if not enrichment_cfg.get("enable_side_effect_detection", True):
                 return side_effects_context
-                
+
             # Read source text and parse AST if needed for side effect detection
             try:
                 parse_result = self._parser.parse_file(source_path)
@@ -1429,7 +1504,7 @@ class ContextAssembler:
                     else None
                 )
                 ast_tree = parse_result.get("ast") if parse_result else None
-                
+
                 # Fallback to direct file reading if needed
                 if src_text is None:
                     src_text = source_path.read_text(encoding="utf-8")
@@ -1437,7 +1512,7 @@ class ContextAssembler:
                     ast_tree = ast.parse(src_text)
             except Exception:
                 src_text, ast_tree = "", None
-                
+
             if src_text:
                 side_effect_data = self._enrichment.detect_side_effect_boundaries(
                     src_text, ast_tree
@@ -1453,8 +1528,10 @@ class ContextAssembler:
         except Exception:
             pass
         return side_effects_context
-    
-    def _get_path_constraints_context(self, source_path: Path, plan: TestGenerationPlan) -> list[str]:
+
+    def _get_path_constraints_context(
+        self, source_path: Path, plan: TestGenerationPlan
+    ) -> list[str]:
         """Get path constraints context for conditional logic and branching analysis."""
         path_constraints = []
         try:
@@ -1462,16 +1539,16 @@ class ContextAssembler:
             context_cats = self._config.get("context_categories", {})
             if not context_cats.get("path_constraints", True):
                 return path_constraints
-                
+
             # Analyze conditional branches and path constraints in the source code
             try:
                 parse_result = self._parser.parse_file(source_path)
                 ast_tree = parse_result.get("ast") if parse_result else None
-                
+
                 if ast_tree:
                     conditions = []
                     branches = []
-                    
+
                     # Walk AST to find conditional logic
                     for node in ast.walk(ast_tree):
                         # If statements
@@ -1485,36 +1562,42 @@ class ContextAssembler:
                                         condition_line = lines[node.lineno - 1].strip()
                                         # Clean up the condition
                                         if condition_line.startswith("if "):
-                                            condition = condition_line[3:].rstrip(":").strip()
+                                            condition = (
+                                                condition_line[3:].rstrip(":").strip()
+                                            )
                                             conditions.append(condition[:100])
                             except Exception:
                                 conditions.append("conditional_branch")
-                                
+
                         # Match statements (Python 3.10+)
                         elif isinstance(node, ast.Match):
                             branches.append("match_statement")
-                            
+
                         # Try/except blocks
                         elif isinstance(node, ast.Try):
                             for handler in node.handlers:
                                 if handler.type:
                                     try:
-                                        exc_name = handler.type.id if hasattr(handler.type, 'id') else str(handler.type)
+                                        exc_name = (
+                                            handler.type.id
+                                            if hasattr(handler.type, "id")
+                                            else str(handler.type)
+                                        )
                                         branches.append(f"except_{exc_name}")
                                     except Exception:
                                         branches.append("except_clause")
-                    
+
                     # Format path constraints summary
                     summary_parts = []
                     if conditions:
                         summary_parts.append(f"conditions: {conditions[:5]}")
                     if branches:
                         summary_parts.append(f"branches: {branches[:3]}")
-                    
+
                     if summary_parts:
                         header = f"# Path constraints: {', '.join(summary_parts)}"
                         path_constraints.append(header[:600])
-                        
+
             except Exception:
                 # Fallback: basic conditional detection via text patterns
                 try:
@@ -1523,61 +1606,65 @@ class ContextAssembler:
                     elif_count = src_text.count("elif ")
                     try_count = src_text.count("try:")
                     match_count = src_text.count("match ")
-                    
+
                     if if_count + elif_count + try_count + match_count > 0:
                         summary = f"# Path constraints: if={if_count}, elif={elif_count}, try={try_count}, match={match_count}"
                         path_constraints.append(summary)
                 except Exception:
                     pass
-                    
+
         except Exception:
             pass
         return path_constraints
-    
+
     def _build_enriched_context_for_generation(
         self, source_path: Path | None, base_context: str | None
     ) -> str | None:
         """
         Build enriched context with packaging and safety information.
-        
+
         Args:
             source_path: Path to the source file being tested
             base_context: Base context from traditional context assembly
-            
+
         Returns:
             Enhanced context string with packaging and safety information
         """
         if source_path is None:
             return base_context
-        
+
         try:
             # Build enriched context using the enhanced context builder
             enriched_context = self._enhanced_context_builder.build_enriched_context(
                 source_file=source_path,
                 existing_context=base_context,
             )
-            
+
             # Format for LLM consumption
-            formatted_context = self._enhanced_context_builder.format_for_llm(enriched_context)
-            
+            formatted_context = self._enhanced_context_builder.format_for_llm(
+                enriched_context
+            )
+
             # Store enriched context for potential use in validation
-            if hasattr(self, '_last_enriched_context'):
+            if hasattr(self, "_last_enriched_context"):
                 self._last_enriched_context = enriched_context
             else:
                 # Add as instance variable for access by other methods
                 self._last_enriched_context = enriched_context
-            
+
             return formatted_context if formatted_context else base_context
-            
+
         except Exception as e:
-            logger.warning("Failed to build enriched context for %s: %s", source_path, e)
+            logger.warning(
+                "Failed to build enriched context for %s: %s", source_path, e
+            )
             return base_context
-    
+
     def get_last_enriched_context(self) -> dict[str, Any] | None:
         """
         Get the last enriched context built for validation purposes.
-        
+
         Returns:
             Dictionary with enriched context information or None
         """
-        return getattr(self, '_last_enriched_context', None)
+        return getattr(self, "_last_enriched_context", None)

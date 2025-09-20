@@ -8,15 +8,15 @@ This module provides:
 - Color scheme management
 """
 
-from dataclasses import dataclass
-from typing import Dict, List, Optional
-from pathlib import Path
 import json
+from dataclasses import dataclass
+from pathlib import Path
 
 
 @dataclass
 class ColorScheme:
     """Represents a color scheme for the UI."""
+
     # Core colors
     primary: str
     secondary: str
@@ -26,7 +26,7 @@ class ColorScheme:
     warning: str
     success: str
     info: str
-    
+
     # Text colors
     text: str
     text_muted: str
@@ -34,13 +34,13 @@ class ColorScheme:
     text_on_primary: str
     text_on_secondary: str
     text_on_error: str
-    
+
     # Border colors
     border: str
     border_focused: str
     border_error: str
     border_success: str
-    
+
     # Special colors
     accent: str
     highlight: str
@@ -51,11 +51,11 @@ class ColorScheme:
 class ThemeManager:
     """
     Manages application themes and color schemes.
-    
+
     Provides built-in themes and support for custom themes,
     with dynamic switching capabilities.
     """
-    
+
     # Built-in themes
     THEMES = {
         "default": ColorScheme(
@@ -80,9 +80,8 @@ class ThemeManager:
             accent="#00D9FF",
             highlight="#264F78",
             shadow="#000000",
-            overlay="#00000080"
+            overlay="#00000080",
         ),
-        
         "high_contrast": ColorScheme(
             primary="#00FFFF",
             secondary="#FFFF00",
@@ -105,9 +104,8 @@ class ThemeManager:
             accent="#FF00FF",
             highlight="#FFFF00",
             shadow="#000000",
-            overlay="#00000080"
+            overlay="#00000080",
         ),
-        
         "solarized_dark": ColorScheme(
             primary="#268BD2",
             secondary="#2AA198",
@@ -130,9 +128,8 @@ class ThemeManager:
             accent="#D33682",
             highlight="#073642",
             shadow="#000000",
-            overlay="#00000080"
+            overlay="#00000080",
         ),
-        
         "solarized_light": ColorScheme(
             primary="#268BD2",
             secondary="#2AA198",
@@ -155,9 +152,8 @@ class ThemeManager:
             accent="#D33682",
             highlight="#EEE8D5",
             shadow="#657B83",
-            overlay="#00000040"
+            overlay="#00000040",
         ),
-        
         "monokai": ColorScheme(
             primary="#66D9EF",
             secondary="#A6E22E",
@@ -180,9 +176,8 @@ class ThemeManager:
             accent="#AE81FF",
             highlight="#49483E",
             shadow="#000000",
-            overlay="#00000080"
+            overlay="#00000080",
         ),
-        
         "dracula": ColorScheme(
             primary="#BD93F9",
             secondary="#50FA7B",
@@ -205,37 +200,37 @@ class ThemeManager:
             accent="#FF79C6",
             highlight="#44475A",
             shadow="#191A21",
-            overlay="#00000080"
-        )
+            overlay="#00000080",
+        ),
     }
-    
+
     def __init__(self, initial_theme: str = "default"):
         """
         Initialize the theme manager.
-        
+
         Args:
             initial_theme: Name of the initial theme to use
         """
         self.current_theme_name = initial_theme
         self.current_theme = self.THEMES.get(initial_theme, self.THEMES["default"])
-        self.custom_themes: Dict[str, ColorScheme] = {}
-        self._css_cache: Optional[str] = None
-    
+        self.custom_themes: dict[str, ColorScheme] = {}
+        self._css_cache: str | None = None
+
     def get_current_theme(self) -> ColorScheme:
         """Get the current theme."""
         return self.current_theme
-    
+
     def get_current_theme_name(self) -> str:
         """Get the name of the current theme."""
         return self.current_theme_name
-    
+
     def set_theme(self, theme_name: str) -> bool:
         """
         Apply a theme to the application.
-        
+
         Args:
             theme_name: Name of the theme to apply
-            
+
         Returns:
             True if theme was applied successfully
         """
@@ -245,101 +240,100 @@ class ThemeManager:
             self.current_theme_name = theme_name
             self._css_cache = None
             return True
-        
+
         # Check custom themes
         if theme_name in self.custom_themes:
             self.current_theme = self.custom_themes[theme_name]
             self.current_theme_name = theme_name
             self._css_cache = None
             return True
-        
+
         return False
-    
+
     def register_custom_theme(self, name: str, theme: ColorScheme) -> None:
         """
         Register a custom theme.
-        
+
         Args:
             name: Name for the custom theme
             theme: ColorScheme object
         """
         self.custom_themes[name] = theme
-    
+
     def load_theme_from_file(self, path: Path) -> bool:
         """
         Load a theme from a JSON file.
-        
+
         Args:
             path: Path to the theme file
-            
+
         Returns:
             True if theme was loaded successfully
         """
         try:
-            with open(path, 'r') as f:
+            with open(path) as f:
                 data = json.load(f)
-            
+
             theme = ColorScheme(**data["colors"])
             self.register_custom_theme(data["name"], theme)
             return True
         except Exception as e:
             print(f"Error loading theme from {path}: {e}")
             return False
-    
+
     def save_theme_to_file(self, name: str, path: Path) -> bool:
         """
         Save a theme to a JSON file.
-        
+
         Args:
             name: Name of the theme to save
             path: Path to save the theme file
-            
+
         Returns:
             True if theme was saved successfully
         """
         theme = None
-        
+
         if name in self.THEMES:
             theme = self.THEMES[name]
         elif name in self.custom_themes:
             theme = self.custom_themes[name]
-        
+
         if not theme:
             return False
-        
+
         try:
             data = {
                 "name": name,
                 "colors": {
-                    field: getattr(theme, field)
-                    for field in theme.__dataclass_fields__
-                }
+                    field: getattr(theme, field) for field in theme.__dataclass_fields__
+                },
             }
-            
-            with open(path, 'w') as f:
+
+            with open(path, "w") as f:
                 json.dump(data, f, indent=2)
-            
+
             return True
         except Exception as e:
             print(f"Error saving theme to {path}: {e}")
             return False
-    
-    def get_available_themes(self) -> List[str]:
+
+    def get_available_themes(self) -> list[str]:
         """Get list of all available theme names."""
         return list(self.THEMES.keys()) + list(self.custom_themes.keys())
-    
+
     def generate_css(self) -> str:
         """
         Generate CSS variables for the current theme.
-        
+
         Returns:
             CSS string with theme variables
         """
         if self._css_cache:
             return self._css_cache
-        
+
         theme = self.current_theme
-        
+
         css = """
         /* TestCraft Theme Variables */
         :root {
@@ -439,48 +433,47 @@ class ThemeManager:
             background: var(--surface);
             border: thick var(--border-focused);
         }
-        """ % {
-            field: getattr(theme, field)
-            for field in theme.__dataclass_fields__
-        }
-        
+        """ % {field: getattr(theme, field) for field in theme.__dataclass_fields__}
+
         self._css_cache = css
         return css
-    
+
     def get_color(self, color_name: str) -> str:
         """
         Get a specific color from the current theme.
-        
+
         Args:
             color_name: Name of the color to get
-            
+
         Returns:
             Color value or empty string if not found
         """
         return getattr(self.current_theme, color_name, "")
-    
-    def create_variant_css(self, widget_name: str, variant: str, colors: Dict[str, str]) -> str:
+
+    def create_variant_css(
+        self, widget_name: str, variant: str, colors: dict[str, str]
+    ) -> str:
         """
         Create CSS for a widget variant.
-        
+
         Args:
             widget_name: Name of the widget
             variant: Variant name
             colors: Dictionary of color overrides
-            
+
         Returns:
             CSS string for the variant
         """
         css_rules = []
-        
+
         for prop, color in colors.items():
             # Map common properties
             css_prop = {
                 "background": "background",
                 "text": "color",
-                "border": "border"
+                "border": "border",
             }.get(prop, prop)
-            
+
             css_rules.append(f"    {css_prop}: {color};")
-        
+
         return f"{widget_name}.-{variant} {{\n" + "\n".join(css_rules) + "\n}"

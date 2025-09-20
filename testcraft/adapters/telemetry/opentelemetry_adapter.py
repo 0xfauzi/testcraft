@@ -15,18 +15,18 @@ from ...ports.telemetry_port import MetricValue, SpanContext, SpanKind
 # OpenTelemetry imports (optional - graceful degradation if not available)
 try:
     from opentelemetry import metrics, trace
-    from opentelemetry.exporter.otlp.proto.grpc.metric_exporter import \
-        OTLPMetricExporter
-    from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import \
-        OTLPSpanExporter
+    from opentelemetry.exporter.otlp.proto.grpc.metric_exporter import (
+        OTLPMetricExporter,
+    )
+    from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
     from opentelemetry.sdk.metrics import MeterProvider
     from opentelemetry.sdk.metrics.export import (
-        ConsoleMetricExporter, PeriodicExportingMetricReader)
-    from opentelemetry.sdk.resources import (SERVICE_NAME, SERVICE_VERSION,
-                                             Resource)
+        ConsoleMetricExporter,
+        PeriodicExportingMetricReader,
+    )
+    from opentelemetry.sdk.resources import SERVICE_NAME, SERVICE_VERSION, Resource
     from opentelemetry.sdk.trace import TracerProvider
-    from opentelemetry.sdk.trace.export import (BatchSpanProcessor,
-                                                ConsoleSpanExporter)
+    from opentelemetry.sdk.trace.export import BatchSpanProcessor, ConsoleSpanExporter
     from opentelemetry.trace import Status, StatusCode
     from opentelemetry.util.types import AttributeValue
 

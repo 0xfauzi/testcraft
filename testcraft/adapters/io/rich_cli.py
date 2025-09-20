@@ -12,9 +12,15 @@ from rich import box
 from rich.console import Console
 from rich.layout import Layout
 from rich.panel import Panel
-from rich.progress import (BarColumn, Progress, SpinnerColumn,
-                           TaskProgressColumn, TextColumn, TimeElapsedColumn,
-                           TimeRemainingColumn)
+from rich.progress import (
+    BarColumn,
+    Progress,
+    SpinnerColumn,
+    TaskProgressColumn,
+    TextColumn,
+    TimeElapsedColumn,
+    TimeRemainingColumn,
+)
 from rich.prompt import Confirm, Prompt
 from rich.status import Status
 from rich.syntax import Syntax
@@ -33,7 +39,7 @@ TESTCRAFT_THEME = Theme(
         # Minimal accent colors
         "accent": "cyan",
         "primary": "white",
-        "secondary": "bright_white", 
+        "secondary": "bright_white",
         # Clean text hierarchy
         "header": "bold white",
         "title": "bold",
@@ -41,13 +47,13 @@ TESTCRAFT_THEME = Theme(
         "subtle": "dim",
         # Simplified coverage colors
         "coverage_good": "green",
-        "coverage_medium": "yellow", 
+        "coverage_medium": "yellow",
         "coverage_low": "red",
         # Clean status indicators
         "status_pass": "green",
         "status_fail": "red",
         "status_working": "yellow",
-        # Minimal interactive elements  
+        # Minimal interactive elements
         "prompt": "cyan",
         "selected": "green",
         # Clean borders
@@ -60,7 +66,7 @@ MINIMAL_THEME = Theme(
     {
         # Essential status colors only
         "success": "green",
-        "error": "red", 
+        "error": "red",
         "status_working": "yellow",
         "accent": "cyan",
         # Minimal text colors
@@ -71,13 +77,13 @@ MINIMAL_THEME = Theme(
         "warning": "yellow",
         "info": "cyan",
         "header": "white",
-        "title": "white", 
+        "title": "white",
         "secondary": "white",
         "subtle": "dim white",
         "coverage_good": "green",
         "coverage_medium": "yellow",
         "coverage_low": "red",
-        "status_pass": "green", 
+        "status_pass": "green",
         "status_fail": "red",
         "prompt": "cyan",
         "selected": "green",
@@ -85,11 +91,11 @@ MINIMAL_THEME = Theme(
 )
 
 
-def get_theme(ui_style: 'UIStyle') -> Theme:  # Forward ref to avoid circular import
+def get_theme(ui_style: "UIStyle") -> Theme:  # Forward ref to avoid circular import
     """Get the appropriate theme for the UI style."""
     # Import here to avoid circular import
     from .ui_rich import UIStyle
-    
+
     if ui_style == UIStyle.MINIMAL:
         return MINIMAL_THEME
     else:
@@ -596,7 +602,11 @@ class RichCliComponents:
 
         # Expose section names for tests expecting _layout_items keys
         try:
-            layout._layout_items = {"header": layout["header"], "body": layout["body"], "footer": layout["footer"]}  # type: ignore[attr-defined]
+            layout._layout_items = {
+                "header": layout["header"],
+                "body": layout["body"],
+                "footer": layout["footer"],
+            }  # type: ignore[attr-defined]
         except Exception:
             pass
         return layout

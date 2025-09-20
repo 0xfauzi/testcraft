@@ -1,0 +1,26 @@
+# Task ID: 34
+# Title: Implement Repository-Aware Context Assembly Pipeline per Specification
+# Status: pending
+# Dependencies: 6, 7, 11, 12, 13, 14, 17, 19
+# Priority: high
+# Description: Develop a comprehensive, repository-aware context assembly pipeline that orchestrates planning, generation, refinement, and manual fix flows, enforcing canonical imports and quality gates as specified in docs/context_assembly_specification.md.
+# Details:
+Implement an end-to-end pipeline that is repository-aware, following the architecture and requirements in docs/context_assembly_specification.md:
+
+- **Analyzers**: Build RepoLayoutDetector, ImportResolver, MetainfoBuilder, TestCaseIndexer, and PropertyAnalyzer to extract repository structure, resolve canonical absolute imports, gather metadata, index test cases, and analyze properties.
+- **Context Assembler**: Assemble a ContextPack per target module, including ImportMap, focal code, resolved definitions, property context, conventions, and prompt/test budgets. Ensure on-demand resolution of definitions and property-based retrieval (APT), and bootstrap import context as needed.
+- **LLM Orchestrator**: Implement discrete prompt flows for PLAN, GENERATE, REFINE, and MANUAL FIX stages. Integrate a symbol resolution loop in PLAN and REFINE to handle missing_symbols, and enforce user approval gates where required.
+- **Runners**: Integrate pytest/coverage runners with PYTHONPATH bootstrap or conftest support. Collect ExecutionFeedback for use in refinement and manual fix flows.
+- **Controller**: Implement the orchestration algorithm as described in the specification, gluing all stages, enforcing quality gates (import presence, bootstrap/conftest, compile, determinism, coverage, and optional mutation sampling), and passing approved plans into GENERATE.
+- **Integration Points**: Reuse existing adapters for parser, context, coverage, LLM, and telemetry. Extend TOML configuration for import policy, prompt budgets, feature flags (context_as_json, mutation sampling), and model selection per stage. Expose new planning and manual-fix flows in CLI and Textual UI, supporting non-interactive flags and defaults.
+- **Documentation**: Update documentation to reference the context assembly specification and provide usage examples.
+
+All components must enforce canonical absolute imports for target modules throughout prompts and generated tests, and ensure consistent usage. The ContextPack structure must strictly match the specification.
+
+# Test Strategy:
+1. Unit tests for ImportResolver, RepoLayoutDetector, and ContextPack assembly, verifying correct extraction, resolution, and packaging of repository context and canonical imports.
+2. Integration tests for the full plan→generate→refine→manual-fix pipeline, including enforcement of all quality gates (import presence, bootstrap/conftest, compile, determinism, coverage, mutation sampling if enabled).
+3. Simulate missing_symbols scenarios to verify the symbol resolution loop and user approval gates.
+4. Test CLI and UI flows for planning and manual-fix, including non-interactive operation.
+5. Validate that generated tests use canonical imports and that ContextPack matches the documented schema.
+6. Update and verify documentation with concrete examples and references to the specification.

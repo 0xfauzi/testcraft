@@ -289,14 +289,14 @@ class TestMapper:
 
             if not mapped_tests:
                 gap_info["gap_type"] = "missing_test"
-                gap_info[
-                    "description"
-                ] = f"No test found for {source_element.type} '{source_element.name}'"
+                gap_info["description"] = (
+                    f"No test found for {source_element.type} '{source_element.name}'"
+                )
             elif len(mapped_tests) == 1:
                 gap_info["gap_type"] = "single_test"
-                gap_info[
-                    "description"
-                ] = f"Only one test found for {source_element.type} '{source_element.name}'"
+                gap_info["description"] = (
+                    f"Only one test found for {source_element.type} '{source_element.name}'"
+                )
             else:
                 # Multiple tests found - this might be good coverage
                 continue

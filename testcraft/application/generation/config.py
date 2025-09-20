@@ -153,14 +153,28 @@ class GenerationConfig:
                 )
 
         # Only merge keys that are relevant to generation config
-        special_keys = {"context_categories", "prompt_budgets", "context_enrichment", "context_budgets"}
-        valid_generation_keys = {
-            "batch_size", "enable_context", "enable_refinement", "max_refinement_iterations",
-            "coverage_threshold", "test_framework", "enable_streaming",
-            "immediate_refinement", "max_refine_workers", "keep_failed_writes", 
-            "refine_on_first_failure_only", "refinement_backoff_sec", "disable_ruff_format"
+        special_keys = {
+            "context_categories",
+            "prompt_budgets",
+            "context_enrichment",
+            "context_budgets",
         }
-        
+        valid_generation_keys = {
+            "batch_size",
+            "enable_context",
+            "enable_refinement",
+            "max_refinement_iterations",
+            "coverage_threshold",
+            "test_framework",
+            "enable_streaming",
+            "immediate_refinement",
+            "max_refine_workers",
+            "keep_failed_writes",
+            "refine_on_first_failure_only",
+            "refinement_backoff_sec",
+            "disable_ruff_format",
+        }
+
         for key, value in overrides.items():
             if key not in special_keys:
                 if key in config or key in valid_generation_keys:
@@ -229,7 +243,9 @@ class GenerationConfig:
         # Validate immediate refinement config
         immediate = config.get("immediate_refinement", True)
         if not isinstance(immediate, bool):
-            logger.warning("Invalid immediate_refinement %s, using default True", immediate)
+            logger.warning(
+                "Invalid immediate_refinement %s, using default True", immediate
+            )
             config["immediate_refinement"] = True
 
         # Validate max_refine_workers
@@ -241,19 +257,25 @@ class GenerationConfig:
             config["max_refine_workers"] = 2
         elif max_workers > 8:
             logger.warning(
-                "Very large max_refine_workers %s may cause resource issues", max_workers
+                "Very large max_refine_workers %s may cause resource issues",
+                max_workers,
             )
 
         # Validate keep_failed_writes
         keep_failed = config.get("keep_failed_writes", False)
         if not isinstance(keep_failed, bool):
-            logger.warning("Invalid keep_failed_writes %s, using default False", keep_failed)
+            logger.warning(
+                "Invalid keep_failed_writes %s, using default False", keep_failed
+            )
             config["keep_failed_writes"] = False
 
         # Validate refine_on_first_failure_only
         first_failure = config.get("refine_on_first_failure_only", True)
         if not isinstance(first_failure, bool):
-            logger.warning("Invalid refine_on_first_failure_only %s, using default True", first_failure)
+            logger.warning(
+                "Invalid refine_on_first_failure_only %s, using default True",
+                first_failure,
+            )
             config["refine_on_first_failure_only"] = True
 
         # Validate refinement_backoff_sec
@@ -271,7 +293,9 @@ class GenerationConfig:
         # Validate disable_ruff_format
         disable_ruff = config.get("disable_ruff_format", False)
         if not isinstance(disable_ruff, bool):
-            logger.warning("Invalid disable_ruff_format %s, using default False", disable_ruff)
+            logger.warning(
+                "Invalid disable_ruff_format %s, using default False", disable_ruff
+            )
             config["disable_ruff_format"] = False
 
         # Validate prompt budgets with comprehensive validation
@@ -282,12 +306,14 @@ class GenerationConfig:
             if per_item is not None:
                 if not isinstance(per_item, int) or per_item < 100:
                     logger.warning(
-                        "Invalid per_item_chars %s (must be int >= 100), using default 1500", per_item
+                        "Invalid per_item_chars %s (must be int >= 100), using default 1500",
+                        per_item,
                     )
                     prompt_budgets["per_item_chars"] = 1500
                 elif per_item > 5000:
                     logger.warning(
-                        "Very large per_item_chars %s may cause performance issues", per_item
+                        "Very large per_item_chars %s may cause performance issues",
+                        per_item,
                     )
 
             # Validate total_chars
@@ -295,56 +321,70 @@ class GenerationConfig:
             if total_chars is not None:
                 if not isinstance(total_chars, int) or total_chars < 1000:
                     logger.warning(
-                        "Invalid total_chars %s (must be int >= 1000), using default 10000", total_chars
+                        "Invalid total_chars %s (must be int >= 1000), using default 10000",
+                        total_chars,
                     )
                     prompt_budgets["total_chars"] = 10000
                 elif total_chars > 50000:
                     logger.warning(
-                        "Very large total_chars %s may cause performance issues", total_chars
+                        "Very large total_chars %s may cause performance issues",
+                        total_chars,
                     )
 
             # Validate section_caps
             section_caps = prompt_budgets.get("section_caps", {})
             if isinstance(section_caps, dict):
                 valid_sections = {
-                    "snippets", "neighbors", "test_exemplars", "contracts",
-                    "deps_config_fixtures", "coverage_hints", "callgraph",
-                    "error_paths", "usage_examples", "pytest_settings",
-                    "side_effects", "path_constraints"
+                    "snippets",
+                    "neighbors",
+                    "test_exemplars",
+                    "contracts",
+                    "deps_config_fixtures",
+                    "coverage_hints",
+                    "callgraph",
+                    "error_paths",
+                    "usage_examples",
+                    "pytest_settings",
+                    "side_effects",
+                    "path_constraints",
                 }
-                
+
                 # Create lists to track sections to remove to avoid modifying dict during iteration
                 sections_to_remove = []
-                
+
                 for section, cap in section_caps.items():
                     if section not in valid_sections:
                         logger.warning(
-                            "Unknown section_cap '%s', valid sections: %s", 
-                            section, sorted(valid_sections)
+                            "Unknown section_cap '%s', valid sections: %s",
+                            section,
+                            sorted(valid_sections),
                         )
                     elif not isinstance(cap, int) or cap < 0:
                         logger.warning(
                             "Invalid section_cap for '%s': %s (must be non-negative int), removing",
-                            section, cap
+                            section,
+                            cap,
                         )
                         sections_to_remove.append(section)
                     elif cap > 50:
                         logger.warning(
                             "Very large section_cap for '%s': %s may cause performance issues",
-                            section, cap
+                            section,
+                            cap,
                         )
-                
+
                 # Remove invalid sections after iteration
                 for section in sections_to_remove:
                     section_caps.pop(section, None)
-                        
+
             # Validate consistency between per_item and total budgets
             final_per_item = prompt_budgets.get("per_item_chars", 1500)
             final_total = prompt_budgets.get("total_chars", 10000)
             if final_per_item * 2 > final_total:
                 logger.warning(
                     "per_item_chars (%d) * 2 > total_chars (%d), this may cause truncation issues",
-                    final_per_item, final_total
+                    final_per_item,
+                    final_total,
                 )
 
         # Validate context budgets
@@ -358,12 +398,14 @@ class GenerationConfig:
                 if max_depth is not None:
                     if not isinstance(max_depth, int) or max_depth < 1:
                         logger.warning(
-                            "Invalid directory_tree.max_depth %s (must be int >= 1), using default 4", max_depth
+                            "Invalid directory_tree.max_depth %s (must be int >= 1), using default 4",
+                            max_depth,
                         )
                         directory_tree["max_depth"] = 4
                     elif max_depth > 10:
                         logger.warning(
-                            "Very large directory_tree.max_depth %s may cause performance issues", max_depth
+                            "Very large directory_tree.max_depth %s may cause performance issues",
+                            max_depth,
                         )
 
                 # Validate max_entries_per_dir
@@ -371,18 +413,23 @@ class GenerationConfig:
                 if max_entries is not None:
                     if not isinstance(max_entries, int) or max_entries < 10:
                         logger.warning(
-                            "Invalid directory_tree.max_entries_per_dir %s (must be int >= 10), using default 200", max_entries
+                            "Invalid directory_tree.max_entries_per_dir %s (must be int >= 10), using default 200",
+                            max_entries,
                         )
                         directory_tree["max_entries_per_dir"] = 200
                     elif max_entries > 1000:
                         logger.warning(
-                            "Very large directory_tree.max_entries_per_dir %s may cause performance issues", max_entries
+                            "Very large directory_tree.max_entries_per_dir %s may cause performance issues",
+                            max_entries,
                         )
 
                 # Validate include_py_only
                 include_py_only = directory_tree.get("include_py_only")
-                if include_py_only is not None and not isinstance(include_py_only, bool):
+                if include_py_only is not None and not isinstance(
+                    include_py_only, bool
+                ):
                     logger.warning(
-                        "Invalid directory_tree.include_py_only %s (must be boolean), using default True", include_py_only
+                        "Invalid directory_tree.include_py_only %s (must be boolean), using default True",
+                        include_py_only,
                     )
                     directory_tree["include_py_only"] = True

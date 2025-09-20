@@ -8,6 +8,7 @@ patterns to keep `subprocess_safe` generic and single-purpose.
 """
 
 import sys
+
 from .subprocess_safe import run_subprocess_simple
 
 

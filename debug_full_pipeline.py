@@ -9,8 +9,7 @@ from pathlib import Path
 sys.path.insert(0, "/Users/wumpinihussein/Documents/code/ai/testcraft/testcraft")
 
 from testcraft.adapters.parsing.codebase_parser import CodebaseParser
-from testcraft.domain.models import (TestElement, TestElementType,
-                                     TestGenerationPlan)
+from testcraft.domain.models import TestGenerationPlan
 
 
 def test_full_pipeline():
@@ -31,7 +30,7 @@ def test_full_pipeline():
 
     try:
         # Step 1: Parse the file exactly as GenerateUseCase does
-        print(f"\n=== Step 1: Parse file ===")
+        print("\n=== Step 1: Parse file ===")
         parse_result = parser.parse_file(test_file)
         elements = parse_result.get("elements", [])
 
@@ -40,32 +39,32 @@ def test_full_pipeline():
         print(f"Elements length: {len(elements)}")
 
         # Step 2: Check elements exactly as GenerateUseCase does
-        print(f"\n=== Step 2: Check elements ===")
+        print("\n=== Step 2: Check elements ===")
         if not elements:
             print("❌ Skipping: no testable elements found")
             return
         else:
             print(f"✅ Found {len(elements)} testable elements")
             for i, elem in enumerate(elements):
-                print(f"   {i+1}. {elem.name} ({elem.type})")
+                print(f"   {i + 1}. {elem.name} ({elem.type})")
 
         # Step 3: Find existing test files (simplified)
-        print(f"\n=== Step 3: Find existing tests ===")
+        print("\n=== Step 3: Find existing tests ===")
         existing_tests = []  # Simplified
         print(f"Existing tests: {existing_tests}")
 
         # Step 4: Create TestGenerationPlan exactly as GenerateUseCase does
-        print(f"\n=== Step 4: Create TestGenerationPlan ===")
+        print("\n=== Step 4: Create TestGenerationPlan ===")
         plan = TestGenerationPlan(
             elements_to_test=elements,
             existing_tests=existing_tests,
             coverage_before=None,
         )
-        print(f"✅ TestGenerationPlan created successfully!")
+        print("✅ TestGenerationPlan created successfully!")
         print(f"   Elements in plan: {len(plan.elements_to_test)}")
 
         # Test what happens when we convert to dict/JSON (for debugging)
-        print(f"\n=== Step 5: Plan serialization test ===")
+        print("\n=== Step 5: Plan serialization test ===")
         plan_dict = plan.dict()
         print(f"Plan dict elements count: {len(plan_dict['elements_to_test'])}")
 
@@ -81,8 +80,8 @@ def test_full_pipeline():
 
 def test_with_relative_paths():
     """Test with relative paths like TestCraft might use."""
-    print(f"\n{'='*60}")
-    print(f"🔍 Testing with relative paths...")
+    print(f"\n{'=' * 60}")
+    print("🔍 Testing with relative paths...")
 
     # Change to weather collector directory
     original_cwd = os.getcwd()
@@ -100,12 +99,12 @@ def test_with_relative_paths():
         parse_result = parser.parse_file(relative_path)
         elements = parse_result.get("elements", [])
 
-        print(f"Relative path parsing:")
+        print("Relative path parsing:")
         print(f"   Elements found: {len(elements)}")
 
         if elements:
             for i, elem in enumerate(elements):
-                print(f"   {i+1}. {elem.name} ({elem.type})")
+                print(f"   {i + 1}. {elem.name} ({elem.type})")
         else:
             print("   ❌ No elements found with relative path!")
 
@@ -119,6 +118,6 @@ if __name__ == "__main__":
     test_with_relative_paths()
 
     if plan:
-        print(f"\n✅ Full pipeline test PASSED")
+        print("\n✅ Full pipeline test PASSED")
     else:
-        print(f"\n❌ Full pipeline test FAILED")
+        print("\n❌ Full pipeline test FAILED")
