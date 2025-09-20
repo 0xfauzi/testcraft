@@ -248,7 +248,6 @@ class EnrichedContextBuilder:
                 import_info["module_path"] = canonical_import
 
                 # Build import statement
-                file_stem = source_file.stem
                 if source_file.name == "__init__.py":
                     import_info["canonical_import"] = f"import {canonical_import}"
                 else:

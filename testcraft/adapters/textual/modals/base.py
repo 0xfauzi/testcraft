@@ -27,7 +27,7 @@ class BaseModal(ModalScreen):
         align: center middle;
         background: $overlay 60%;
     }
-    
+
     .modal-container {
         width: 60%;
         min-width: 40;
@@ -39,31 +39,31 @@ class BaseModal(ModalScreen):
         border: thick $primary;
         padding: 1 2;
     }
-    
+
     .modal-title {
         text-style: bold;
         color: $primary;
         margin-bottom: 1;
         text-align: center;
     }
-    
+
     .modal-content {
         margin: 1 0;
         height: auto;
     }
-    
+
     .modal-footer {
         margin-top: 1;
         height: 3;
         align: center middle;
     }
-    
+
     .modal-buttons {
         layout: horizontal;
         align: center middle;
         height: 3;
     }
-    
+
     .modal-buttons Button {
         margin: 0 1;
         min-width: 10;

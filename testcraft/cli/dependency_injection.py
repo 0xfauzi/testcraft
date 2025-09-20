@@ -98,7 +98,7 @@ def create_dependency_container(config: TestCraftConfig) -> dict[str, Any]:
             )
 
         except Exception as e:
-            raise DependencyError(f"Failed to create adapters: {e}")
+            raise DependencyError(f"Failed to create adapters: {e}") from e
 
         # Use cases
         try:
@@ -147,14 +147,16 @@ def create_dependency_container(config: TestCraftConfig) -> dict[str, Any]:
             )
 
         except Exception as e:
-            raise DependencyError(f"Failed to create use cases: {e}")
+            raise DependencyError(f"Failed to create use cases: {e}") from e
 
         return container
 
     except DependencyError:
         raise
     except Exception as e:
-        raise DependencyError(f"Unexpected error during dependency injection: {e}")
+        raise DependencyError(
+            f"Unexpected error during dependency injection: {e}"
+        ) from e
 
 
 def _create_coverage_adapter(config: TestCraftConfig):

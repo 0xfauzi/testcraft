@@ -75,7 +75,7 @@ class CodebaseParser:
             try:
                 tree = ast.parse(source_code, filename=str(file_path))
             except SyntaxError as e:
-                raise ParseError(f"Syntax error in {file_path}: {e}")
+                raise ParseError(f"Syntax error in {file_path}: {e}") from e
 
             # Extract elements and their source code
             elements, source_content = self._extract_elements(
@@ -103,7 +103,7 @@ class CodebaseParser:
         except Exception as e:
             if isinstance(e, ParseError):
                 raise
-            raise ParseError(f"Failed to parse {file_path}: {e}")
+            raise ParseError(f"Failed to parse {file_path}: {e}") from e
 
     def extract_functions(
         self, file_path: Path, include_private: bool = False, **kwargs: Any

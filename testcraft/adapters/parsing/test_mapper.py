@@ -93,7 +93,7 @@ class TestMapper:
         except Exception as e:
             if isinstance(e, TestMappingError):
                 raise
-            raise TestMappingError(f"Failed to map tests: {e}")
+            raise TestMappingError(f"Failed to map tests: {e}") from e
 
     def find_test_file_for_source(
         self, source_file_path: Path, test_directories: list[Path] | None = None

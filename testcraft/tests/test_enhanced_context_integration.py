@@ -107,18 +107,18 @@ Base = declarative_base()
 
 class City(Base):
     __tablename__ = 'cities'
-    
+
     id = Column(Integer, primary_key=True)
     name = Column(String(100))
     country = Column(String(100))
-    
+
     def __init__(self, name, country, latitude, longitude, timezone_offset=0):
         self.name = name
         self.country = country
 
 class WeatherReading(Base):
     __tablename__ = 'weather_readings'
-    
+
     id = Column(Integer, primary_key=True)
     city_id = Column(Integer)
     temperature = Column(Integer)
@@ -144,7 +144,7 @@ class WeatherReading(Base):
 class WeatherAPIClient:
     def __init__(self, api_key):
         self.api_key = api_key
-    
+
     def get_current_weather(self, city):
         pass
 """)
@@ -196,10 +196,10 @@ class WeatherScheduler:
     def __init__(self):
         self.api_client = WeatherAPIClient()
         self.running = False
-    
+
     def collect_weather_data(self, cities: List[str]) -> None:
         console.print(f"Collecting weather data at {datetime.now()}")
-        
+
         with get_db() as db:
             for city_name in cities:
                 try:
@@ -207,7 +207,7 @@ class WeatherScheduler:
                     # ... rest of implementation
                 except Exception as e:
                     logger.error(f"Failed to collect data for {city_name}: {e}")
-            
+
             db.commit()
 """)
 

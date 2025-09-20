@@ -78,7 +78,7 @@ class SafetyPolicies:
                 except ValueError:
                     raise SafetyError(
                         f"File path {file_path} is outside project root {project_root}"
-                    )
+                    ) from None
             else:
                 raise SafetyError(
                     f"Absolute paths not allowed without project root: {file_path}"
@@ -184,7 +184,7 @@ class SafetyPolicies:
         try:
             ast.parse(content)
         except SyntaxError as e:
-            raise SafetyError(f"Invalid Python syntax: {e}")
+            raise SafetyError(f"Invalid Python syntax: {e}") from e
 
     @staticmethod
     def get_allowed_test_extensions() -> set[str]:

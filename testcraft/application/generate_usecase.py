@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import Any
 
 from ..adapters.io.file_discovery import FileDiscoveryService
+from ..adapters.io.file_status_tracker import FileStatus
 from ..domain.models import GenerationResult
 from ..ports.context_port import ContextPort
 from ..ports.coverage_port import CoveragePort
@@ -338,7 +339,9 @@ class GenerateUseCase:
                 span.set_attribute("error", str(e))
                 span.record_exception(e)
                 logger.exception("Test generation failed: %s", e)
-                raise GenerateUseCaseError(f"Test generation failed: {e}", cause=e)
+                raise GenerateUseCaseError(
+                    f"Test generation failed: {e}", cause=e
+                ) from e
 
     async def _generate_tests_for_plan(
         self, plan, context_data: dict[str, Any]
@@ -1289,7 +1292,9 @@ class GenerateUseCase:
 
             except Exception as e:
                 logger.exception("Test file writing failed: %s", e)
-                raise GenerateUseCaseError(f"Test file writing failed: {e}", cause=e)
+                raise GenerateUseCaseError(
+                    f"Test file writing failed: {e}", cause=e
+                ) from e
 
     async def _execute_and_refine_tests(
         self, write_results: list[dict[str, Any]]
@@ -1350,7 +1355,7 @@ class GenerateUseCase:
                 logger.exception("Test execution and refinement failed: %s", e)
                 raise GenerateUseCaseError(
                     f"Test execution and refinement failed: {e}", cause=e
-                )
+                ) from e
 
     async def _record_final_state(
         self,

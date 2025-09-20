@@ -18,7 +18,7 @@ from testcraft.config.models import RefineConfig
 @pytest.fixture
 def refiner_with_enhanced_annotations():
     """Create a PytestRefiner with enhanced annotations enabled."""
-    config = RefineConfig(
+    RefineConfig(
         enable=True,
         annotate_failed_tests=True,
         annotation_placement="top",

@@ -75,7 +75,9 @@ class JsonReportAdapter(ReportPort):
                 raise ReportError(f"Unsupported report type: {report_type}")
 
         except Exception as e:
-            raise ReportError(f"Failed to generate {report_type} report: {str(e)}")
+            raise ReportError(
+                f"Failed to generate {report_type} report: {str(e)}"
+            ) from e
 
     def generate_analysis_report(
         self,
@@ -138,7 +140,7 @@ class JsonReportAdapter(ReportPort):
             }
 
         except Exception as e:
-            raise ReportError(f"Failed to generate analysis report: {str(e)}")
+            raise ReportError(f"Failed to generate analysis report: {str(e)}") from e
 
     def generate_coverage_report(
         self,
@@ -162,7 +164,7 @@ class JsonReportAdapter(ReportPort):
                 coverage_data, style=report_style, **kwargs
             )
         except Exception as e:
-            raise ReportError(f"Failed to generate coverage report: {str(e)}")
+            raise ReportError(f"Failed to generate coverage report: {str(e)}") from e
 
     def generate_summary_report(
         self,
@@ -186,7 +188,7 @@ class JsonReportAdapter(ReportPort):
                 project_data, level=summary_level, **kwargs
             )
         except Exception as e:
-            raise ReportError(f"Failed to generate summary report: {str(e)}")
+            raise ReportError(f"Failed to generate summary report: {str(e)}") from e
 
     def export_report(
         self,
@@ -240,7 +242,9 @@ class JsonReportAdapter(ReportPort):
             }
 
         except Exception as e:
-            raise ReportError(f"Failed to export report to {output_path}: {str(e)}")
+            raise ReportError(
+                f"Failed to export report to {output_path}: {str(e)}"
+            ) from e
 
     def _generate_coverage_report_content(
         self, coverage_data: dict[str, Any], **kwargs: Any

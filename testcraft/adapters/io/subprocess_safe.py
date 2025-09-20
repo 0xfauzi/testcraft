@@ -145,7 +145,9 @@ def run_subprocess_safe(
         logger.warning(f"Command {cmd} timed out after {timeout} seconds")
         proc.kill()
         proc.communicate()  # Clean up zombie process
-        raise SubprocessTimeoutError(f"Command {cmd} timed out after {timeout} seconds")
+        raise SubprocessTimeoutError(
+            f"Command {cmd} timed out after {timeout} seconds"
+        ) from None
 
     except Exception:
         # Ensure cleanup on any other exception

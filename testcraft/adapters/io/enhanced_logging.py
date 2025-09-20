@@ -214,7 +214,7 @@ class StructuredLogger:
         if current_item:
             current_name = (
                 Path(current_item).name
-                if isinstance(current_item, (str, Path))
+                if isinstance(current_item, str | Path)
                 else str(current_item)
             )
             message += f" [muted]{current_name}[/]"

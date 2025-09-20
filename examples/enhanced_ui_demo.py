@@ -34,7 +34,7 @@ def simulate_file_processing(files: list[str]) -> list[dict[str, Any]]:
     """Simulate processing files with realistic data."""
     results = []
 
-    for i, file_path in enumerate(files):
+    for _i, file_path in enumerate(files):
         # Simulate realistic processing times and outcomes
         processing_time = random.uniform(0.5, 3.0)
         success_rate = 0.85  # 85% success rate
@@ -60,7 +60,7 @@ def simulate_file_processing(files: list[str]) -> list[dict[str, Any]]:
 def demo_enhanced_progress_tracking():
     """Demo advanced progress tracking with multiple stages."""
     ui = EnhancedUIAdapter()
-    logger = get_operation_logger("demo")
+    get_operation_logger("demo")
 
     ui.console.print("\n🚀 [title]Enhanced Progress Tracking Demo[/title]")
     ui.console.rule("[cyan]Multi-Stage Operations[/]")
@@ -375,17 +375,17 @@ async def main():
     ui.console.clear()
     welcome_text = """
     🚀 [title]TestCraft Enhanced UI System Demo[/title] 🚀
-    
+
     [info]Welcome to the dramatically improved TestCraft experience![/]
     [info]This demo showcases the comprehensive Rich UI overhaul with:[/]
-    
+
     ✨ [highlight]Advanced progress tracking with multi-stage operations[/]
-    📊 [highlight]Real-time dashboards with live status updates[/] 
+    📊 [highlight]Real-time dashboards with live status updates[/]
     📁 [highlight]Beautiful file processing tables with rich formatting[/]
     📝 [highlight]Enhanced structured logging with context and suggestions[/]
     ❌ [highlight]Intelligent error handling with helpful recommendations[/]
     🎉 [highlight]Comprehensive success summaries with performance metrics[/]
-    
+
     [primary]Prepare for a visual feast! 🍰[/]
     """
 
@@ -429,7 +429,7 @@ async def main():
 
 [info]The TestCraft UI system now features:[/]
   🎨 [highlight]Sophisticated progress tracking[/] with multi-stage operations
-  📊 [highlight]Real-time dashboards[/] with live status updates  
+  📊 [highlight]Real-time dashboards[/] with live status updates
   📁 [highlight]Rich file processing tables[/] with beautiful formatting
   📝 [highlight]Enhanced structured logging[/] with context and rich formatting
   ❌ [highlight]Intelligent error handling[/] with helpful suggestions

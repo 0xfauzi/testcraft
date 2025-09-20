@@ -346,7 +346,7 @@ class ThemeManager:
             --warning: %(warning)s;
             --success: %(success)s;
             --info: %(info)s;
-            
+
             /* Text colors */
             --text: %(text)s;
             --text-muted: %(text_muted)s;
@@ -354,81 +354,81 @@ class ThemeManager:
             --text-on-primary: %(text_on_primary)s;
             --text-on-secondary: %(text_on_secondary)s;
             --text-on-error: %(text_on_error)s;
-            
+
             /* Border colors */
             --border: %(border)s;
             --border-focused: %(border_focused)s;
             --border-error: %(border_error)s;
             --border-success: %(border_success)s;
-            
+
             /* Special colors */
             --accent: %(accent)s;
             --highlight: %(highlight)s;
             --shadow: %(shadow)s;
             --overlay: %(overlay)s;
         }
-        
+
         /* Textual-specific theme mappings */
         App {
             background: var(--background);
             color: var(--text);
         }
-        
+
         Screen {
             background: var(--background);
         }
-        
+
         /* Widget defaults */
         Button {
             background: var(--surface);
             color: var(--text);
             border: tall var(--border);
         }
-        
+
         Button:hover {
             background: var(--primary);
             color: var(--text-on-primary);
             border: tall var(--border-focused);
         }
-        
+
         Button:focus {
             border: tall var(--border-focused);
         }
-        
+
         Button.-primary {
             background: var(--primary);
             color: var(--text-on-primary);
         }
-        
+
         Button.-error {
             background: var(--error);
             color: var(--text-on-error);
         }
-        
+
         Button.-success {
             background: var(--success);
             color: var(--text-on-primary);
         }
-        
+
         Input {
             background: var(--surface);
             color: var(--text);
             border: tall var(--border);
         }
-        
+
         Input:focus {
             border: tall var(--border-focused);
         }
-        
+
         Input.-invalid {
             border: tall var(--border-error);
         }
-        
+
         /* Modal styling */
         ModalScreen {
             background: var(--overlay);
         }
-        
+
         .modal-container {
             background: var(--surface);
             border: thick var(--border-focused);

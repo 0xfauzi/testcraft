@@ -8,7 +8,7 @@ for distributed tracing and metrics collection.
 import hashlib
 import os
 from contextlib import AbstractContextManager, contextmanager
-from typing import Any, Union
+from typing import Any
 
 from ...ports.telemetry_port import MetricValue, SpanContext, SpanKind
 
@@ -57,7 +57,7 @@ except ImportError:
     SERVICE_VERSION = "service.version"  # type: ignore
 
     # Type stubs for OpenTelemetry types
-    AttributeValue = Union[str, bool, int, float]
+    AttributeValue = str | bool | int | float
 
     class MockTracer:
         def start_as_current_span(self, *args, **kwargs):

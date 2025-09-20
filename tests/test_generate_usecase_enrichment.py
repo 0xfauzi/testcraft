@@ -90,7 +90,7 @@ app_settings = settings.DATABASE_NAME
         source_text = """
 import os
 var1 = os.environ["VAR1"]
-var2 = os.environ["VAR2"] 
+var2 = os.environ["VAR2"]
 var3 = os.environ["VAR3"]
 var4 = os.environ["VAR4"]
 """
@@ -184,7 +184,7 @@ def sample_data():
     """Sample data fixture."""
     return {"key": "value"}
 
-@pytest.fixture(scope="module") 
+@pytest.fixture(scope="module")
 def api_client():
     """API client fixture."""
     pass
@@ -283,7 +283,7 @@ import uuid
 time.sleep(1)
 now = datetime.datetime.now()
 
-# Random operations  
+# Random operations
 value = random.choice([1, 2, 3])
 identifier = uuid.uuid4()
 """
@@ -434,8 +434,8 @@ class TestContextEnrichmentConfig:
         assert config.context_enrichment.max_fixtures == 30
 
         # Test invalid max values
-        with pytest.raises(Exception):  # ValidationError from pydantic
+        with pytest.raises(ValueError):  # ValidationError from pydantic
             TestCraftConfig(context_enrichment={"max_env_vars": 0})  # Below minimum
 
-        with pytest.raises(Exception):  # ValidationError from pydantic
+        with pytest.raises(ValueError):  # ValidationError from pydantic
             TestCraftConfig(context_enrichment={"max_fixtures": 200})  # Above maximum

@@ -81,7 +81,9 @@ class ConfigInitializer:
             return config_file
 
         except Exception as e:
-            raise ConfigInitializationError(f"Failed to create configuration file: {e}")
+            raise ConfigInitializationError(
+                f"Failed to create configuration file: {e}"
+            ) from e
 
     def run_guided_setup(self, config_file: Path) -> None:
         """Run guided configuration setup."""
@@ -173,7 +175,7 @@ openai_max_tokens = 12000             # Maximum tokens in response (auto-calcula
 openai_timeout = 60.0                 # Request timeout in seconds (5.0-600.0)
 
 # Anthropic Claude Configuration (Claude Sonnet 4 default)
-# API Key: Set ANTHROPIC_API_KEY environment variable  
+# API Key: Set ANTHROPIC_API_KEY environment variable
 anthropic_model = "claude-sonnet-4"   # Model with extended thinking capabilities
 anthropic_max_tokens = 100000         # Maximum tokens for Claude (up to 200k context)
 anthropic_timeout = 60.0              # Request timeout in seconds
@@ -206,7 +208,7 @@ enable_streaming = false              # Enable streaming responses (where suppor
 # Glob patterns for finding test files
 test_patterns = [
     "test_*.py",
-    "*_test.py", 
+    "*_test.py",
     "tests/**/test_*.py"
 ]
 
@@ -222,7 +224,7 @@ exclude = [
 exclude_dirs = [
     # Virtual environments
     "venv", "env", ".env", ".venv", "virtualenv",
-    # Build directories  
+    # Build directories
     "build", "dist", "*.egg-info", "*.dist-info",
     # Cache directories
     "__pycache__", ".pytest_cache", ".coverage", ".cache",
@@ -354,7 +356,7 @@ enable_pattern_analysis = true      # Enable failure pattern analysis for refine
 # Modern Python mutator configurations
 [quality.modern_mutators]
 enable_type_hints = true            # Enable type hint mutations
-enable_async_await = true           # Enable async/await mutations  
+enable_async_await = true           # Enable async/await mutations
 enable_dataclass = true             # Enable dataclass mutations
 # Severity levels: 'low', 'medium', 'high'
 type_hints_severity = "medium"      # Type hint mutation severity
@@ -378,12 +380,12 @@ dependency_validation = true       # Validate dependencies before running tests
 use_poetry_run = true              # Use 'poetry run' for commands
 respect_poetry_venv = true         # Respect Poetry's virtual environment
 
-# Pipenv-specific settings  
+# Pipenv-specific settings
 [environment.overrides.pipenv]
 use_pipenv_run = true              # Use 'pipenv run' for commands
 
 # Conda-specific settings
-[environment.overrides.conda] 
+[environment.overrides.conda]
 activate_environment = true        # Activate conda environment
 
 # UV-specific settings (fast Python package installer)
@@ -443,7 +445,7 @@ version = ""                      # Service version
 
 [telemetry.backends.jaeger]
 endpoint = "http://localhost:14268/api/traces"  # Jaeger endpoint
-agent_host_name = "localhost"     # Jaeger agent hostname  
+agent_host_name = "localhost"     # Jaeger agent hostname
 agent_port = 6831                 # Jaeger agent port
 
 # =============================================================================
@@ -488,7 +490,7 @@ prompt_version = ""               # Specific prompt version (empty = latest)
 # Set these environment variables in your system or .env file:
 #
 # OpenAI: OPENAI_API_KEY
-# Anthropic: ANTHROPIC_API_KEY  
+# Anthropic: ANTHROPIC_API_KEY
 # Azure OpenAI: AZURE_OPENAI_API_KEY, AZURE_OPENAI_ENDPOINT
 # AWS Bedrock: AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_REGION
 #
@@ -662,7 +664,7 @@ prompt_version = ""               # Specific prompt version (empty = latest)
                 toml_lines.append(f'{field_name} = "{escaped_value}"')
             elif isinstance(field_value, bool):
                 toml_lines.append(f"{field_name} = {str(field_value).lower()}")
-            elif isinstance(field_value, (int, float)):
+            elif isinstance(field_value, int | float):
                 toml_lines.append(f"{field_name} = {field_value}")
             elif isinstance(field_value, list):
                 if not field_value:  # Empty list
@@ -745,7 +747,9 @@ prompt_version = ""               # Specific prompt version (empty = latest)
 
                 return yaml.dump(config_dict, default_flow_style=False, indent=2)
             except ImportError:
-                raise ConfigInitializationError("PyYAML not available for YAML format")
+                raise ConfigInitializationError(
+                    "PyYAML not available for YAML format"
+                ) from None
         elif format_type == "json":
             return json.dumps(config_dict, indent=2)
         else:

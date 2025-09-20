@@ -119,7 +119,7 @@ class RichUIAdapter(UIPort):
                 self._display_test_generation_progress(progress_data, **kwargs)
 
         except Exception as e:
-            raise UIError(f"Failed to display progress: {str(e)}")
+            raise UIError(f"Failed to display progress: {str(e)}") from e
 
     def display_results(
         self, results: dict[str, Any], result_type: str = "general", **kwargs: Any
@@ -166,7 +166,7 @@ class RichUIAdapter(UIPort):
                     self.rich_cli.display_error(error_msg, "Operation Failed")
 
         except Exception as e:
-            raise UIError(f"Failed to display results: {str(e)}")
+            raise UIError(f"Failed to display results: {str(e)}") from e
 
     def display_error(
         self, error_message: str, error_type: str = "general", **kwargs: Any
@@ -204,7 +204,7 @@ class RichUIAdapter(UIPort):
 
         except Exception as e:
             # Wrap errors in UIError for consistent test expectations
-            raise UIError(f"Failed to display error: {str(e)}")
+            raise UIError(f"Failed to display error: {str(e)}") from e
 
     def display_warning(
         self, warning_message: str, warning_type: str = "general", **kwargs: Any
@@ -226,7 +226,7 @@ class RichUIAdapter(UIPort):
             )
             self.rich_cli.display_warning(warning_message, title)
         except Exception as e:
-            raise UIError(f"Failed to display warning: {str(e)}")
+            raise UIError(f"Failed to display warning: {str(e)}") from e
 
     def display_info(
         self, info_message: str, info_type: str = "general", **kwargs: Any
@@ -246,7 +246,7 @@ class RichUIAdapter(UIPort):
             )
             self.rich_cli.display_info(info_message, title)
         except Exception as e:
-            raise UIError(f"Failed to display info: {str(e)}")
+            raise UIError(f"Failed to display info: {str(e)}") from e
 
     def get_user_input(
         self, prompt: str, input_type: str = "string", **kwargs: Any
@@ -312,7 +312,7 @@ class RichUIAdapter(UIPort):
                 )
 
         except Exception as e:
-            raise UIError(f"Failed to get user input: {str(e)}")
+            raise UIError(f"Failed to get user input: {str(e)}") from e
 
     def confirm_action(
         self, message: str, default: bool = False, **kwargs: Any
@@ -331,7 +331,7 @@ class RichUIAdapter(UIPort):
         try:
             return self.rich_cli.get_user_confirmation(message, default)
         except Exception as e:
-            raise UIError(f"Failed to get user confirmation: {str(e)}")
+            raise UIError(f"Failed to get user confirmation: {str(e)}") from e
 
     def get_user_confirmation(
         self, message: str, default: bool = False, **kwargs: Any
@@ -366,7 +366,7 @@ class RichUIAdapter(UIPort):
         try:
             self.rich_cli.display_success(message, title)
         except Exception as e:
-            raise UIError(f"Failed to display success message: {str(e)}")
+            raise UIError(f"Failed to display success message: {str(e)}") from e
 
     def print_divider(self, title: str | None = None) -> None:
         """
@@ -522,10 +522,6 @@ class RichUIAdapter(UIPort):
         """Finalize the UI and clean up resources."""
         self._stop_progress_indicators()
 
-    def print_divider(self, title: str | None = None) -> None:
-        """Print a styled divider."""
-        self.rich_cli.print_divider(title)
-
     def set_quiet_mode(self, quiet: bool) -> None:
         """Set quiet mode for minimal output."""
         if quiet:
@@ -548,7 +544,7 @@ class RichUIAdapter(UIPort):
         try:
             return self.rich_cli.create_configuration_wizard(config_steps)
         except Exception as e:
-            raise UIError(f"Configuration wizard failed: {str(e)}")
+            raise UIError(f"Configuration wizard failed: {str(e)}") from e
 
     def display_code_snippet(
         self,
@@ -570,7 +566,7 @@ class RichUIAdapter(UIPort):
             line_numbers = kwargs.get("line_numbers", True)
             self.rich_cli.display_code_snippet(code, language, title, line_numbers)
         except Exception as e:
-            raise UIError(f"Failed to display code snippet: {str(e)}")
+            raise UIError(f"Failed to display code snippet: {str(e)}") from e
 
     def create_beautiful_summary(
         self, data: dict[str, Any], layout_style: str = "comprehensive"
@@ -612,7 +608,7 @@ class RichUIAdapter(UIPort):
                     self.rich_cli.print_panel(panel)
 
         except Exception as e:
-            raise UIError(f"Failed to create summary display: {str(e)}")
+            raise UIError(f"Failed to create summary display: {str(e)}") from e
 
     def create_status_spinner(self, message: str) -> Status:
         """

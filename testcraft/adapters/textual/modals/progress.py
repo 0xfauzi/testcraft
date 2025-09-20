@@ -30,49 +30,49 @@ class ProgressDialog(BaseModal):
         min-width: 50;
         max-width: 80;
     }
-    
+
     ProgressDialog .progress-icon {
         text-align: center;
         font-size: 200%;
         margin-bottom: 1;
     }
-    
+
     ProgressDialog .progress-message {
         text-align: center;
         margin: 1 0;
         color: $text;
     }
-    
+
     ProgressDialog .progress-status {
         text-align: center;
         margin: 0.5 0;
         color: $text-muted;
         font-size: 90%;
     }
-    
+
     ProgressDialog .progress-bar-container {
         margin: 1 0;
         padding: 0 2;
     }
-    
+
     ProgressDialog ProgressBar {
         width: 100%;
     }
-    
+
     ProgressDialog .progress-percentage {
         text-align: center;
         margin: 0.5 0;
         color: $primary;
         text-style: bold;
     }
-    
+
     ProgressDialog .progress-eta {
         text-align: center;
         margin: 0.5 0;
         color: $text-muted;
         font-size: 90%;
     }
-    
+
     ProgressDialog .progress-details {
         background: $surface;
         border: solid $border;
@@ -81,11 +81,11 @@ class ProgressDialog(BaseModal):
         max-height: 10;
         overflow-y: auto;
     }
-    
+
     ProgressDialog.indeterminate .progress-icon {
         animation: spin 2s linear infinite;
     }
-    
+
     @keyframes spin {
         from { transform: rotate(0deg); }
         to { transform: rotate(360deg); }

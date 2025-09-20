@@ -106,7 +106,7 @@ class PlanBuilder:
                 logger.exception("Failed to decide files to process: %s", e)
                 raise GenerateUseCaseError(
                     f"File processing decision failed: {e}", cause=e
-                )
+                ) from e
 
     def build_plans(self, files_to_process: list[Path]) -> list[TestGenerationPlan]:
         """
@@ -137,7 +137,7 @@ class PlanBuilder:
                 logger.exception("Failed to build generation plans: %s", e)
                 raise GenerateUseCaseError(
                     f"Generation plan creation failed: {e}", cause=e
-                )
+                ) from e
 
     def get_source_path_for_plan(self, plan: TestGenerationPlan) -> Path | None:
         """

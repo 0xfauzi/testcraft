@@ -456,7 +456,7 @@ class TestPytestRefinerIntegration:
             async def mock_context_fn(test_path, content):
                 return {}
 
-            result = await refiner.refine_until_pass(
+            await refiner.refine_until_pass(
                 test_path=str(test_file),
                 max_iterations=3,
                 build_source_context_fn=mock_context_fn,
@@ -523,7 +523,7 @@ class TestPytestRefinerIntegration:
         ) as mock_runner:
             mock_runner.return_value = ("PASSED", "", 0)
 
-            result = await refiner.run_pytest(str(test_file))
+            await refiner.run_pytest(str(test_file))
 
             # Verify custom args were passed
             mock_runner.assert_called_once()

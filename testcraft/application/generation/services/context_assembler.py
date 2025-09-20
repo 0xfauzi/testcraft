@@ -542,8 +542,8 @@ class ContextAssembler:
 
                         header = (
                             f"# Exemplars from {tp.name}: asserts={asserts}, "
-                            f"raises={raises}, fixtures={sorted(list(fixtures_used))[:5]}, "
-                            f"markers={sorted(list(markers_used))[:5]}"
+                            f"raises={raises}, fixtures={sorted(fixtures_used)[:5]}, "
+                            f"markers={sorted(markers_used)[:5]}"
                         )
                         exemplar_items.append(header[:600])
                     except Exception:
@@ -1103,7 +1103,7 @@ class ContextAssembler:
         try:
             target_fn = (
                 node
-                if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+                if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef)
                 else None
             )
             if target_fn is not None:
@@ -1147,7 +1147,7 @@ class ContextAssembler:
             return info
 
         try:
-            lines = [l.rstrip() for l in doc.splitlines()]
+            lines = [line.rstrip() for line in doc.splitlines()]
             # Summary: first non-empty line
             for ln in lines:
                 if ln.strip():
@@ -1169,15 +1169,15 @@ class ContextAssembler:
                 try:
                     idx = next(
                         i
-                        for i, l in enumerate(lines)
-                        if l.strip().lower().startswith(header)
+                        for i, line in enumerate(lines)
+                        if line.strip().lower().startswith(header)
                     )
                 except StopIteration:
                     return items
-                for l in lines[idx + 1 : idx + 12]:  # scan a few lines
-                    if not l.strip():
+                for line in lines[idx + 1 : idx + 12]:  # scan a few lines
+                    if not line.strip():
                         break
-                    m2 = re.match(r"\s*([A-Za-z_][A-Za-z0-9_]*)\s*[:\(]", l)
+                    m2 = re.match(r"\s*([A-Za-z_][A-Za-z0-9_]*)\s*[:\(]", line)
                     if m2:
                         items.append(m2.group(1))
                 return items
@@ -1194,8 +1194,8 @@ class ContextAssembler:
                 try:
                     idx = next(
                         i
-                        for i, l in enumerate(lines)
-                        if l.strip().lower().startswith("returns")
+                        for i, line in enumerate(lines)
+                        if line.strip().lower().startswith("returns")
                     )
                     if idx + 1 < len(lines):
                         info["returns"] = re.sub(r"\s+", " ", lines[idx + 1].strip())
@@ -1321,7 +1321,7 @@ class ContextAssembler:
                 pass
 
             # Combine and format
-            all_raises = sorted(list(docstring_raises | ast_raises))[:8]
+            all_raises = sorted(docstring_raises | ast_raises)[:8]
             if all_raises:
                 error_items.append(f"# Error paths: {all_raises}")
         except Exception:
@@ -1472,7 +1472,7 @@ class ContextAssembler:
         pytest_context = []
         try:
             # Check if pytest settings context is needed based on feature flags
-            enrichment_cfg = self._config.get("context_enrichment", {})
+            self._config.get("context_enrichment", {})
             context_cats = self._config.get("context_categories", {})
 
             if not context_cats.get("pytest_settings", True):

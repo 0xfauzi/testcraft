@@ -27,25 +27,25 @@ class ConfirmationDialog(BaseModal):
         text-align: center;
         padding: 1;
     }
-    
+
     ConfirmationDialog .modal-message.warning {
         color: $warning;
     }
-    
+
     ConfirmationDialog .modal-message.error {
         color: $error;
     }
-    
+
     ConfirmationDialog .modal-icon {
         text-align: center;
         font-size: 200%;
         margin-bottom: 1;
     }
-    
+
     ConfirmationDialog .modal-icon.warning {
         color: $warning;
     }
-    
+
     ConfirmationDialog .modal-icon.danger {
         color: $error;
     }

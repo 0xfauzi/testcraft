@@ -207,13 +207,13 @@ def test_all_adapters_return_consistent_structures():
         result = adapter.generate_tests("def f(): pass")
         assert isinstance(result["tests"], str)
         assert isinstance(result["coverage_focus"], list)
-        assert isinstance(result["confidence"], (int, float))
+        assert isinstance(result["confidence"], int | float)
         assert isinstance(result["metadata"], dict)
         assert "parsed" in result["metadata"]
 
         # Test analyze_code structure
         result = adapter.analyze_code("def g(): pass")
-        assert isinstance(result["testability_score"], (int, float))
+        assert isinstance(result["testability_score"], int | float)
         assert isinstance(result["complexity_metrics"], dict)
         assert isinstance(result["recommendations"], list)
         assert isinstance(result["potential_issues"], list)
@@ -224,7 +224,7 @@ def test_all_adapters_return_consistent_structures():
         result = adapter.refine_content("old content", "instructions")
         assert isinstance(result["refined_content"], str)
         assert isinstance(result["changes_made"], str)
-        assert isinstance(result["confidence"], (int, float))
+        assert isinstance(result["confidence"], int | float)
         assert isinstance(result["metadata"], dict)
         assert "parsed" in result["metadata"]
 

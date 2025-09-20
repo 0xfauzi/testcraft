@@ -222,7 +222,7 @@ class PromptFooIntegrationAdapter:
             return PromptFooConfig(**config_data)
 
         except Exception as e:
-            raise ValueError(f"Failed to load PromptFoo config: {e}")
+            raise ValueError(f"Failed to load PromptFoo config: {e}") from e
 
     def register_prompt_version(
         self,

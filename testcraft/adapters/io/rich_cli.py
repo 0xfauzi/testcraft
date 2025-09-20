@@ -6,7 +6,10 @@ CLI output including tables, progress indicators, summaries, and themed layouts.
 """
 
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from .ui_rich import UIStyle
 
 from rich import box
 from rich.console import Console
@@ -91,7 +94,7 @@ MINIMAL_THEME = Theme(
 )
 
 
-def get_theme(ui_style: "UIStyle") -> Theme:  # Forward ref to avoid circular import
+def get_theme(ui_style: UIStyle) -> Theme:
     """Get the appropriate theme for the UI style."""
     # Import here to avoid circular import
     from .ui_rich import UIStyle

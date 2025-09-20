@@ -201,7 +201,7 @@ class ArtifactStoreAdapter:
             return artifact_id
 
         except Exception as e:
-            raise ArtifactStoreError(f"Failed to store artifact: {str(e)}")
+            raise ArtifactStoreError(f"Failed to store artifact: {str(e)}") from e
 
     def retrieve_artifact(self, artifact_id: str) -> dict[str, Any] | None:
         """
@@ -247,7 +247,7 @@ class ArtifactStoreAdapter:
         except Exception as e:
             raise ArtifactStoreError(
                 f"Failed to retrieve artifact {artifact_id}: {str(e)}"
-            )
+            ) from e
 
     def list_artifacts(
         self,
@@ -294,7 +294,7 @@ class ArtifactStoreAdapter:
             return results
 
         except Exception as e:
-            raise ArtifactStoreError(f"Failed to list artifacts: {str(e)}")
+            raise ArtifactStoreError(f"Failed to list artifacts: {str(e)}") from e
 
     def remove_artifact(self, artifact_id: str) -> bool:
         """
@@ -325,7 +325,7 @@ class ArtifactStoreAdapter:
         except Exception as e:
             raise ArtifactStoreError(
                 f"Failed to remove artifact {artifact_id}: {str(e)}"
-            )
+            ) from e
 
     def cleanup_expired(self) -> dict[str, int]:
         """
@@ -358,7 +358,9 @@ class ArtifactStoreAdapter:
             }
 
         except Exception as e:
-            raise ArtifactStoreError(f"Failed to cleanup expired artifacts: {str(e)}")
+            raise ArtifactStoreError(
+                f"Failed to cleanup expired artifacts: {str(e)}"
+            ) from e
 
     def apply_cleanup_policy(self) -> dict[str, int]:
         """
@@ -430,7 +432,7 @@ class ArtifactStoreAdapter:
             return stats
 
         except Exception as e:
-            raise ArtifactStoreError(f"Failed to apply cleanup policy: {str(e)}")
+            raise ArtifactStoreError(f"Failed to apply cleanup policy: {str(e)}") from e
 
     def get_storage_stats(self) -> dict[str, Any]:
         """
@@ -472,7 +474,9 @@ class ArtifactStoreAdapter:
             return stats
 
         except Exception as e:
-            raise ArtifactStoreError(f"Failed to get storage statistics: {str(e)}")
+            raise ArtifactStoreError(
+                f"Failed to get storage statistics: {str(e)}"
+            ) from e
 
     def _load_metadata(self) -> None:
         """Load metadata from disk."""
@@ -500,7 +504,7 @@ class ArtifactStoreAdapter:
                 json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8"
             )
         except Exception as e:
-            raise ArtifactStoreError(f"Failed to save metadata: {str(e)}")
+            raise ArtifactStoreError(f"Failed to save metadata: {str(e)}") from e
 
 
 # Convenience functions for common use cases

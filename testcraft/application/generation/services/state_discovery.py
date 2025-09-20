@@ -106,4 +106,6 @@ class StateSyncDiscovery:
 
             except Exception as e:
                 logger.exception("Failed to sync state and discover files: %s", e)
-                raise GenerateUseCaseError(f"File discovery failed: {e}", cause=e)
+                raise GenerateUseCaseError(
+                    f"File discovery failed: {e}", cause=e
+                ) from e

@@ -396,7 +396,7 @@ class TestAnnotationConfiguration:
                     "failure_category": "import_error",
                 }
 
-                result = await refiner.refine_until_pass(
+                await refiner.refine_until_pass(
                     test_path=str(temp_test_file),
                     max_iterations=1,
                     build_source_context_fn=AsyncMock(return_value={}),
@@ -450,7 +450,7 @@ class TestAnnotationConfiguration:
                     "failure_category": "import_error",
                 }
 
-                result = await refiner.refine_until_pass(
+                await refiner.refine_until_pass(
                     test_path=str(temp_test_file),
                     max_iterations=1,
                     build_source_context_fn=AsyncMock(return_value={}),
@@ -595,7 +595,7 @@ class TestTelemetryIntegration:
                     "failure_category": "import_error",
                 }
 
-                result = await refiner_with_annotation_enabled.refine_until_pass(
+                await refiner_with_annotation_enabled.refine_until_pass(
                     test_path=str(temp_test_file),
                     max_iterations=1,
                     build_source_context_fn=AsyncMock(return_value={}),

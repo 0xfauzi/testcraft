@@ -87,7 +87,7 @@ class TextualUIAdapter:
                 self.console.print(f"[blue]{message}[/] {percentage:.1f}%")
 
         except Exception as e:
-            raise UIError(f"Failed to display progress: {e}")
+            raise UIError(f"Failed to display progress: {e}") from e
 
     def display_results(
         self, results: dict[str, Any], result_type: str = "general", **kwargs: Any
@@ -115,7 +115,7 @@ class TextualUIAdapter:
                     self.console.print(f"[red]✗[/] {summary}")
 
         except Exception as e:
-            raise UIError(f"Failed to display results: {e}")
+            raise UIError(f"Failed to display results: {e}") from e
 
     def display_error(
         self, error_message: str, error_type: str = "general", **kwargs: Any
@@ -130,7 +130,7 @@ class TextualUIAdapter:
                 self.console.print(f"[red]Error:[/] {error_message}")
 
         except Exception as e:
-            raise UIError(f"Failed to display error: {e}")
+            raise UIError(f"Failed to display error: {e}") from e
 
     def display_warning(
         self, warning_message: str, warning_type: str = "general", **kwargs: Any
@@ -143,14 +143,14 @@ class TextualUIAdapter:
                     try:
                         notifications = self._app.screen.query_one(Notifications)
                         notifications.warning(warning_message)
-                    except:
+                    except Exception:
                         pass
 
             # Always show in console as fallback
             self.console.print(f"[yellow]Warning:[/] {warning_message}")
 
         except Exception as e:
-            raise UIError(f"Failed to display warning: {e}")
+            raise UIError(f"Failed to display warning: {e}") from e
 
     def display_info(
         self, info_message: str, info_type: str = "general", **kwargs: Any
@@ -163,14 +163,14 @@ class TextualUIAdapter:
                     try:
                         notifications = self._app.screen.query_one(Notifications)
                         notifications.info(info_message)
-                    except:
+                    except Exception:
                         pass
 
             # Console fallback
             self.console.print(f"[blue]Info:[/] {info_message}")
 
         except Exception as e:
-            raise UIError(f"Failed to display info: {e}")
+            raise UIError(f"Failed to display info: {e}") from e
 
     def get_user_input(
         self, prompt: str, input_type: str = "string", **kwargs: Any
@@ -193,7 +193,7 @@ class TextualUIAdapter:
                     return Prompt.ask(prompt, default=kwargs.get("default", ""))
 
         except Exception as e:
-            raise UIError(f"Failed to get user input: {e}")
+            raise UIError(f"Failed to get user input: {e}") from e
 
     def confirm_action(
         self, message: str, default: bool = False, **kwargs: Any
@@ -210,7 +210,7 @@ class TextualUIAdapter:
                 return Confirm.ask(message, default=default)
 
         except Exception as e:
-            raise UIError(f"Failed to get confirmation: {e}")
+            raise UIError(f"Failed to get confirmation: {e}") from e
 
     # ========================================================================
     # Enhanced API Methods (Parity with EnhancedUIAdapter)
@@ -334,7 +334,7 @@ class TextualUIAdapter:
                             file_data.get("duration", 0.0),
                             file_data.get("error"),
                         )
-                except:
+                except Exception:
                     # Fallback to console if no file table available
                     self._display_console_file_table(files_data, title)
             else:
@@ -403,7 +403,7 @@ class TextualUIAdapter:
                     current_screen = self._app.screen
                     stats_panel = current_screen.query_one(StatsPanel)
                     stats_panel.update_stats(metrics)
-                except:
+                except Exception:
                     # Fallback to console
                     self._display_console_metrics(metrics, title)
             else:
@@ -471,7 +471,7 @@ class TextualUIAdapter:
                 try:
                     notifications = self._app.screen.query_one(Notifications)
                     notifications.success(message)
-                except:
+                except Exception:
                     pass
 
             # Console display

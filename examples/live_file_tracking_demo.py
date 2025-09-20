@@ -33,7 +33,7 @@ async def simulate_test_generation_pipeline(
 ):
     """Simulate the complete test generation pipeline with live updates."""
 
-    for i, file_path in enumerate(file_paths):
+    for _i, file_path in enumerate(file_paths):
         file_name = Path(file_path).name
 
         try:
@@ -254,7 +254,7 @@ async def demo_live_file_tracking():
   • [red]Failed:[/] {stats["failed"]}
   • [yellow]Total Duration:[/] {stats["total_duration"]:.1f}s
   • [blue]Processing Rate:[/] {stats["files_per_minute"]:.1f} files/min
-  
+
 [info]🧪 Test Generation:[/]
   • [cyan]Tests Generated:[/] {stats["total_tests_generated"]}
   • [magenta]Pytest Runs:[/] {stats["total_pytest_runs"]}
@@ -388,22 +388,22 @@ async def main():
     ui.console.clear()
     welcome_text = """
     🔄 [title]TestCraft Live File Tracking Demo[/title] 🔄
-    
+
     [info]Welcome to the revolutionary live file status tracking system![/]
     [info]This demo shows granular real-time updates during generation and refinement.[/]
-    
+
     🌟 [highlight]Features Showcased:[/]
-    
+
     ⚡ [primary]Real-time Status Updates[/] - See exactly what's happening to each file
-    📊 [primary]Live Progress Tables[/] - Beautiful visual feedback with status indicators  
+    📊 [primary]Live Progress Tables[/] - Beautiful visual feedback with status indicators
     🔍 [primary]Granular Operation Details[/] - Detailed step-by-step progress
     📈 [primary]Performance Metrics[/] - Live statistics and completion rates
     🎯 [primary]Phase Tracking[/] - Analysis → Generation → Writing → Testing → Refinement
     ⚠️ [primary]Error Handling[/] - Detailed error tracking and reporting
-    
+
     [secondary]No more wondering what's happening during long operations![/]
     [secondary]Users get complete visibility into every step of the process.[/]
-    
+
     [primary]🚀 Prepare for the future of CLI feedback! 🚀[/]
     """
 

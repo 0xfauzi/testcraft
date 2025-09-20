@@ -226,7 +226,7 @@ class GenerationConfig:
 
         # Validate coverage_threshold
         threshold = config.get("coverage_threshold", 0.8)
-        if not isinstance(threshold, (int, float)) or not (0.0 <= threshold <= 1.0):
+        if not isinstance(threshold, int | float) or not (0.0 <= threshold <= 1.0):
             logger.warning(
                 "Invalid coverage_threshold %s, using default 0.8", threshold
             )
@@ -280,7 +280,7 @@ class GenerationConfig:
 
         # Validate refinement_backoff_sec
         backoff = config.get("refinement_backoff_sec", 0.2)
-        if not isinstance(backoff, (int, float)) or backoff < 0:
+        if not isinstance(backoff, int | float) or backoff < 0:
             logger.warning(
                 "Invalid refinement_backoff_sec %s, using default 0.2", backoff
             )

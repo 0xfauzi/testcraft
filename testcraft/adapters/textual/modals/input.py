@@ -27,32 +27,32 @@ class InputDialog(BaseModal):
         margin: 1 0;
         color: $text;
     }
-    
+
     InputDialog .modal-input {
         margin: 1 0;
         width: 100%;
     }
-    
+
     InputDialog .modal-help {
         margin-top: 0.5;
         color: $text-muted;
         font-size: 90%;
     }
-    
+
     InputDialog .modal-error {
         margin-top: 0.5;
         color: $error;
         font-size: 90%;
     }
-    
+
     InputDialog Input {
         width: 100%;
     }
-    
+
     InputDialog Input:focus {
         border: tall $primary;
     }
-    
+
     InputDialog Input.-invalid {
         border: tall $error;
     }

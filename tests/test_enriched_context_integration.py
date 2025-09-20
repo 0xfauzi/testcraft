@@ -114,45 +114,45 @@ API_KEY = os.environ["API_KEY"]
 
 class UserManager:
     \"\"\"User management class.
-    
+
     :raises ValueError: When user ID is invalid
     :raises KeyError: When user not found
     \"\"\"
-    
+
     def __init__(self):
         self.db_url = DATABASE_URL
-        
+
     def create_user(self, name: str, email: str) -> dict:
         \"\"\"Create a new user.
-        
+
         Args:
             name: User's name
             email: User's email address
-            
+
         Returns:
             Created user data
-            
+
         Raises:
             ValueError: If name or email is empty
         \"\"\"
         if not name or not email:
             raise ValueError("Name and email are required")
-            
+
         response = requests.post("http://api.example.com/users", {
             "name": name,
             "email": email
         })
-        
+
         if response.status_code != 201:
             raise RuntimeError("Failed to create user")
-            
+
         return response.json()
 
     def get_user(self, user_id: int) -> dict:
         \"\"\"Get user by ID.\"\"\"
         if user_id <= 0:
             raise ValueError("Invalid user ID")
-            
+
         # Database query would go here
         return {"id": user_id, "name": "Test User"}
 """)
@@ -188,16 +188,16 @@ from unittest.mock import patch
 from main import UserManager
 
 class TestUserManager:
-    
+
     def test_create_user_success(self, user_data, api_client):
         \"\"\"Test successful user creation.\"\"\"
         with patch('requests.post') as mock_post:
             mock_post.return_value.status_code = 201
             mock_post.return_value.json.return_value = {"id": 1, **user_data}
-            
+
             manager = UserManager()
             result = manager.create_user(user_data["name"], user_data["email"])
-            
+
             assert result["id"] == 1
             assert result["name"] == user_data["name"]
 
@@ -205,7 +205,7 @@ class TestUserManager:
     def test_get_user_invalid_id(self):
         \"\"\"Test get user with invalid ID.\"\"\"
         manager = UserManager()
-        
+
         with pytest.raises(ValueError, match="Invalid user ID"):
             manager.get_user(-1)
 """)
@@ -312,7 +312,6 @@ testpaths = ["tests"]
 
         # Run actual generation to test end-to-end flow
         # Note: This tests the integration but with mocked LLM calls
-        results = []
 
         # Mock the async generation flow
         async def run_generation():
@@ -490,7 +489,7 @@ testpaths = ["tests"]
 
         mock_ports["llm_port"].generate_async = AsyncMock(side_effect=mock_llm_generate)
 
-        generate_usecase = GenerateUseCase(config=config_enriched, **mock_ports)
+        GenerateUseCase(config=config_enriched, **mock_ports)
 
         # Create test plan
         test_element = TestElement(
@@ -540,17 +539,17 @@ from .external_api import APIClient
 @dataclass
 class UserService:
     \"\"\"User service with multiple dependencies.
-    
-    :raises ConnectionError: When database connection fails  
+
+    :raises ConnectionError: When database connection fails
     :raises TimeoutError: When API calls timeout
     :raises ValueError: When input validation fails
     \"\"\"
-    
+
     db: DatabaseManager
     cache: CacheManager
     api_client: APIClient
     logger: logging.Logger
-    
+
     async def get_user_profile(self, user_id: int) -> Optional[dict]:
         \"\"\"Get comprehensive user profile.\"\"\"
         try:
@@ -558,20 +557,20 @@ class UserService:
             cached = await self.cache.get(f"user:{user_id}")
             if cached:
                 return cached
-                
+
             # Get from database
             user = await self.db.find_user(user_id)
             if not user:
                 return None
-                
+
             # Enrich with external API data
             external_data = await self.api_client.get_user_details(user_id)
-            
+
             profile = {**user, **external_data}
             await self.cache.set(f"user:{user_id}", profile, ttl=3600)
-            
+
             return profile
-            
+
         except Exception as e:
             self.logger.error(f"Failed to get user profile: {e}")
             raise

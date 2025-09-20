@@ -79,8 +79,8 @@ class EnrichmentDetectors:
             logger.debug("Error detecting env/config usage: %s", e)
 
         return {
-            "env_vars": sorted(list(env_vars))[:max_vars],
-            "config_keys": sorted(list(config_keys))[:max_vars],
+            "env_vars": sorted(env_vars)[:max_vars],
+            "config_keys": sorted(config_keys)[:max_vars],
         }
 
     @staticmethod
@@ -138,8 +138,8 @@ class EnrichmentDetectors:
             logger.debug("Error detecting client boundaries: %s", e)
 
         return {
-            "database_clients": sorted(list(db_clients))[:10],
-            "http_clients": sorted(list(http_clients))[:10],
+            "database_clients": sorted(db_clients)[:10],
+            "http_clients": sorted(http_clients)[:10],
         }
 
     @staticmethod
@@ -220,7 +220,7 @@ class EnrichmentDetectors:
         return {
             "builtin": builtin_fixtures[: max_fixtures // 3],
             "custom": dict(list(custom_fixtures.items())[: max_fixtures // 3]),
-            "third_party": sorted(list(third_party_fixtures))[: max_fixtures // 3],
+            "third_party": sorted(third_party_fixtures)[: max_fixtures // 3],
         }
 
     @staticmethod
@@ -308,7 +308,7 @@ class EnrichmentDetectors:
 
         # Convert sets to sorted lists and limit size
         return {
-            category: sorted(list(effects))[:5]
+            category: sorted(effects)[:5]
             for category, effects in side_effects.items()
             if effects
         }

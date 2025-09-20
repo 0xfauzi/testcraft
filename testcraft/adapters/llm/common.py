@@ -285,15 +285,15 @@ def validate_and_repair_schema(
             if not isinstance(current_value, expected_type):
                 # Attempt type coercion
                 try:
-                    if expected_type == str:
+                    if expected_type is str:
                         repaired_data[field] = str(current_value)
                         repair_performed = True
                         repair_type = "type_coercion"
-                    elif expected_type == float:
+                    elif expected_type is float:
                         repaired_data[field] = float(current_value)
                         repair_performed = True
                         repair_type = "type_coercion"
-                    elif expected_type == list:
+                    elif expected_type is list:
                         if isinstance(current_value, str):
                             # Try to convert string to list
                             repaired_data[field] = [current_value]

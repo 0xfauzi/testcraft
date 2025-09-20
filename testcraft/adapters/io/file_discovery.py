@@ -150,7 +150,9 @@ class FileDiscoveryService:
             if isinstance(e, FileDiscoveryError):
                 raise
             logger.exception(f"Failed to discover source files: {e}")
-            raise FileDiscoveryError(f"Source file discovery failed: {e}", cause=e)
+            raise FileDiscoveryError(
+                f"Source file discovery failed: {e}", cause=e
+            ) from e
 
     def discover_test_files(
         self,
@@ -228,7 +230,7 @@ class FileDiscoveryService:
             if isinstance(e, FileDiscoveryError):
                 raise
             logger.exception(f"Failed to discover test files: {e}")
-            raise FileDiscoveryError(f"Test file discovery failed: {e}", cause=e)
+            raise FileDiscoveryError(f"Test file discovery failed: {e}", cause=e) from e
 
     def discover_all_python_files(
         self, project_path: str | Path, separate_tests: bool = True
@@ -269,7 +271,9 @@ class FileDiscoveryService:
             if isinstance(e, FileDiscoveryError):
                 raise
             logger.exception(f"Failed to discover Python files: {e}")
-            raise FileDiscoveryError(f"Python file discovery failed: {e}", cause=e)
+            raise FileDiscoveryError(
+                f"Python file discovery failed: {e}", cause=e
+            ) from e
 
     def filter_existing_files(self, file_paths: list[str | Path]) -> list[str]:
         """

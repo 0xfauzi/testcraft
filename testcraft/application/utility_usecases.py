@@ -156,7 +156,9 @@ class UtilityUseCase:
                 span.set_attribute("error", str(e))
                 span.record_exception(e)
                 logger.exception("Debug state dump failed: %s", e)
-                raise UtilityUseCaseError(f"Debug state dump failed: {e}", cause=e)
+                raise UtilityUseCaseError(
+                    f"Debug state dump failed: {e}", cause=e
+                ) from e
 
     async def sync_state(
         self, force_reload: bool = False, persist_after_sync: bool = True, **kwargs: Any
@@ -262,7 +264,9 @@ class UtilityUseCase:
                 span.set_attribute("error", str(e))
                 span.record_exception(e)
                 logger.exception("State synchronization failed: %s", e)
-                raise UtilityUseCaseError(f"State synchronization failed: {e}", cause=e)
+                raise UtilityUseCaseError(
+                    f"State synchronization failed: {e}", cause=e
+                ) from e
 
     async def reset_state(
         self,
@@ -385,7 +389,7 @@ class UtilityUseCase:
                 span.set_attribute("error", str(e))
                 span.record_exception(e)
                 logger.exception("State reset failed: %s", e)
-                raise UtilityUseCaseError(f"State reset failed: {e}", cause=e)
+                raise UtilityUseCaseError(f"State reset failed: {e}", cause=e) from e
 
     async def get_environment_info(
         self,
@@ -463,7 +467,7 @@ class UtilityUseCase:
                 logger.exception("Environment info collection failed: %s", e)
                 raise UtilityUseCaseError(
                     f"Environment info collection failed: {e}", cause=e
-                )
+                ) from e
 
     async def get_cost_summary(
         self,
@@ -553,7 +557,7 @@ class UtilityUseCase:
                 logger.exception("Cost summary generation failed: %s", e)
                 raise UtilityUseCaseError(
                     f"Cost summary generation failed: {e}", cause=e
-                )
+                ) from e
 
     async def _collect_debug_state(self) -> dict[str, Any]:
         """Collect comprehensive debug state information."""
@@ -800,7 +804,9 @@ class UtilityUseCase:
             return backup_data
 
         except Exception as e:
-            raise UtilityUseCaseError(f"Failed to create state backup: {e}", cause=e)
+            raise UtilityUseCaseError(
+                f"Failed to create state backup: {e}", cause=e
+            ) from e
 
     async def _calculate_cost_projections(
         self, cost_summary: dict[str, Any], time_period: str

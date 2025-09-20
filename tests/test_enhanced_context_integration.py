@@ -292,7 +292,7 @@ app = FastAPI()
 class UserService:
     def __init__(self):
         self.db_url = os.getenv('DATABASE_URL', 'sqlite:///default.db')
-    
+
     def create_user(self, user_data: Dict) -> Dict:
         if not user_data.get('email'):
             raise ValueError('Email is required')

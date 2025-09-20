@@ -26,21 +26,21 @@ class ErrorDialog(BaseModal):
         border: thick $error;
         max-width: 80;
     }
-    
+
     ErrorDialog .error-icon {
         text-align: center;
         font-size: 200%;
         color: $error;
         margin-bottom: 1;
     }
-    
+
     ErrorDialog .error-message {
         color: $error;
         text-style: bold;
         margin: 1 0;
         text-align: center;
     }
-    
+
     ErrorDialog .error-details {
         background: $surface;
         border: solid $border;
@@ -50,7 +50,7 @@ class ErrorDialog(BaseModal):
         overflow-y: auto;
         color: $text-muted;
     }
-    
+
     ErrorDialog .error-code {
         font-family: monospace;
         background: $background;
@@ -58,24 +58,24 @@ class ErrorDialog(BaseModal):
         margin: 0.5 0;
         border: solid $border;
     }
-    
+
     ErrorDialog .suggestions-title {
         color: $warning;
         text-style: bold;
         margin-top: 1;
     }
-    
+
     ErrorDialog .suggestion-item {
         margin-left: 2;
         margin-top: 0.5;
         color: $text;
     }
-    
+
     ErrorDialog .suggestion-item::before {
         content: "• ";
         color: $primary;
     }
-    
+
     ErrorDialog Collapsible {
         margin: 1 0;
     }

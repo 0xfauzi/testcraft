@@ -48,7 +48,7 @@ class TestTextualApp:
         app = TestCraftTextualApp()
 
         # Use Textual's testing capabilities
-        async with app.run_test() as pilot:
+        async with app.run_test():
             # Test initial state
             assert app.current_operation is None
 
@@ -233,12 +233,12 @@ async def test_app_file_processing_integration():
     """Integration test showing file processing workflow."""
     app = TestCraftTextualApp()
 
-    async with app.run_test() as pilot:
+    async with app.run_test():
         # Simulate file processing workflow
         files_to_process = ["file1.py", "file2.py", "file3.py"]
 
         # Start processing
-        for i, file_path in enumerate(files_to_process):
+        for _i, file_path in enumerate(files_to_process):
             app.update_file_status(file_path, "running", 0.0)
 
             # Simulate progress updates

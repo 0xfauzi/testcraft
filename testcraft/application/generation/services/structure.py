@@ -441,7 +441,6 @@ class ModulePathDeriver:
 
         try:
             # Simple heuristic: suggest importing the module name or main classes
-            file_stem = file_path.stem
 
             # For __init__.py, suggest importing the package
             if file_path.name == "__init__.py":

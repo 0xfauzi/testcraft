@@ -149,7 +149,9 @@ class StatusUseCase:
                 span.set_attribute("error", str(e))
                 span.record_exception(e)
                 logger.exception("Status retrieval failed: %s", e)
-                raise StatusUseCaseError(f"Status retrieval failed: {e}", cause=e)
+                raise StatusUseCaseError(
+                    f"Status retrieval failed: {e}", cause=e
+                ) from e
 
     async def get_filtered_history(
         self,
@@ -211,7 +213,7 @@ class StatusUseCase:
                 logger.exception("Filtered history retrieval failed: %s", e)
                 raise StatusUseCaseError(
                     f"Filtered history retrieval failed: {e}", cause=e
-                )
+                ) from e
 
     async def _get_current_state(self) -> dict[str, Any]:
         """

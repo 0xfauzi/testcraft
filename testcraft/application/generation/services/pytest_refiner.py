@@ -348,9 +348,9 @@ class PytestRefiner:
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 !!! PRODUCTION BUG DETECTED - TEST DELIBERATELY FAILING
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-!!! 
+!!!
 !!! LLM Analysis Confidence: {confidence:.0f}%
-!!! 
+!!!
 !!! WHAT'S WRONG:
 !!! {bug_description}
 !!!
@@ -709,7 +709,7 @@ pytestmark = pytest.mark.xfail(
                 start = max(0, i - 3)
                 end = min(len(lines), i + 4)
                 context["traceback_highlights"] = [
-                    l.strip() for l in lines[start:end] if l.strip()
+                    line.strip() for line in lines[start:end] if line.strip()
                 ]
                 break
 

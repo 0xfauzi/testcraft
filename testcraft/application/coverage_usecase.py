@@ -188,7 +188,9 @@ class CoverageUseCase:
                 span.set_attribute("error", str(e))
                 span.record_exception(e)
                 logger.exception("Coverage measurement failed: %s", e)
-                raise CoverageUseCaseError(f"Coverage measurement failed: {e}", cause=e)
+                raise CoverageUseCaseError(
+                    f"Coverage measurement failed: {e}", cause=e
+                ) from e
 
     async def _sync_state_and_discover_files(
         self,
@@ -262,7 +264,9 @@ class CoverageUseCase:
 
             except Exception as e:
                 logger.exception("Failed to sync state and discover files: %s", e)
-                raise CoverageUseCaseError(f"File discovery failed: {e}", cause=e)
+                raise CoverageUseCaseError(
+                    f"File discovery failed: {e}", cause=e
+                ) from e
 
     async def _measure_coverage(
         self, source_files: list[str], test_files: list[str] | None = None
@@ -307,7 +311,9 @@ class CoverageUseCase:
 
             except Exception as e:
                 logger.exception("Failed to measure coverage: %s", e)
-                raise CoverageUseCaseError(f"Coverage measurement failed: {e}", cause=e)
+                raise CoverageUseCaseError(
+                    f"Coverage measurement failed: {e}", cause=e
+                ) from e
 
     async def _generate_reports(
         self, coverage_data: dict[str, CoverageResult]
@@ -347,7 +353,9 @@ class CoverageUseCase:
 
             except Exception as e:
                 logger.exception("Failed to generate reports: %s", e)
-                raise CoverageUseCaseError(f"Report generation failed: {e}", cause=e)
+                raise CoverageUseCaseError(
+                    f"Report generation failed: {e}", cause=e
+                ) from e
 
     async def _record_coverage_state(
         self, coverage_data: dict[str, CoverageResult], coverage_summary: dict[str, Any]

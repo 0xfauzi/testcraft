@@ -628,7 +628,10 @@ def tui(ctx: click.Context, web: bool, port: int) -> None:
         if web:
             # Web mode using textual-web
             try:
-                import textual_web
+                import importlib.util
+
+                if importlib.util.find_spec("textual_web") is None:
+                    raise ImportError("textual_web not available")
 
                 ctx.obj.ui.display_info(
                     f"Launching TestCraft TUI in web browser on port {port}...",

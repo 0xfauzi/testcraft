@@ -30,52 +30,52 @@ class FilePickerDialog(BaseModal):
         max-width: 100;
         max-height: 40;
     }
-    
+
     FilePickerDialog .file-browser {
         height: 100%;
         border: solid $border;
         margin: 1 0;
         background: $surface;
     }
-    
+
     FilePickerDialog .path-bar {
         height: 3;
         padding: 0 1;
         background: $surface;
         border-bottom: solid $border;
     }
-    
+
     FilePickerDialog .path-input {
         width: 100%;
         margin: 0;
     }
-    
+
     FilePickerDialog .filter-bar {
         height: 3;
         padding: 0 1;
         background: $surface;
         border-top: solid $border;
     }
-    
+
     FilePickerDialog .filter-input {
         width: 100%;
         margin: 0;
     }
-    
+
     FilePickerDialog DirectoryTree {
         background: transparent;
         padding: 1;
     }
-    
+
     FilePickerDialog DirectoryTree:focus {
         border: none;
     }
-    
+
     FilePickerDialog .selected-file {
         color: $primary;
         text-style: bold;
     }
-    
+
     FilePickerDialog .file-info {
         height: 3;
         padding: 0 1;
