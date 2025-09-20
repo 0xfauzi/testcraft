@@ -33,6 +33,7 @@ class SafetyPolicies:
     # System files that are allowed in project root
     ALLOWED_SYSTEM_FILES = {
         ".testcraft_state.json",
+        ".testcraft_evaluation_state.json",
         ".testcraft.toml",
         "custom_state.json",
     }
