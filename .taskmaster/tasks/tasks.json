@@ -710,7 +710,7 @@
         "description": "Replace all fake LLM adapter implementations with real API integrations (at minimum OpenAI), resolve method signature mismatches, and ensure all adapters are production-ready for real use.",
         "details": "1. Replace all mock/fake LLM adapters with real API integrations, starting with OpenAI using the official Python SDK (`openai` package). Ensure API keys are handled securely via environment variables or configuration files, never hardcoded. Example for OpenAI:\n\n```python\nimport openai\nimport os\nopenai.api_key = os.getenv('OPENAI_API_KEY')\n```\n\n2. Implement robust API key management and configuration, leveraging the existing configuration system. Validate that keys are loaded at runtime and provide clear error messages if missing.\n\n3. Refactor the RefineAdapter and any other LLM adapters to ensure their method signatures match the expected interface. Specifically, ensure that calls to `llm.generate()` are replaced with the correct methods (`generate_tests()`, `analyze_code()`, `refine_content()`) as defined in the adapters. Update all usages and tests accordingly.\n\n4. Audit all LLM adapters for interface mismatches and correct them to ensure consistency across providers (OpenAI, Claude, Azure, Bedrock, etc.).\n\n5. Integrate real prompt construction using the prompt registry, ensuring that all LLM calls use the correct, versioned prompt templates and that prompt formatting is robust.\n\n6. Implement and test real API calls, handling JSON parsing, schema validation, and error handling for real-world LLM responses (including malformed or partial outputs). Use the common helpers for response parsing and validation.\n\n7. Ensure that response validation logic is robust against real LLM outputs, not just mock data. Update or extend JSON schema validation as needed.\n\n8. Update any other adapters or modules that depend on LLM functionality to use the new, real implementations. Remove or clearly separate any remaining mock/test-only code.\n\n9. Document all changes, including configuration instructions for API keys and troubleshooting for common integration errors.\n<info added on 2025-09-07T22:49:49.617Z>\nOfficial Python SDKs for 2024 are: OpenAI (`openai`), Anthropic Claude (`anthropic`), Azure OpenAI (via `openai` with Azure config), and AWS Bedrock (`boto3`). All are actively maintained, support type hints, and most offer async and streaming capabilities. For authentication, OpenAI and Anthropic use API keys loaded via environment variables or secure config; Azure OpenAI requires both an API key and endpoint; AWS Bedrock uses AWS credentials (environment variables, profiles, or IAM roles). Best practices include never hardcoding secrets, using Pydantic models for config validation, dependency injection for adapter setup, robust error handling with retries and logging, and output validation against JSON schemas. Adapters should abstract provider-specific logic behind a unified interface, support both sync and async methods, and handle streaming where available. Integration tests should use real API keys and validate outputs; unit tests should mock responses. Ensure adapters are extensible for future providers and keep SDKs updated to avoid breaking changes.\n</info added on 2025-09-07T22:49:49.617Z>\n<info added on 2025-09-07T22:50:54.347Z>\nThe latest official Python SDKs for LLM integration as of September 2025 are: OpenAI (`openai`, v1.102.0), Anthropic Claude (`anthropic`, v0.21.0), Azure OpenAI (`azure-ai-openai`, v1.2.0), and AWS Bedrock (`boto3`, v1.34.x). All SDKs support Python 3.8+, provide both synchronous and asynchronous API access, and offer type-safe request/response objects. Authentication methods are provider-specific: OpenAI and Anthropic use API keys loaded via environment variables or secure config; Azure OpenAI requires both an API key and endpoint with Azure AD credentials; AWS Bedrock uses AWS credentials via environment variables, profiles, or IAM roles. Production best practices include never hardcoding secrets, using environment variables or secret managers, implementing robust error handling and retries, logging request/response metadata, and validating all LLM outputs against JSON schemas. Adapters should abstract provider-specific logic behind a unified interface, support both sync and async methods, and handle streaming where available. Integration tests must use real API keys/accounts and validate outputs; unit tests should mock SDK responses. Ensure adapters are extensible for future providers and keep SDKs updated to avoid breaking changes. Update all LLM adapters to use the latest SDKs and authentication methods, refactor method signatures to match SDK requirements and the `LLMPort` protocol, and implement secure credential loading via the configuration system.\n</info added on 2025-09-07T22:50:54.347Z>",
         "testStrategy": "1. Write integration tests that perform real API calls to OpenAI (and other providers if possible) using test API keys, verifying that the adapters return valid, correctly parsed responses.\n2. Validate that all LLM outputs conform to the expected JSON schema using the existing validation logic.\n3. Simulate and test error handling for common API failures (invalid key, rate limit, malformed response, network errors).\n4. Run end-to-end flows (e.g., test generation, refinement) to ensure the system works with real LLMs and not just mock data.\n5. Confirm that all method signatures and interfaces are consistent and that no calls to removed or renamed methods remain.\n6. Review logs and error messages for clarity and completeness.\n7. Ensure that configuration and API key handling works in various environments (local, CI, production).",
-        "status": "pending",
+        "status": "done",
         "dependencies": [
           3,
           11,
@@ -725,7 +725,7 @@
             "description": "Remove all mock or fake LLM adapter implementations and integrate real API calls using the latest official Python SDKs for OpenAI, Anthropic Claude, Azure OpenAI, and AWS Bedrock. Ensure adapters use the correct SDK versions and support both synchronous and asynchronous methods as required.",
             "dependencies": [],
             "details": "Install and configure the latest SDKs: openai (v1.102.0), anthropic (v0.21.0), azure-ai-openai (v1.2.0), and boto3 (v1.34.x). Refactor adapter code to use these SDKs for all LLM operations, abstracting provider-specific logic behind a unified interface. Ensure adapters are extensible for future providers and support streaming where available.\n<info added on 2025-09-07T22:55:08.907Z>\nUpdate SDK versions to use openai (v1.106.1, released Sep 4, 2025) and anthropic (v0.66.0) as the latest supported versions. Ensure all adapter code and dependencies reflect these versions, and verify that pyproject.toml is updated accordingly.\n</info added on 2025-09-07T22:55:08.907Z>\n<info added on 2025-09-07T22:57:55.388Z>\nUpdate AWS Bedrock integration to use the ChatBedrock class from the langchain-aws package instead of direct boto3 calls. This approach ensures a more consistent interface across providers, leverages built-in retry logic and error handling, and enables advanced features such as prompt caching. Add langchain-aws as a dependency and update all relevant adapter code and configuration to utilize ChatBedrock for Bedrock LLM operations.\n</info added on 2025-09-07T22:57:55.388Z>",
-            "status": "pending",
+            "status": "done",
             "testStrategy": "Write integration tests that perform real API calls to each provider using test API keys/accounts. Validate that adapters return valid, correctly parsed responses for all supported operations."
           },
           {
@@ -736,7 +736,7 @@
               "22.1"
             ],
             "details": "Use environment variables or secret managers for OpenAI and Anthropic API keys, Azure OpenAI API key and endpoint, and AWS credentials (environment variables, profiles, or IAM roles). Validate credentials at startup and provide clear error messages if missing. Use Pydantic models for config validation and dependency injection for adapter setup.",
-            "status": "pending",
+            "status": "done",
             "testStrategy": "Test configuration loading with valid and missing credentials for each provider. Verify that errors are raised and logged appropriately when credentials are absent or invalid."
           },
           {
@@ -747,7 +747,7 @@
               "22.1"
             ],
             "details": "Update RefineAdapter and other adapters to expose methods like generate_tests(), analyze_code(), and refine_content() as defined in the interface. Replace direct llm.generate() calls with the appropriate adapter methods. Ensure consistency across all providers and update all usages and tests to match the new signatures.",
-            "status": "pending",
+            "status": "done",
             "testStrategy": "Run static type checks and unit tests to verify that all adapters conform to the expected interface. Add tests for each method to ensure correct invocation and output structure."
           },
           {
@@ -758,7 +758,7 @@
               "22.3"
             ],
             "details": "Refactor adapters to fetch and format prompts using the prompt registry. Implement logic to select the correct prompt version and handle formatting errors gracefully. Ensure all LLM calls use the constructed prompts and that prompt changes are tracked and versioned.",
-            "status": "pending",
+            "status": "done",
             "testStrategy": "Write tests that verify correct prompt selection, formatting, and usage for each adapter method. Simulate prompt template changes and validate adapter robustness."
           },
           {
@@ -770,7 +770,7 @@
               "22.3"
             ],
             "details": "Use common helpers for response parsing and validation. Extend or update JSON schema validation logic as needed to handle real-world LLM outputs. Implement error handling with retries and logging for API failures or malformed responses. Remove or clearly separate any remaining mock/test-only code.",
-            "status": "pending",
+            "status": "done",
             "testStrategy": "Write integration tests that send real requests and validate outputs against schemas. Test error handling by simulating malformed, partial, or invalid responses. Ensure all adapters reject or correct invalid outputs and log errors appropriately."
           }
         ]
@@ -1046,209 +1046,6 @@
         "subtasks": []
       },
       {
-        "id": 26,
-        "title": "Enrich LLM generation context for test generation",
-        "description": "Implement comprehensive ADDITIONAL CONTEXT for LLM test generation. Extend retrieval to include symbol-aware snippets, import-graph neighbors, existing tests, API contracts/invariants, dependency/config surfaces, fixtures, usage examples, coverage/branch hints, call-graph neighbors, error paths, pytest settings, side-effect boundaries, and path constraints. Ensure prompts remain bounded with size caps and are configurable.",
-        "details": "Scope:\n- Retrieval: Use top-ranked symbol-aware snippets (use retriever \"snippet\" field) and merge import-graph related files from ContextPort.get_related_context.\n- Existing tests: Parse existing test files and include short exemplars (assertion style, fixtures).\n- API contracts/invariants: Extract signatures, docstrings, pre/postconditions from parser; include concise contract notes per target element.\n- Dependencies/config: Detect env/config usage (API_KEY, BASE_URL) and add minimal examples; include DB/HTTP client boundaries.\n- Fixtures: Discover available pytest fixtures (project tests/plugins) and suggest usage (db_session, httpx_mock, freeze_time).\n- Coverage hints: Integrate uncovered lines/branches to target tricky paths.\n- Call-graph neighbors: Add direct callers/callees/import neighbors for target file.\n- Error paths: Include known exceptions/edge conditions from code or docstrings.\n- Usage examples: Provide common invocations (from codebase references).\n- Pytest settings: Include marks/plugins from pytest.ini/pyproject.\n- Side-effect boundaries: Recommend mocks/stubs for fs/network/time/process.\n- Path constraints: Suggest boundary inputs to hit edge branches.\n- Prompt size control: Per-item and total caps; deterministic ordering and de-duplication.\n- Configurability: Add config flags to enable/limit each context category.\nAcceptance Criteria:\n- User prompt CODE TO TEST contains real source (already) and ADDITIONAL CONTEXT contains the above categories when available.\n- Retrieval uses snippet, not content; empty context only when no results.\n- Caps enforced: per-element, per-section, and total prompt budgets.\n- Unit/integration tests validate presence/format of fields and bounded sizes.\n- Backwards compatible: default behavior on for core retrieval; feature flags documented.\nDocs:\n- Update README/docs to describe context categories and configuration.",
-        "testStrategy": "Unit tests for retriever formatting and context assembly; integration test for generate_usecase to verify prompt contains enriched ADDITIONAL CONTEXT with bounded size. Include tests for config flags and ordering/de-duplication. Mock codebase to cover callers/callees and import neighbors.",
-        "status": "pending",
-        "dependencies": [],
-        "priority": "high",
-        "subtasks": [
-          {
-            "id": 1,
-            "title": "Implement Retrieval Snippet Wiring and Import-Neighbor Merge",
-            "description": "Develop logic to retrieve top-ranked symbol-aware snippets using the retriever's 'snippet' field and merge import-graph related files from ContextPort.get_related_context for the target code element.",
-            "dependencies": [],
-            "details": "Ensure retrieval is efficient, merges relevant context from import neighbors, and only includes snippets (not full content). Handle empty context gracefully when no results are found.",
-            "status": "pending",
-            "testStrategy": "Unit tests for snippet retrieval and import-graph merging; verify correct context assembly and fallback behavior."
-          },
-          {
-            "id": 2,
-            "title": "Analyze Existing Tests and Extract Exemplars",
-            "description": "Parse existing test files to extract short exemplars, focusing on assertion styles and fixture usage relevant to the target code.",
-            "dependencies": [
-              "26.1"
-            ],
-            "details": "Implement parsing logic to identify and summarize representative test patterns, assertion types, and fixture applications. Ensure exemplars are concise and contextually relevant.\n<info added on 2025-09-09T14:50:28.896Z>\nReused the existing context pipeline in GenerateUseCase._get_relevant_context to introduce a bounded \"test exemplars\" section, leveraging ParserPort and existing file discovery without new helpers. For each source plan, up to three existing test files were located and parsed via AST to extract concise signals: counts of ast.Assert, counts of pytest.raises usages, names of fixtures (function arguments in test_ functions), and pytest markers (decorator attributes or IDs). Each file yielded a single-line exemplar header, capped at 600 characters, and these were assembled into the ADDITIONAL CONTEXT section, respecting prompt budget caps for both per-item and total size. An indentation bug causing premature early return before budget enforcement was fixed to ensure correct block evaluation order. The implementation uses only concise summaries (no full test file dumping), applies de-duplication and deterministic ordering, and respects feature flags and budget caps in self._config. The result is that ADDITIONAL CONTEXT now consistently includes concise, size-bounded, deduplicated test exemplars reflecting assertion styles, fixtures, and markers, visible in integration tests when existing tests are present. Key code changes are in testcraft/application/generate_usecase.py::_get_relevant_context.\n</info added on 2025-09-09T14:50:28.896Z>",
-            "status": "pending",
-            "testStrategy": "Unit tests for test file parsing and exemplar extraction; integration tests to verify inclusion in generated context."
-          },
-          {
-            "id": 3,
-            "title": "Extract API Contracts and Invariants from Parser",
-            "description": "Use code parsing tools to extract API signatures, docstrings, and pre/postconditions, generating concise contract notes for each target element.",
-            "dependencies": [
-              "26.1"
-            ],
-            "details": "Automate extraction of contract information, ensuring notes are brief and accurately reflect code invariants and usage expectations.",
-            "status": "pending",
-            "testStrategy": "Unit tests for parser accuracy and contract note formatting; verify correct mapping to target elements."
-          },
-          {
-            "id": 4,
-            "title": "Discover Dependencies, Config Surfaces, and Fixtures",
-            "description": "Detect environment/config usage (e.g., API_KEY, BASE_URL), database/HTTP client boundaries, and available pytest fixtures (from project tests/plugins), suggesting minimal examples and fixture usage.",
-            "dependencies": [
-              "26.1"
-            ],
-            "details": "Implement scanning for config variables, dependency boundaries, and fixture definitions. Recommend relevant fixtures and provide example usages.\n<info added on 2025-09-09T20:02:09.983Z>\nSubtask 26.4 implementation is complete. Added ContextEnrichmentConfig with all required toggles and caps, integrated into TestCraftConfig. Implemented four detection helpers for environment/config usage, database and HTTP client boundaries, comprehensive fixture discovery, and side-effect boundaries. Replaced minimal dependency detection with a comprehensive context enrichment block that uses all detection methods based on config, enforces prompt budgets and caps, and includes fallback/error handling. Configuration is fully wired, backward compatible, and enables deps_config_fixtures as needed. Created 16 unit tests covering detection, integration, limits, and error handling—all passing. Code meets formatting, linting, and documentation standards. Documentation update is pending, but all implementation work is complete and functional.\n</info added on 2025-09-09T20:02:09.983Z>",
-            "status": "pending",
-            "testStrategy": "Unit tests for config/dependency/fixture discovery; verify correct suggestions and example generation."
-          },
-          {
-            "id": 5,
-            "title": "Assemble Coverage, Call-Graph, Error Path, and Usage Context",
-            "description": "Integrate uncovered lines/branches, direct callers/callees/import neighbors, known exceptions/edge conditions, and common usage examples from codebase references into the context.",
-            "dependencies": [
-              "26.1",
-              "26.2",
-              "26.3",
-              "26.4"
-            ],
-            "details": "Aggregate and format coverage hints, call-graph relationships, error paths, and usage examples for inclusion in the enriched context.\n<info added on 2025-09-09T14:30:31.324Z>\nEnhancement notes for future implementation:\n\n- Wire per-file coverage hints from CoveragePort:\n  - During _measure_initial_coverage/_measure_final_coverage, capture per-file missing lines/branches where available from CoveragePort API.\n  - In _get_relevant_context, when source_path is known, look up that file’s specific coverage result and include a concise list of missing line ranges/functions under a bounded \"# Coverage hints\" block (respect section caps and per_item_chars).\n  - Prefer uncovered branches/exception paths if CoveragePort exposes branch data; otherwise include missing lines aggregated per function.\n\n- Usage example mining improvements:\n  - Query ContextPort.retrieve with symbol-specific queries (e.g., \"ClassName.method_name\", filename stem) and context_type=\"usage\"; add a light rerank by presence of call tokens like '(' and keyword arguments.\n  - De-duplicate by path+chunk_id; diversify across files (limit 1–2 snippets per file); respect section caps.\n\n- Call-graph neighbors:\n  - If ContextPort or ParserPort can expose callers/callees in future, include those relations explicitly (not only import neighbors). Add a small, readable edge list with types: import, call, inherit.\n\n- Error paths & invariants:\n  - Extend docstring extraction to pick up :raises: or explicit exception mentions. Combine with coverage miss sets to suggest high-value error tests.\n\n- Structured JSON context (optional flag):\n  - Add a config flag context_as_json. When true, assemble a JSON object with keys {snippets, neighbors, exemplars, contracts, deps_config_fixtures, coverage_hints, callgraph, error_paths, usage_examples} and pass to prompt registry under additional_context.\n  - Update prompts to accept either free text or JSON. Keep backwards compatible and gated by flag.\n\n- Budget telemetry:\n  - Record actual characters used per section and total to TelemetryPort for later tuning.\n\n- Tests to add later:\n  - Unit tests that simulate per-file coverage hints rendering and ensure caps are respected.\n  - Tests that verify JSON mode formatting when context_as_json=true.\n  - Tests that verify de-duplication across sections (no identical blocks included twice).\n</info added on 2025-09-09T14:30:31.324Z>\n<info added on 2025-09-09T21:01:11.287Z>\nBased on recent analysis, the following targeted implementation actions are required:\n\n- Refactor and enhance the `_get_advanced_context` method in `context_assembler.py` to leverage the existing CoveragePort for precise per-file coverage hints, ensuring missing lines and branches are surfaced in a concise, bounded format.\n- Upgrade usage example mining by issuing symbol-specific queries to ContextPort, applying reranking for call tokens and keyword arguments, and enforcing deduplication and diversity across files.\n- Improve call-graph neighbor extraction by utilizing `_context.get_related_context()` and related ContextPort relationships to explicitly include direct callers, callees, and import neighbors as a structured edge list.\n- Strengthen error path detection by combining current docstring parsing with AST-based exception analysis, correlating with uncovered coverage regions to prioritize high-value error scenarios.\n- Maintain strict adherence to prompt size budgets and deduplication logic as enforced in `_assemble_final_context`, reusing existing abstractions and infrastructure to minimize code growth given the file size constraint.\n- All enhancements should be modular, focused, and avoid redundant logic, leveraging the robust detection methods in `EnrichmentDetectors` and the configuration in `GenerationConfig`.\n</info added on 2025-09-09T21:01:11.287Z>\n<info added on 2025-09-09T21:04:03.163Z>\nIMPLEMENTATION COMPLETED ✅\n\nSuccessfully implemented enhanced advanced context functionality for sub-task 26.5. Here's what was accomplished:\n\nKey Implementations\n\n1. Enhanced _get_advanced_context Method: Refactored to use feature flags from context_enrichment config and delegate to specialized methods for better separation of concerns.\n\n2. Four New Specialized Methods:\n   - _get_coverage_hints(): Placeholder for future CoveragePort integration (ready for per-file coverage data)\n   - _get_callgraph_neighbors(): Uses ContextPort relationships to extract call-graph edges and import neighbors\n   - _get_error_paths(): Combines docstring parsing with AST analysis to detect exceptions and error conditions\n   - _get_usage_examples(): Enhanced query strategies with deduplication and diversity across files\n\n3. Configuration Enhancement: Added context_enrichment section to GenerationConfig with feature flags for all advanced context categories.\n\n4. Comprehensive Testing: Created 8 unit tests covering all new methods with various scenarios including empty results, feature flags, and integration testing.\n\nTechnical Details\n\n- Reused Existing Abstractions: Leveraged existing ContextPort.get_related_context(), ContextPort.retrieve(), existing docstring parsing, and budget enforcement logic\n- File Size Management: Kept additions focused while staying within reasonable bounds (context_assembler.py now ~1220 lines)\n- Error Handling: All methods include proper exception handling and graceful degradation\n- Configuration-Driven: All features respect configuration flags and can be individually enabled/disabled\n- Budget Enforcement: All context items respect existing prompt budget caps and deduplication logic\n\nTest Results\n- All 8 new tests pass\n- No linting errors introduced\n- Maintains backward compatibility\n- Follows existing code patterns and abstractions\n\nThe implementation is production-ready and provides a solid foundation for future enhancements like coverage integration and structured JSON context output.\n</info added on 2025-09-09T21:04:03.163Z>",
-            "status": "pending",
-            "testStrategy": "Unit and integration tests for context assembly; verify correct aggregation and relevance of each category."
-          },
-          {
-            "id": 6,
-            "title": "Implement Prompt Size Budgets, Ordering, and Deduplication",
-            "description": "Enforce per-item, per-section, and total prompt size caps; implement deterministic ordering and de-duplication of context elements.",
-            "dependencies": [
-              "26.5"
-            ],
-            "details": "Design logic to cap context sizes, order elements for consistency, and remove duplicates to ensure prompt remains within configured bounds.\n<info added on 2025-09-09T21:08:20.495Z>\nReview and refactor the `_assemble_final_context` method in ContextAssembler to address the following:\n\n- Audit and expand the section keys list to include all supported and planned context types (e.g., \"coverage_hints\", \"call_graph\", \"error_paths\", \"usage_examples\", \"api_contracts\", etc.), ensuring new types are consistently handled.\n- Redesign the `prompt_budgets` configuration structure in config.py for clarity and extensibility, supporting per-section and per-item caps with clear documentation and validation.\n- Refactor the ordering logic to be data-driven and robust against future additions of context types, maintaining deterministic output.\n- Add comprehensive validation and error handling for configuration values, section presence, and budget enforcement, with clear error messages for misconfiguration or unexpected input.\n</info added on 2025-09-09T21:08:20.495Z>\n<info added on 2025-09-09T21:14:13.885Z>\nImplementation complete: Enhanced prompt budgeting, ordering, and deduplication logic is now in place. All supported context types are dynamically included based on configuration, with robust per-item, per-section, and total character caps enforced (including separator accounting). Ordering is fully data-driven and deterministic, supporting custom and future context sections. Deduplication prevents repeated content across sections. Configuration validation covers per-item and section caps, consistency, and performance warnings, with clear error handling and logging. Eight unit tests verify budget enforcement, ordering, deduplication, and configuration validation; all pass except for a minor warning message adjustment. The system now reliably assembles bounded, consistent, and non-redundant prompt contexts as specified.\n</info added on 2025-09-09T21:14:13.885Z>\n<info added on 2025-09-09T21:17:20.353Z>\n✅ ALL ISSUES RESOLVED – Subtask 26.6 is now fully complete with all tests passing!\n\nFinal Status Update:\n- Enhanced prompt budgeting, ordering, and deduplication fully implemented\n- Fixed critical bug in test assertion logic – mock warning messages needed proper formatting\n- All 19 tests now passing (8 prompt budget tests + 11 configuration tests)\n- Cleaned up debug files\n- Code coverage improved significantly on config.py (87%) and context_assembler.py (14%)\n\nKey Bug Fix:\nThe test failure was due to incorrect handling of mock warning messages. Test was checking raw str(call) representation instead of formatted logger message. Fixed by properly formatting the mock call args as the logger would: call % call[1:]\n\nImplementation is production-ready with comprehensive testing and validation. The prompt budgeting system now properly enforces size caps, maintains deterministic ordering, and performs effective deduplication across all 11 context types.\n</info added on 2025-09-09T21:17:20.353Z>",
-            "status": "pending",
-            "testStrategy": "Unit tests for size enforcement, ordering, and deduplication; verify prompt fits within specified budgets."
-          },
-          {
-            "id": 7,
-            "title": "Add Configuration Flags and Update Documentation",
-            "description": "Introduce config flags to enable or limit each context category; update README and documentation to describe context categories and configuration options.",
-            "dependencies": [
-              "26.6"
-            ],
-            "details": "Implement flexible configuration for context enrichment features and document usage, defaults, and feature flags for users.",
-            "status": "pending",
-            "testStrategy": "Unit tests for config flag behavior; verify documentation completeness and accuracy."
-          },
-          {
-            "id": 8,
-            "title": "Develop Unit and Integration Tests for Enriched Context Feature",
-            "description": "Create comprehensive unit and integration tests to validate presence, format, and bounded sizes of enriched context fields; ensure backwards compatibility and feature flag coverage.",
-            "dependencies": [
-              "26.7"
-            ],
-            "details": "Test context assembly, prompt generation, config flag effects, and compatibility with existing workflows. Mock codebase for coverage of callers/callees and import neighbors.\n<info added on 2025-09-09T21:27:23.884Z>\nImplementation completed: comprehensive unit and integration test suites have been developed for the enriched context feature, covering context assembly, prompt generation, feature flag effects, backwards compatibility, and complex codebase scenarios. Test files include integration, advanced method unit tests, feature flag controls, and full end-to-end pipelines. All context categories, advanced enrichment methods, configuration validation, error handling, and budget enforcement are thoroughly tested. The suite ensures robust error resilience, realistic mocking, performance validation, and full backwards compatibility with legacy configurations. All tests adhere to project standards, are fully linted, and validate both the presence and bounded size of enriched context fields.\n</info added on 2025-09-09T21:27:23.884Z>",
-            "status": "pending",
-            "testStrategy": "Unit tests for individual context categories; integration tests for end-to-end prompt generation and feature flag scenarios."
-          }
-        ]
-      },
-      {
-        "id": 27,
-        "title": "Always include recursive directory tree and exact module_path in LLM context",
-        "description": "Ensure generated tests always receive a recursive project directory structure and an authoritative import module_path for the target file, eliminating wrong import guesses.",
-        "details": "Goals:\n- Always provide a recursive (bounded) directory tree in generation/refinement context\n- Derive the precise dotted module_path for each target source file and surface it to the LLM\n- Inject explicit import hints (e.g., `from {module_path} import {Symbol}`) into the prompt/context\n- Reduce import-related failures and mis-guesses (e.g., `weatherscheduler` vs `src.weather_collector`)\n\nDesign/Plan:\n1) Directory structure (recursive, budgeted)\n- Extend `DirectoryTreeBuilder` with `build_tree_recursive(project_root, max_depth, max_entries_per_dir, include_py_only=True)`\n- Defaults: depth=4, entries=200, include only `.py` files unless configured\n- Wire into `ContextAssembler.gather_project_context` so the structure is always present in additional_context JSON\n\n2) Module path derivation (authoritative)\n- Implement a utility `derive_module_path(file_path: Path, project_root: Path) -> str` (new module, or extend parsing adapter):\n  - Find `project_root` via nearest `pyproject.toml`/git root\n  - If `src/` exists and file is under it, include `src` in dotted path (as requested), e.g., `src/weather_collector.py` -> `src.weather_collector`\n  - Else, compute dotted path from the first ancestor directory that is clearly a package (has `__init__.py`) or treat PEP 420 namespace directories as packages (best-effort)\n  - Replace separators with dots, drop `.py`\n  - Validate by attempting import with a temporary `sys.path` that includes `project_root` and `project_root/src`; record validation status\n- Add small fallback heuristics (try both with and without `src.` prefix) and surface both if only one validates is unclear\n\n3) Prompt/context injection\n- In `GenerateUseCase._generate_tests_for_plan`, include in `additional_context`:\n  - `module_path`: derived path\n  - `import_suggestion`: `from {module_path} import {Name}` for the primary element\n  - `target_file`: relative path from `project_root`\n- Update `PromptRegistry` usage (no template changes needed) to pass these keys; the LLM will see them in the Additional Context JSON\n\n4) Smarter usage examples and neighbor context\n- In `ContextAssembler._get_usage_examples`, build queries using the derived `module_path` (e.g., `from {module_path} import {Name}`)\n- Keep existing heuristics but prioritize module-qualified patterns\n\n5) Test execution and imports\n- In evaluation/pytest execution paths, ensure `PYTHONPATH` includes `project_root` and `project_root/src` (configurable via `TestEnvironmentConfig.append_pythonpath`); respect existing config if already set\n- Optionally add a fast precheck that tries `importlib.import_module(module_path)` with the temp sys.path augmentation and logs a hint if it fails\n\n6) Configuration & budgets\n- Expose recursion depth/width and include_py_only in config under a new `context_budgets.directory_tree` section (or reuse `prompt_budgets`)\n- Default `append_pythonpath` to include `src` if it exists at `project_root`\n\n7) Telemetry & docs\n- Add telemetry counters for: module_path derived, validated, fallback used\n- Update docs: generation context now includes `module_path`, import hint, and recursive tree\n\n8) Tests\n- Unit tests for module_path derivation across patterns: `src/` layout, flat package with `__init__`, nested packages, namespace packages\n- Integration test: generating tests for `src/weather_collector.py` produces import `from src.weather_collector import WeatherScheduler`\n- Acceptance: import success rate increases (mocked LLM output) and pytest runs with PYTHONPATH including `src`\n",
-        "testStrategy": "- Unit: module path derivation utility across directory layouts\n- Unit: recursive DirectoryTreeBuilder respects depth/width and include_py_only\n- Integration: context includes module_path + import_suggestion; usage examples prefer module-qualified queries\n- Acceptance: generated test imports succeed with `PYTHONPATH` including `src` and pass import check/pytest\n",
-        "status": "pending",
-        "dependencies": [],
-        "priority": "high",
-        "subtasks": [
-          {
-            "id": 1,
-            "title": "Extend DirectoryTreeBuilder for Recursive Tree Generation",
-            "description": "Modify the DirectoryTreeBuilder to support recursive traversal with configurable depth, entry limits, and file type filtering, ensuring only relevant files (e.g., .py) are included.",
-            "dependencies": [],
-            "details": "Implement a method such as build_tree_recursive(project_root, max_depth, max_entries_per_dir, include_py_only=True). Use os.walk or pathlib.Path.iterdir for traversal, applying depth and entry limits. Filter files by extension as needed. Return a structured representation suitable for LLM context injection.",
-            "status": "pending",
-            "testStrategy": "Unit test with sample directories of varying depth and width. Verify correct tree structure, depth/width limits, and file filtering."
-          },
-          {
-            "id": 2,
-            "title": "Integrate Recursive Directory Tree into Context Gathering",
-            "description": "Ensure the recursive directory tree is always included in the context assembled for LLM test generation and refinement.",
-            "dependencies": [
-              "27.1"
-            ],
-            "details": "Update ContextAssembler.gather_project_context to invoke the extended DirectoryTreeBuilder and inject the resulting tree into the additional_context JSON. Ensure the tree is present for all relevant generation/refinement flows.",
-            "status": "pending",
-            "testStrategy": "Integration test: verify additional_context contains the directory tree for various project layouts."
-          },
-          {
-            "id": 3,
-            "title": "Implement Authoritative Module Path Derivation Utility",
-            "description": "Create a utility to derive the exact dotted module_path for any target source file, handling src/ layouts, package boundaries, and namespace packages.",
-            "dependencies": [],
-            "details": "Implement derive_module_path(file_path: Path, project_root: Path) -> str. Locate project_root via pyproject.toml or git root. For files under src/, include src in the path. Traverse ancestor directories to identify packages (via __init__.py or PEP 420 rules). Replace path separators with dots and strip .py. Validate by attempting import with sys.path augmented to include project_root and project_root/src.",
-            "status": "pending",
-            "testStrategy": "Unit tests for various directory/package layouts. Validate derived module_path matches importable path."
-          },
-          {
-            "id": 4,
-            "title": "Inject Module Path and Import Suggestions into Prompt Context",
-            "description": "Surface the derived module_path and explicit import hints in the LLM prompt/context for test generation.",
-            "dependencies": [
-              "27.2",
-              "27.3"
-            ],
-            "details": "Update GenerateUseCase._generate_tests_for_plan to include module_path, import_suggestion (e.g., from {module_path} import {Symbol}), and target_file in additional_context. Ensure PromptRegistry passes these keys to the LLM without template changes.\n<info added on 2025-09-10T17:00:02.888Z>\nRemoved redundant keyword arguments from the generate_tests call to resolve the LLM API error. Now, module_path, import_suggestion, and target_file are injected solely via the enhanced context string, ensuring these details are available to the LLM without being passed as separate parameters. This maintains correct context propagation and prevents parameter-related invocation errors.\n</info added on 2025-09-10T17:00:02.888Z>",
-            "status": "pending",
-            "testStrategy": "Integration test: verify prompt context includes correct module_path and import_suggestion for target files."
-          },
-          {
-            "id": 5,
-            "title": "Prioritize Module-Qualified Usage Examples in Context",
-            "description": "Adjust usage example retrieval to prefer module-qualified import patterns using the authoritative module_path.",
-            "dependencies": [
-              "27.4"
-            ],
-            "details": "Update ContextAssembler._get_usage_examples to build queries and examples using the derived module_path (e.g., from {module_path} import {Name}). Retain fallback heuristics but prioritize examples matching the exact module path.",
-            "status": "pending",
-            "testStrategy": "Unit test: verify usage examples in context use module-qualified imports when available."
-          },
-          {
-            "id": 6,
-            "title": "Ensure Test Execution Environment Supports Reliable Imports",
-            "description": "Configure the test execution environment (e.g., pytest) to include project_root and src/ in PYTHONPATH, and validate imports using the derived module_path.",
-            "dependencies": [
-              "27.3"
-            ],
-            "details": "Update TestEnvironmentConfig.append_pythonpath to ensure PYTHONPATH includes project_root and project_root/src if src exists. Optionally, add a precheck using importlib.import_module(module_path) with temporary sys.path augmentation, logging hints on failure.",
-            "status": "pending",
-            "testStrategy": "Integration test: verify tests run successfully with correct PYTHONPATH and imports using derived module_path."
-          },
-          {
-            "id": 7,
-            "title": "Expose Directory Tree and Import Budgets in Configuration",
-            "description": "Add configuration options for directory tree recursion depth, width, and file type filtering, as well as PYTHONPATH defaults.",
-            "dependencies": [
-              "27.1",
-              "27.6"
-            ],
-            "details": "Extend the configuration system to include context_budgets.directory_tree (depth, width, include_py_only) and default append_pythonpath behavior. Ensure these options are validated and respected throughout context assembly and test execution.",
-            "status": "pending",
-            "testStrategy": "Unit test: verify configuration options are loaded, validated, and applied to tree building and PYTHONPATH setup."
-          },
-          {
-            "id": 8,
-            "title": "Add Telemetry, Documentation, and Comprehensive Tests",
-            "description": "Instrument telemetry for module_path derivation and validation, update documentation, and implement unit/integration/acceptance tests for the full workflow.",
-            "dependencies": [
-              "27.3",
-              "27.4",
-              "27.5",
-              "27.6",
-              "27.7"
-            ],
-            "details": "Add telemetry counters for module_path derived, validated, and fallback usage. Update docs to describe new context keys and directory tree inclusion. Implement unit tests for module_path derivation, integration tests for context assembly, and acceptance tests for import success rate and test execution.",
-            "status": "pending",
-            "testStrategy": "Telemetry: verify counters increment as expected. Documentation: review for completeness. Tests: run full suite and verify import reliability and context correctness."
-          }
-        ]
-      },
-      {
         "id": 28,
         "title": "Complete TestCraft Textual UI Implementation",
         "description": "Develop a fully functional Textual-based TUI for TestCraft by integrating infrastructure, connecting business logic, completing all screens, and implementing advanced features for real test operations.",
@@ -1436,11 +1233,68 @@
         "dependencies": [],
         "priority": "high",
         "subtasks": []
+      },
+      {
+        "id": 32,
+        "title": "Implement Planning Stage in Generation/Refinement Pipeline",
+        "description": "Introduce a configurable planning step before generate/refine, with LLM-driven plan creation, user acceptance flow, and integration into CLI and Textual UI.",
+        "details": "1. Add a new application-level orchestration class `PlanUseCase` in `testcraft/application/`, leveraging existing LLM adapters and the context pipeline. 2. Define new domain models: `PlanningRequest`, `PlanOption`, and `PlanningResult` in the domain layer, including metadata (model, params, prompt hash, timestamps). 3. Create new ports in `testcraft/ports/` for planning (`PlanningPort`, `PlanningPresenterPort`), following the adapter pattern; implement an LLM adapter in `testcraft/adapters/llm/` that reuses existing clients. 4. Implement robust prompt management for planning: structured templates, variable substitution, and response parsing per LLM integration rules, including retries, validation, and error handling. 5. Persist accepted plans in the run context/artifact store, with plan hashing for deduplication; ensure generate/refine steps can read accepted plans. 6. Extend the CLI with a `plan` command and integrate planning gating into `generate`/`refine` flows, supporting `--plan-first`, `--auto-accept-plan`, and interactive acceptance/rejection. 7. Update the Textual UI to add a \"Plan Review\" screen for previewing, accepting/rejecting, and editing planning prompts, maintaining a minimalist, professional design. 8. Add TOML configuration keys for planning prompt, model, and parameters, defaulting to the main LLM if unset. 9. Integrate telemetry for planning durations, acceptance decisions, and plan hashes. 10. Ensure backward compatibility: when planning is disabled, the pipeline remains unchanged.",
+        "testStrategy": "- Unit tests for `PlanUseCase` and planning adapter, covering prompt management, retries, error handling, and correct LLM invocation.\n- Integration tests to verify that only accepted plans are injected into generate/refine, and that rejection/edit flows work as intended.\n- CLI tests for the new `plan` command and gating flags, ensuring correct user interaction and plan persistence.\n- UI tests for the Plan Review screen, including acceptance, rejection, and prompt editing scenarios.\n- Configuration tests for TOML keys and default behaviors.\n- Telemetry tests to confirm correct event recording.\n- Documentation review to ensure README and user docs are updated with planning usage and configuration.",
+        "status": "pending",
+        "dependencies": [
+          2,
+          3,
+          4,
+          11,
+          14,
+          17,
+          28
+        ],
+        "priority": "high",
+        "subtasks": []
+      },
+      {
+        "id": 33,
+        "title": "Implement Manual Fix Guidance Feature for Post-Refinement Failures",
+        "description": "Introduce a Manual Fix Guidance step that triggers after failed test refinement, leveraging a dedicated LLM prompt to generate actionable manual fix instructions for the user.",
+        "details": "1. Create `ManualFixGuidanceUseCase` in `testcraft/application/` to orchestrate the manual fix flow, activating only after the final refinement iteration fails or aborts.\n2. Define domain models: `ManualFixRequest`, `ManualFixRecommendation` (ordered, granular steps), and `ManualFixContextAttachment` with metadata (model, params, prompt hash, timestamps).\n3. Implement `ManualFixGuidancePort` and `ManualFixPresenterPort` in `testcraft/ports/`, ensuring clear separation of concerns and adherence to protocol standards.\n4. Develop an LLM adapter in `testcraft/adapters/llm/` using existing provider-unification patterns, supporting prompt templating, strict response schema validation, retries with backoff, and error wrapping.\n5. Build context assembly logic to gather failing test names/paths, error messages/tracebacks, last run coverage/telemetry, diffs, code-under-test summaries, prior generation/refine messages, and accepted plan (if any), preferring AST-based code excerpts for precision.\n6. On user acceptance, annotate failing test files with structured comments/docstrings adjacent to failing functions and persist a Markdown artifact to `.testcraft/manual_fixes/<runId>.md`, including run metadata and hashes; deduplicate by plan/prompt hash.\n7. Extend CLI with `--manual-fix-on-fail`, `--auto-accept-fixes`, `--fixes-output <path>`, and a standalone `manual-fix` command; update Textual UI to add a \"Manual Fix Guidance\" review screen for preview, acceptance/rejection, and prompt editing.\n8. Add TOML config keys under `[manual_fix]` for enabling, prompt, model, max_tokens, and parameters, with sensible defaults.\n9. Emit telemetry for durations, acceptance, files touched, and recommendation hash; ensure backward compatibility when disabled.",
+        "testStrategy": "- Unit tests for `ManualFixGuidanceUseCase`, domain models, ports, and LLM adapter, covering context assembly, prompt validation, retry logic, and error handling.\n- Integration tests simulating failed refinement to verify correct triggering, context completeness, acceptance gating, file annotation, and artifact persistence.\n- CLI tests for new flags and commands; UI tests for the review screen, acceptance/rejection, and prompt editing flows.\n- Configuration tests for TOML keys and defaults; telemetry tests for event emission and metadata accuracy.\n- Documentation updates for README, config keys, CLI/UI workflows, and examples.",
+        "status": "pending",
+        "dependencies": [
+          4,
+          11,
+          14,
+          28,
+          29,
+          32
+        ],
+        "priority": "high",
+        "subtasks": []
+      },
+      {
+        "id": 34,
+        "title": "Implement Repository-Aware Context Assembly Pipeline per Specification",
+        "description": "Develop a comprehensive, repository-aware context assembly pipeline that orchestrates planning, generation, refinement, and manual fix flows, enforcing canonical imports and quality gates as specified in docs/context_assembly_specification.md.",
+        "details": "Implement an end-to-end pipeline that is repository-aware, following the architecture and requirements in docs/context_assembly_specification.md:\n\n- **Analyzers**: Build RepoLayoutDetector, ImportResolver, MetainfoBuilder, TestCaseIndexer, and PropertyAnalyzer to extract repository structure, resolve canonical absolute imports, gather metadata, index test cases, and analyze properties.\n- **Context Assembler**: Assemble a ContextPack per target module, including ImportMap, focal code, resolved definitions, property context, conventions, and prompt/test budgets. Ensure on-demand resolution of definitions and property-based retrieval (APT), and bootstrap import context as needed.\n- **LLM Orchestrator**: Implement discrete prompt flows for PLAN, GENERATE, REFINE, and MANUAL FIX stages. Integrate a symbol resolution loop in PLAN and REFINE to handle missing_symbols, and enforce user approval gates where required.\n- **Runners**: Integrate pytest/coverage runners with PYTHONPATH bootstrap or conftest support. Collect ExecutionFeedback for use in refinement and manual fix flows.\n- **Controller**: Implement the orchestration algorithm as described in the specification, gluing all stages, enforcing quality gates (import presence, bootstrap/conftest, compile, determinism, coverage, and optional mutation sampling), and passing approved plans into GENERATE.\n- **Integration Points**: Reuse existing adapters for parser, context, coverage, LLM, and telemetry. Extend TOML configuration for import policy, prompt budgets, feature flags (context_as_json, mutation sampling), and model selection per stage. Expose new planning and manual-fix flows in CLI and Textual UI, supporting non-interactive flags and defaults.\n- **Documentation**: Update documentation to reference the context assembly specification and provide usage examples.\n\nAll components must enforce canonical absolute imports for target modules throughout prompts and generated tests, and ensure consistent usage. The ContextPack structure must strictly match the specification.",
+        "testStrategy": "1. Unit tests for ImportResolver, RepoLayoutDetector, and ContextPack assembly, verifying correct extraction, resolution, and packaging of repository context and canonical imports.\n2. Integration tests for the full plan→generate→refine→manual-fix pipeline, including enforcement of all quality gates (import presence, bootstrap/conftest, compile, determinism, coverage, mutation sampling if enabled).\n3. Simulate missing_symbols scenarios to verify the symbol resolution loop and user approval gates.\n4. Test CLI and UI flows for planning and manual-fix, including non-interactive operation.\n5. Validate that generated tests use canonical imports and that ContextPack matches the documented schema.\n6. Update and verify documentation with concrete examples and references to the specification.",
+        "status": "pending",
+        "dependencies": [
+          6,
+          7,
+          11,
+          12,
+          13,
+          14,
+          17,
+          19
+        ],
+        "priority": "high",
+        "subtasks": []
       }
     ],
     "metadata": {
       "created": "2025-01-27T20:16:58.061Z",
-      "updated": "2025-09-17T22:01:03.157Z",
+      "updated": "2025-09-20T13:31:17.632Z",
       "description": "Tasks for master context"
     }
   }

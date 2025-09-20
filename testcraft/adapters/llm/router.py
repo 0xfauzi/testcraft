@@ -5,6 +5,7 @@ from typing import Any
 
 from ...ports.cost_port import CostPort
 from ...ports.llm_port import LLMPort
+from ...prompts.registry import PromptRegistry
 
 logger = logging.getLogger(__name__)
 
@@ -13,11 +14,15 @@ class LLMRouter(LLMPort):
     """Router for multiple LLM providers using user configuration."""
 
     def __init__(
-        self, config: dict[str, Any] | None = None, cost_port: CostPort | None = None
+        self, 
+        config: dict[str, Any] | None = None, 
+        cost_port: CostPort | None = None,
+        prompt_registry: PromptRegistry | None = None
     ):
-        """Initialize LLM Router with configuration and optional cost tracking."""
+        """Initialize LLM Router with configuration, optional cost tracking, and prompt registry."""
         self.config = config or {}
         self.cost_port = cost_port
+        self.prompt_registry = prompt_registry or PromptRegistry()
         self._adapters: dict[str, LLMPort] = {}
         # Get the default provider from config, fallback to openai
         self.default_provider = self.config.get("default_provider", "openai")
@@ -81,25 +86,33 @@ class LLMRouter(LLMPort):
                 from .openai import OpenAIAdapter
 
                 self._adapters[provider] = OpenAIAdapter(
-                    cost_port=self.cost_port, **provider_config
+                    cost_port=self.cost_port, 
+                    prompt_registry=self.prompt_registry,
+                    **provider_config
                 )
             elif provider == "anthropic":
                 from .claude import ClaudeAdapter
 
                 self._adapters[provider] = ClaudeAdapter(
-                    cost_port=self.cost_port, **provider_config
+                    cost_port=self.cost_port, 
+                    prompt_registry=self.prompt_registry,
+                    **provider_config
                 )
             elif provider == "azure-openai":
                 from .azure import AzureOpenAIAdapter
 
                 self._adapters[provider] = AzureOpenAIAdapter(
-                    cost_port=self.cost_port, **provider_config
+                    cost_port=self.cost_port, 
+                    prompt_registry=self.prompt_registry,
+                    **provider_config
                 )
             elif provider == "bedrock":
                 from .bedrock import BedrockAdapter
 
                 self._adapters[provider] = BedrockAdapter(
-                    cost_port=self.cost_port, **provider_config
+                    cost_port=self.cost_port, 
+                    prompt_registry=self.prompt_registry,
+                    **provider_config
                 )
             else:
                 raise ValueError(f"Unknown provider: {provider}")
@@ -116,10 +129,10 @@ class LLMRouter(LLMPort):
         adapter = self._get_adapter(self.default_provider)
         return adapter.generate_tests(code_content, context, test_framework, **kwargs)
 
-    async def analyze_code(self, code: str, focus_areas: list) -> dict[str, Any]:
+    async def analyze_code(self, code_content: str, analysis_type: str = "comprehensive", **kwargs: Any) -> dict[str, Any]:
         """Analyze code using configured provider."""
         adapter = self._get_adapter(self.default_provider)
-        return adapter.analyze_code(code, focus_areas)
+        return adapter.analyze_code(code_content, analysis_type, **kwargs)
 
     async def refine_tests(self, tests: str, feedback: str) -> str:
         """Refine tests using configured provider."""
