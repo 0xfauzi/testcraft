@@ -472,9 +472,9 @@ class TestRefineAdapterHardening:
         llm = MockLLMPort()
         config = RefineConfig()
         adapter = RefineAdapter(llm, config=config)
-        
+
         result = adapter._validate_refined_content(None, "original content")
-        
+
         assert not result["is_valid"]
         assert "None content" in result["reason"]
 
@@ -483,9 +483,9 @@ class TestRefineAdapterHardening:
         llm = MockLLMPort()
         config = RefineConfig()
         adapter = RefineAdapter(llm, config=config)
-        
+
         result = adapter._validate_refined_content("", "original content")
-        
+
         assert not result["is_valid"]
         assert "empty or whitespace-only" in result["reason"]
 
@@ -494,9 +494,9 @@ class TestRefineAdapterHardening:
         llm = MockLLMPort()
         config = RefineConfig()
         adapter = RefineAdapter(llm, config=config)
-        
+
         result = adapter._validate_refined_content("   \n\t  ", "original content")
-        
+
         assert not result["is_valid"]
         assert "empty or whitespace-only" in result["reason"]
 
@@ -505,9 +505,9 @@ class TestRefineAdapterHardening:
         llm = MockLLMPort()
         config = RefineConfig()
         adapter = RefineAdapter(llm, config=config)
-        
+
         test_cases = ["None", "none", "NONE", "null", "NULL", "Null"]
-        
+
         for literal_none in test_cases:
             result = adapter._validate_refined_content(literal_none, "original content")
             assert not result["is_valid"], f"Should reject literal '{literal_none}'"
@@ -518,11 +518,11 @@ class TestRefineAdapterHardening:
         llm = MockLLMPort()
         config = RefineConfig()
         adapter = RefineAdapter(llm, config=config)
-        
+
         original = "def test_example():\n    assert True"
-        
+
         result = adapter._validate_refined_content(original, original)
-        
+
         assert not result["is_valid"]
         assert "identical content" in result["reason"]
 
@@ -531,11 +531,11 @@ class TestRefineAdapterHardening:
         llm = MockLLMPort()
         config = RefineConfig()
         adapter = RefineAdapter(llm, config=config)
-        
+
         invalid_python = "def test_example(\n    assert True  # missing closing paren"
-        
+
         result = adapter._validate_refined_content(invalid_python, "original")
-        
+
         assert not result["is_valid"]
         assert "invalid Python syntax" in result["reason"]
 
@@ -544,11 +544,11 @@ class TestRefineAdapterHardening:
         llm = MockLLMPort()
         config = RefineConfig()
         adapter = RefineAdapter(llm, config=config)
-        
+
         valid_python = "def test_example():\n    assert True"
-        
+
         result = adapter._validate_refined_content(valid_python, "different content")
-        
+
         assert result["is_valid"]
         assert "reason" not in result
 
@@ -556,13 +556,13 @@ class TestRefineAdapterHardening:
         """Test path safety validation accepts valid test paths."""
         llm = MockLLMPort()
         adapter = RefineAdapter(llm)
-        
+
         valid_paths = [
             Path("tests/test_example.py"),
             Path("test_module.py"),
             Path("/some/project/tests/test_feature.py"),
         ]
-        
+
         for path in valid_paths:
             result = adapter._validate_test_path_safety(path)
             assert result, f"Should accept valid path: {path}"
@@ -571,14 +571,14 @@ class TestRefineAdapterHardening:
         """Test path safety validation rejects invalid paths."""
         llm = MockLLMPort()
         adapter = RefineAdapter(llm)
-        
+
         invalid_paths = [
             Path("src/module.py"),  # Not a test file
             Path("tests/example.txt"),  # Not Python
             Path("example.py"),  # No test indicator
             Path("/etc/passwd"),  # System file
         ]
-        
+
         for path in invalid_paths:
             result = adapter._validate_test_path_safety(path)
             assert not result, f"Should reject invalid path: {path}"
@@ -588,18 +588,16 @@ class TestRefineAdapterHardening:
         # Create test file
         test_file = tmp_path / "test_example.py"
         test_file.write_text("def test_example():\n    assert False")
-        
+
         # Mock LLM that returns None (triggers validation failure)
         llm = MockLLMPort([None])
         config = RefineConfig()
         adapter = RefineAdapter(llm, config=config)
-        
+
         result = adapter.refine_from_failures(
-            test_file=test_file,
-            failure_output="Test failed",
-            max_iterations=3
+            test_file=test_file, failure_output="Test failed", max_iterations=3
         )
-        
+
         assert not result["success"]
         assert result["final_status"] == "llm_no_change"
         assert result["iterations_used"] == 1
@@ -611,18 +609,16 @@ class TestRefineAdapterHardening:
         original_content = "def test_example():\n    assert False"
         test_file = tmp_path / "test_example.py"
         test_file.write_text(original_content)
-        
+
         # Mock LLM that returns identical content
         llm = MockLLMPort([original_content])
         config = RefineConfig()
         adapter = RefineAdapter(llm, config=config)
-        
+
         result = adapter.refine_from_failures(
-            test_file=test_file,
-            failure_output="Test failed",
-            max_iterations=3
+            test_file=test_file, failure_output="Test failed", max_iterations=3
         )
-        
+
         assert not result["success"]
         assert result["final_status"] == "llm_no_change"
         assert result["iterations_used"] == 1
@@ -634,22 +630,20 @@ class TestRefineAdapterHardening:
         original_content = "def test_example():\n    assert False"
         test_file = tmp_path / "test_example.py"
         test_file.write_text(original_content)
-        
+
         # Mock LLM that returns invalid syntax
         llm = MockLLMPort(["def test_example(\n    assert True  # syntax error"])
         config = RefineConfig()
         adapter = RefineAdapter(llm, config=config)
-        
+
         result = adapter.refine_from_failures(
-            test_file=test_file,
-            failure_output="Test failed",
-            max_iterations=3
+            test_file=test_file, failure_output="Test failed", max_iterations=3
         )
-        
+
         assert not result["success"]
         assert result["final_status"] == "llm_no_change"
         assert "invalid Python syntax" in result["error"]
-        
+
         # Verify original content is preserved
         assert test_file.read_text() == original_content
 
@@ -665,16 +659,18 @@ class TestRefineAdapterHardening:
             "format_on_refine": False,
         }
         adapter = RefineAdapter(llm, config=config)
-        
+
         # Test that validation passes when guardrails are disabled
         result = adapter._validate_refined_content("", "original")
         assert result["is_valid"]  # Empty content allowed when reject_empty=False
-        
+
         result = adapter._validate_refined_content("None", "original")
         assert result["is_valid"]  # Literal None allowed when reject_literal_none=False
-        
+
         result = adapter._validate_refined_content("original", "original")
-        assert result["is_valid"]  # Identical content allowed when reject_identical=False
+        assert result[
+            "is_valid"
+        ]  # Identical content allowed when reject_identical=False
 
     def test_configuration_pytest_args_default(self):
         """Test that pytest args have sensible defaults."""
@@ -685,7 +681,7 @@ class TestRefineAdapterHardening:
         """Test that guardrails have safe defaults."""
         config = RefineConfig()
         guardrails = config.refinement_guardrails
-        
+
         assert guardrails["reject_empty"] is True
         assert guardrails["reject_literal_none"] is True
         assert guardrails["reject_identical"] is True

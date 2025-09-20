@@ -140,9 +140,13 @@ class OpenAIAdapter(LLMPort):
         if raw_obj is not None:
             try:
                 if hasattr(raw_obj, "model_dump"):
-                    raw_pretty = json.dumps(raw_obj.model_dump(), indent=2, ensure_ascii=False)  # type: ignore[attr-defined]
+                    raw_pretty = json.dumps(
+                        raw_obj.model_dump(), indent=2, ensure_ascii=False
+                    )  # type: ignore[attr-defined]
                 elif hasattr(raw_obj, "dict"):
-                    raw_pretty = json.dumps(raw_obj.dict(), indent=2, ensure_ascii=False)  # type: ignore[call-arg]
+                    raw_pretty = json.dumps(
+                        raw_obj.dict(), indent=2, ensure_ascii=False
+                    )  # type: ignore[call-arg]
                 else:
                     raw_pretty = str(raw_obj)
             except Exception:
@@ -510,23 +514,33 @@ class OpenAIAdapter(LLMPort):
 
             if parsed.success and parsed.data:
                 # Use common schema validation and repair
-                from .common import normalize_refinement_response, create_repair_prompt
-                
+                from .common import create_repair_prompt, normalize_refinement_response
+
                 validation_result = normalize_refinement_response(parsed.data)
-                
+
                 if not validation_result.is_valid:
                     logger.warning(
                         "OpenAI returned invalid schema: %s. Attempting repair...",
-                        validation_result.error
+                        validation_result.error,
                     )
-                    
-                    # Attempt single-shot repair with minimal prompt  
-                    if "refined_content" not in parsed.data or self._is_invalid_refined_content(parsed.data.get("refined_content")):
+
+                    # Attempt single-shot repair with minimal prompt
+                    if (
+                        "refined_content" not in parsed.data
+                        or self._is_invalid_refined_content(
+                            parsed.data.get("refined_content")
+                        )
+                    ):
                         repair_prompt = create_repair_prompt(
                             validation_result.error,
-                            ["refined_content", "changes_made", "confidence", "improvement_areas"]
+                            [
+                                "refined_content",
+                                "changes_made",
+                                "confidence",
+                                "improvement_areas",
+                            ],
                         )
-                        
+
                         def repair_call() -> dict[str, Any]:
                             return self._chat_completion(
                                 system_prompt=system_prompt,
@@ -536,27 +550,31 @@ class OpenAIAdapter(LLMPort):
                                 temperature=0.0,  # Deterministic repair
                                 **kwargs,
                             )
-                        
+
                         try:
                             repair_result = with_retries(repair_call, retries=1)
                             repair_content = repair_result.get("content", "")
                             repair_parsed = parse_json_response(repair_content)
-                            
+
                             if repair_parsed.success and repair_parsed.data:
-                                repair_validation = normalize_refinement_response(repair_parsed.data)
+                                repair_validation = normalize_refinement_response(
+                                    repair_parsed.data
+                                )
                                 if repair_validation.is_valid:
                                     logger.info("OpenAI schema repair successful.")
                                     validation_result = repair_validation
                                 else:
-                                    logger.error(f"OpenAI repair failed: {repair_validation.error}")
-                            
+                                    logger.error(
+                                        f"OpenAI repair failed: {repair_validation.error}"
+                                    )
+
                         except Exception as repair_e:
                             logger.error(f"OpenAI repair attempt failed: {repair_e}")
-                
+
                 # Return consistent response structure
                 if validation_result.is_valid and validation_result.data:
                     response_data = validation_result.data
-                
+
                     return {
                         "refined_content": response_data["refined_content"],
                         "changes_made": response_data["changes_made"],
@@ -573,7 +591,9 @@ class OpenAIAdapter(LLMPort):
                     }
                 else:
                     # Schema validation failed even after repair
-                    logger.error(f"OpenAI schema validation failed: {validation_result.error}")
+                    logger.error(
+                        f"OpenAI schema validation failed: {validation_result.error}"
+                    )
                     return {
                         "refined_content": original_content,  # Safe fallback
                         "changes_made": f"Schema validation failed: {validation_result.error}",
@@ -605,7 +625,7 @@ class OpenAIAdapter(LLMPort):
         except Exception as e:
             logger.error(f"OpenAI content refinement failed: {e}")
             raise OpenAIError(f"Content refinement failed: {e}") from e
-    
+
     def _is_invalid_refined_content(self, content: Any) -> bool:
         """Check if refined_content is invalid (None, empty, or literal 'None'/'null')."""
         if content is None:

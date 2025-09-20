@@ -14,7 +14,7 @@ Imagine you're looking for information about "user registration" in a 2000-line 
 - ❌ Overwhelming amount of irrelevant information
 
 With chunking:
-- ✅ You get just the `register_user` function 
+- ✅ You get just the `register_user` function
 - ✅ Clear, focused information
 - ✅ Easy to understand what's relevant
 
@@ -32,7 +32,7 @@ class User:
     def __init__(self, email: str):
         self.email = email
 
-# Chunk 2: The register_user function  
+# Chunk 2: The register_user function
 def register_user(email: str, password: str):
     # validation logic here
     return User(email)
@@ -67,7 +67,7 @@ Our scoring system considers three main factors:
 **Simple version:** Count how many words from your search appear in each chunk.
 
 ```
-Search: "user registration" 
+Search: "user registration"
 Chunk A: "def register_user(email, password)" → Contains both "user" and "register" → Good match!
 Chunk B: "def format_date(timestamp)" → Contains neither → Poor match
 ```
@@ -139,7 +139,7 @@ When our test refinement system asks: *"What context do I need to fix this faili
 
 Instead of getting random code snippets, you get:
 1. The exact `authenticate` function being tested (Score: 1.8)
-2. The `User` class it depends on (Score: 1.2) 
+2. The `User` class it depends on (Score: 1.2)
 3. Related validation functions (Score: 0.9)
 4. Documentation about auth flows (Score: 0.6)
 

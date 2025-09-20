@@ -8,13 +8,14 @@ that prioritizes Ruff (modern, fast) and gracefully falls back to Black only.
 
 import logging
 import subprocess
-import sys
 import tempfile
 from pathlib import Path
-from typing import Optional
 
-from .subprocess_safe import (SubprocessExecutionError, SubprocessTimeoutError,
-                              run_subprocess_safe)
+from .subprocess_safe import (
+    SubprocessExecutionError,
+    SubprocessTimeoutError,
+    run_subprocess_safe,
+)
 
 # Module-level logger
 logger = logging.getLogger(__name__)
@@ -22,32 +23,36 @@ logger = logging.getLogger(__name__)
 
 class FormatterDetector:
     """Detects available code formatters at runtime."""
-    
-    _ruff_available: Optional[bool] = None
-    _black_available: Optional[bool] = None
-    _isort_available: Optional[bool] = None
+
+    _ruff_available: bool | None = None
+    _black_available: bool | None = None
+    _isort_available: bool | None = None
     _ruff_disabled: bool = False  # Temporary disable if Ruff keeps timing out
     _ruff_failure_count: int = 0  # Track consecutive Ruff failures
-    
+
     @classmethod
     def is_ruff_available(cls) -> bool:
         """Check if Ruff is available in the current environment."""
         if cls._ruff_available is None:
             try:
                 subprocess.run(
-                    ["ruff", "--version"], 
-                    check=True, 
-                    stdout=subprocess.DEVNULL, 
+                    ["ruff", "--version"],
+                    check=True,
+                    stdout=subprocess.DEVNULL,
                     stderr=subprocess.DEVNULL,
-                    timeout=5
+                    timeout=5,
                 )
                 cls._ruff_available = True
                 logger.debug("Ruff formatter detected and available")
-            except (subprocess.CalledProcessError, FileNotFoundError, subprocess.TimeoutExpired):
+            except (
+                subprocess.CalledProcessError,
+                FileNotFoundError,
+                subprocess.TimeoutExpired,
+            ):
                 cls._ruff_available = False
                 logger.debug("Ruff formatter not available")
         return cls._ruff_available and not cls._ruff_disabled
-    
+
     @classmethod
     def record_ruff_failure(cls):
         """Record a Ruff formatting failure and disable if too many failures."""
@@ -58,57 +63,65 @@ class FormatterDetector:
                 "Ruff formatter disabled due to repeated failures/timeouts. "
                 "Using fallback formatters for this session."
             )
-    
+
     @classmethod
     def record_ruff_success(cls):
         """Record a Ruff formatting success and reset failure count."""
         cls._ruff_failure_count = 0
-    
+
     @classmethod
     def is_black_available(cls) -> bool:
         """Check if Black is available in the current environment."""
         if cls._black_available is None:
             try:
                 subprocess.run(
-                    ["python", "-m", "black", "--version"], 
-                    check=True, 
-                    stdout=subprocess.DEVNULL, 
+                    ["python", "-m", "black", "--version"],
+                    check=True,
+                    stdout=subprocess.DEVNULL,
                     stderr=subprocess.DEVNULL,
-                    timeout=5
+                    timeout=5,
                 )
                 cls._black_available = True
                 logger.debug("Black formatter detected and available")
-            except (subprocess.CalledProcessError, FileNotFoundError, subprocess.TimeoutExpired):
+            except (
+                subprocess.CalledProcessError,
+                FileNotFoundError,
+                subprocess.TimeoutExpired,
+            ):
                 cls._black_available = False
                 logger.debug("Black formatter not available")
         return cls._black_available
-    
+
     @classmethod
     def is_isort_available(cls) -> bool:
         """Check if isort is available in the current environment."""
         if cls._isort_available is None:
             try:
                 subprocess.run(
-                    ["python", "-m", "isort", "--version"], 
-                    check=True, 
-                    stdout=subprocess.DEVNULL, 
+                    ["python", "-m", "isort", "--version"],
+                    check=True,
+                    stdout=subprocess.DEVNULL,
                     stderr=subprocess.DEVNULL,
-                    timeout=5
+                    timeout=5,
                 )
                 cls._isort_available = True
                 logger.debug("isort formatter detected and available")
-            except (subprocess.CalledProcessError, FileNotFoundError, subprocess.TimeoutExpired):
+            except (
+                subprocess.CalledProcessError,
+                FileNotFoundError,
+                subprocess.TimeoutExpired,
+            ):
                 cls._isort_available = False
                 logger.debug("isort formatter not available")
         return cls._isort_available
-    
+
     @classmethod
     def get_available_formatters(cls) -> dict[str, bool]:
         """Get a summary of all available formatters."""
         return {
             "ruff": cls.is_ruff_available(),
             "black": cls.is_black_available(),
-            "isort": cls.is_isort_available()
+            "isort": cls.is_isort_available(),
         }
 
 
@@ -201,16 +214,16 @@ def run_isort_safe(content: str, timeout: int = 30) -> str:
 
 def run_ruff_format_safe(content: str, timeout: int = 30) -> str:
     """Run Ruff formatter safely on Python content.
-    
+
     Uses 'ruff format' which is Black-compatible and very fast.
     Raises exceptions on timeout/failure for proper error handling.
     """
     cmd = ["ruff", "format", "-"]  # Use '-' to read from stdin
-    
+
     # Use run_subprocess_safe with stdin input
     with run_subprocess_safe(cmd, input_text=content, timeout=timeout) as result:
         stdout, stderr, returncode = result
-        
+
     if returncode == 0:
         return stdout or content
     else:
@@ -221,16 +234,25 @@ def run_ruff_format_safe(content: str, timeout: int = 30) -> str:
 
 def run_ruff_import_sort_safe(content: str, timeout: int = 30) -> str:
     """Run Ruff import sorting safely on Python content.
-    
+
     Uses 'ruff check --select I --fix' to sort imports like isort.
     Raises exceptions on timeout/failure for proper error handling.
     """
-    cmd = ["ruff", "check", "--select", "I", "--fix", "--stdin-filename", "temp.py", "-"]
-    
+    cmd = [
+        "ruff",
+        "check",
+        "--select",
+        "I",
+        "--fix",
+        "--stdin-filename",
+        "temp.py",
+        "-",
+    ]
+
     # Use run_subprocess_safe with stdin input
     with run_subprocess_safe(cmd, input_text=content, timeout=timeout) as result:
         stdout, stderr, returncode = result
-        
+
     if returncode == 0:
         return stdout or content
     else:
@@ -264,10 +286,20 @@ def format_with_black_only(content: str, timeout: int = 30) -> str:
     return run_black_safe(content, timeout)
 
 
-def format_python_content(content: str, timeout: int = 15, disable_ruff: bool = False) -> str:
+def format_with_black_isort(content: str, timeout: int = 30) -> str:
+    """Legacy function to format with isort first, then Black (for compatibility)."""
+    # First apply isort
+    isort_formatted = run_isort_safe(content, timeout)
+    # Then apply black
+    return run_black_safe(isort_formatted, timeout)
+
+
+def format_python_content(
+    content: str, timeout: int = 15, disable_ruff: bool = False
+) -> str:
     """
     Format Python content using the best available formatter.
-    
+
     Uses smart formatter selection that prioritizes reliable formatters to avoid
     hanging during test generation. Skips experimental Ruff features that may hang.
 

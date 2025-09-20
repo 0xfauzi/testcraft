@@ -5,48 +5,45 @@ Provides syntax-highlighted code display with scrolling,
 line numbers, and modal viewing capabilities.
 """
 
-from typing import Optional
-from textual.widgets import Static
-from textual.containers import VerticalScroll
-from textual.screen import ModalScreen
-from textual.app import ComposeResult
-from textual.widgets import Header, Footer, Button
-from textual.containers import Vertical, Horizontal
-from rich.syntax import Syntax
 from rich.panel import Panel
+from rich.syntax import Syntax
+from textual.app import ComposeResult
+from textual.containers import Horizontal, Vertical, VerticalScroll
+from textual.screen import ModalScreen
+from textual.widgets import Button, Footer, Header, Static
 
 
 class CodePane(Static):
     """
     Widget for displaying syntax-highlighted code.
-    
+
     Can display code inline or in a modal for focused viewing.
     """
-    
+
     def __init__(
         self,
         code: str = "",
         language: str = "python",
         theme: str = "monokai",
         line_numbers: bool = True,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(**kwargs)
         self.add_class("code-pane")
-        
+
         self._code = code
         self._language = language
         self._theme = theme
         self._line_numbers = line_numbers
-        
+
         self._update_display()
-    
+
     def _update_display(self) -> None:
         """Update the code display."""
         if not self._code.strip():
             self.update("No code to display")
             return
-        
+
         # Create syntax-highlighted code
         syntax = Syntax(
             self._code,
@@ -56,7 +53,7 @@ class CodePane(Static):
             word_wrap=True,
             background_color="default",
         )
-        
+
         # Wrap in a panel
         panel = Panel(
             syntax,
@@ -64,14 +61,11 @@ class CodePane(Static):
             title_align="left",
             border_style="blue",
         )
-        
+
         self.update(panel)
-    
+
     def set_code(
-        self,
-        code: str,
-        language: Optional[str] = None,
-        theme: Optional[str] = None
+        self, code: str, language: str | None = None, theme: str | None = None
     ) -> None:
         """Set new code content."""
         self._code = code
@@ -79,22 +73,19 @@ class CodePane(Static):
             self._language = language
         if theme is not None:
             self._theme = theme
-        
+
         self._update_display()
-    
+
     def clear_code(self) -> None:
         """Clear the displayed code."""
         self._code = ""
         self._update_display()
-    
+
     def show_modal(self) -> None:
         """Show the code in a modal screen for focused viewing."""
         if self.app and self._code.strip():
             modal = CodeViewerModal(
-                self._code,
-                self._language,
-                self._theme,
-                self._line_numbers
+                self._code, self._language, self._theme, self._line_numbers
             )
             self.app.push_screen(modal)
 
@@ -102,16 +93,16 @@ class CodePane(Static):
 class CodeViewerModal(ModalScreen):
     """
     Modal screen for viewing code in a larger, focused view.
-    
+
     Provides a full-screen code viewer with close button and
     keyboard navigation.
     """
-    
+
     BINDINGS = [
         ("escape,q", "close", "Close"),
         ("ctrl+c", "close", "Close"),
     ]
-    
+
     def __init__(
         self,
         code: str,
@@ -124,18 +115,18 @@ class CodeViewerModal(ModalScreen):
         self._language = language
         self._theme = theme
         self._line_numbers = line_numbers
-    
+
     def compose(self) -> ComposeResult:
         """Compose the modal content."""
         yield Header()
         yield Footer()
-        
+
         with Vertical(id="modal-content"):
             # Title and close button
             with Horizontal(id="modal-header"):
                 yield Static(f"Code Viewer - {self._language}", id="modal-title")
                 yield Button("Close", id="close-button", variant="error")
-            
+
             # Code display in scrollable container
             with VerticalScroll(id="code-container"):
                 syntax = Syntax(
@@ -147,11 +138,11 @@ class CodeViewerModal(ModalScreen):
                     background_color="default",
                 )
                 yield Static(syntax, id="modal-code")
-    
+
     def action_close(self) -> None:
         """Close the modal."""
         self.dismiss()
-    
+
     def on_button_pressed(self, event: Button.Pressed) -> None:
         """Handle button presses."""
         if event.button.id == "close-button":
@@ -161,32 +152,32 @@ class CodeViewerModal(ModalScreen):
 class InlineCodeSnippet(Static):
     """
     A compact widget for displaying small code snippets inline.
-    
+
     Useful for showing single lines or small blocks of code
     without taking up too much space.
     """
-    
-    def __init__(self, code: str = "", language: str = "python", **kwargs):
+
+    def __init__(self, code: str = "", language: str = "python", **kwargs) -> None:
         super().__init__(**kwargs)
         self.add_class("inline-code")
-        
+
         self._code = code
         self._language = language
-        
+
         self._update_display()
-    
+
     def _update_display(self) -> None:
         """Update the inline code display."""
         if not self._code.strip():
             self.update("")
             return
-        
+
         # For inline display, use simpler formatting
         # Truncate if too long
         display_code = self._code.strip()
         if len(display_code) > 100:
             display_code = display_code[:97] + "..."
-        
+
         # Create simple syntax highlighting
         syntax = Syntax(
             display_code,
@@ -196,15 +187,15 @@ class InlineCodeSnippet(Static):
             word_wrap=False,
             background_color="default",
         )
-        
+
         self.update(syntax)
-    
-    def set_code(self, code: str, language: Optional[str] = None) -> None:
+
+    def set_code(self, code: str, language: str | None = None) -> None:
         """Set new code content."""
         self._code = code
         if language is not None:
             self._language = language
-        
+
         self._update_display()
 
 

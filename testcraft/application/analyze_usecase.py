@@ -25,7 +25,7 @@ logger = logging.getLogger(__name__)
 class AnalyzeUseCaseError(Exception):
     """Exception for Analyze Use Case specific errors."""
 
-    def __init__(self, message: str, cause: Exception | None = None):
+    def __init__(self, message: str, cause: Exception | None = None) -> None:
         super().__init__(message)
         self.cause = cause
 
@@ -163,7 +163,7 @@ class AnalyzeUseCase:
                 span.set_attribute("error", str(e))
                 span.record_exception(e)
                 logger.exception("Analysis failed: %s", e)
-                raise AnalyzeUseCaseError(f"Analysis failed: {e}", cause=e)
+                raise AnalyzeUseCaseError(f"Analysis failed: {e}", cause=e) from e
 
     async def _build_processing_reasons(
         self, files_to_process: list[Path], coverage_data: dict[str, Any]
@@ -191,7 +191,9 @@ class AnalyzeUseCase:
 
             except Exception as e:
                 logger.exception("Failed to build processing reasons: %s", e)
-                raise AnalyzeUseCaseError(f"Reason building failed: {e}", cause=e)
+                raise AnalyzeUseCaseError(
+                    f"Reason building failed: {e}", cause=e
+                ) from e
 
     async def _build_test_presence_info(
         self, files_to_process: list[Path]
@@ -220,7 +222,7 @@ class AnalyzeUseCase:
                 logger.exception("Failed to build test presence info: %s", e)
                 raise AnalyzeUseCaseError(
                     f"Test presence analysis failed: {e}", cause=e
-                )
+                ) from e
 
     async def _sync_state_and_discover_files(
         self, project_path: Path, target_files: list[str | Path] | None = None
@@ -273,7 +275,7 @@ class AnalyzeUseCase:
 
             except Exception as e:
                 logger.exception("Failed to sync state and discover files: %s", e)
-                raise AnalyzeUseCaseError(f"File discovery failed: {e}", cause=e)
+                raise AnalyzeUseCaseError(f"File discovery failed: {e}", cause=e) from e
 
     async def _measure_initial_coverage(
         self, source_files: list[Path]
@@ -344,7 +346,7 @@ class AnalyzeUseCase:
                 logger.exception("Failed to decide files to process: %s", e)
                 raise AnalyzeUseCaseError(
                     f"File processing decision failed: {e}", cause=e
-                )
+                ) from e
 
     async def _file_needs_processing(
         self, file_path: Path, coverage_data: dict[str, Any]
@@ -388,10 +390,14 @@ class AnalyzeUseCase:
         """
         try:
             # Ensure we have candidate test files discovered
-            if self._cached_test_files is None and self._current_project_path is not None:
+            if (
+                self._cached_test_files is None
+                and self._current_project_path is not None
+            ):
                 # Cache not initialized, discover test files once
                 test_files = self._file_discovery.discover_test_files(
-                    self._current_project_path, quiet=True  # Reduce log noise during analysis
+                    self._current_project_path,
+                    quiet=True,  # Reduce log noise during analysis
                 )
                 self._cached_test_files = test_files
             else:

@@ -1,6 +1,10 @@
-from testcraft.adapters.llm import (balance_braces, normalize_output,
-                                    parse_json_response, strip_code_fences,
-                                    try_parse_json)
+from testcraft.adapters.llm import (
+    balance_braces,
+    normalize_output,
+    parse_json_response,
+    strip_code_fences,
+    try_parse_json,
+)
 
 
 def test_strip_code_fences():

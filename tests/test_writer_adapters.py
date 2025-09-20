@@ -14,10 +14,11 @@ from unittest.mock import patch
 import pytest
 
 from testcraft.adapters.io.safety import SafetyError, SafetyPolicies
-from testcraft.adapters.io.writer_append import (WriterAppendAdapter,
-                                                 WriterAppendError)
-from testcraft.adapters.io.writer_ast_merge import (WriterASTMergeAdapter,
-                                                    WriterASTMergeError)
+from testcraft.adapters.io.writer_append import WriterAppendAdapter, WriterAppendError
+from testcraft.adapters.io.writer_ast_merge import (
+    WriterASTMergeAdapter,
+    WriterASTMergeError,
+)
 
 
 class TestSafetyPolicies:

@@ -10,8 +10,7 @@ from pathlib import Path
 
 import pytest
 
-from testcraft.adapters.parsing.codebase_parser import (CodebaseParser,
-                                                        ParseError)
+from testcraft.adapters.parsing.codebase_parser import CodebaseParser, ParseError
 from testcraft.adapters.parsing.test_mapper import TestMapper, TestMappingError
 from testcraft.domain.models import TestElement, TestElementType
 

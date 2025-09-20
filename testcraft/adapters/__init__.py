@@ -8,8 +8,8 @@ implementations of the port interfaces defined in the ports module.
 from . import context, coverage, io, llm, parsing, refine, telemetry
 
 __all__ = [
-    "coverage",
     "context",
+    "coverage",
     "io",
     "llm",
     "parsing",

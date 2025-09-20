@@ -8,22 +8,16 @@ from the generation workflow refactoring.
 import ast
 import tempfile
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
 from testcraft.application.generation.config import GenerationConfig
 from testcraft.application.generation.services.batch_executor import BatchExecutor
-from testcraft.application.generation.services.content_builder import ContentBuilder
 from testcraft.application.generation.services.context_assembler import ContextAssembler
 from testcraft.application.generation.services.coverage_evaluator import (
     CoverageEvaluator,
 )
-from testcraft.application.generation.services.enrichment_detectors import (
-    EnrichmentDetectors,
-)
-from testcraft.application.generation.services.plan_builder import PlanBuilder
-from testcraft.application.generation.services.pytest_refiner import PytestRefiner
 from testcraft.application.generation.services.state_discovery import StateSyncDiscovery
 from testcraft.application.generation.services.structure import DirectoryTreeBuilder
 from testcraft.domain.models import GenerationResult, TestGenerationPlan
@@ -154,7 +148,7 @@ class TestGenerationConfig:
                     "invalid_section": 3,  # Invalid section
                     "contracts": -1,  # Invalid negative value
                     "neighbors": 60,  # Very large value
-                }
+                },
             }
         }
 
@@ -162,10 +156,10 @@ class TestGenerationConfig:
             "testcraft.application.generation.config.logger.warning"
         ) as mock_warn:
             GenerationConfig.validate_config(config)
-            
+
             # Should have multiple warnings
             assert mock_warn.call_count >= 4
-            
+
             # Check specific warning calls - format the messages properly
             warning_messages = []
             for call in mock_warn.call_args_list:
@@ -174,21 +168,32 @@ class TestGenerationConfig:
                     warning_messages.append(call[0][0] % call[0][1:])
                 else:
                     warning_messages.append(call[0][0])
-            
+
             # Should warn about small per_item_chars
-            assert any("per_item_chars" in msg and "using default 1500" in msg for msg in warning_messages)
-            
+            assert any(
+                "per_item_chars" in msg and "using default 1500" in msg
+                for msg in warning_messages
+            )
+
             # Should warn about large total_chars
             assert any("Very large total_chars" in msg for msg in warning_messages)
-            
+
             # Should warn about unknown section (includes list of valid sections)
-            assert any("Unknown section_cap 'invalid_section', valid sections:" in msg for msg in warning_messages)
-            
+            assert any(
+                "Unknown section_cap 'invalid_section', valid sections:" in msg
+                for msg in warning_messages
+            )
+
             # Should warn about invalid negative section cap
-            assert any("Invalid section_cap for 'contracts'" in msg for msg in warning_messages)
-            
+            assert any(
+                "Invalid section_cap for 'contracts'" in msg for msg in warning_messages
+            )
+
             # Should warn about very large section cap
-            assert any("Very large section_cap for 'neighbors'" in msg for msg in warning_messages)
+            assert any(
+                "Very large section_cap for 'neighbors'" in msg
+                for msg in warning_messages
+            )
 
         # Should fix invalid values
         assert config["prompt_budgets"]["per_item_chars"] == 1500
@@ -198,7 +203,7 @@ class TestGenerationConfig:
         config = {
             "prompt_budgets": {
                 "per_item_chars": 3000,  # Large per-item
-                "total_chars": 4000,     # Small total (per_item * 2 > total)
+                "total_chars": 4000,  # Small total (per_item * 2 > total)
             }
         }
 
@@ -206,11 +211,15 @@ class TestGenerationConfig:
             "testcraft.application.generation.config.logger.warning"
         ) as mock_warn:
             GenerationConfig.validate_config(config)
-            
+
             # Should warn about consistency issue
             warning_messages = [str(call) for call in mock_warn.call_args_list]
-            assert any("per_item_chars" in msg and "total_chars" in msg and "truncation issues" in msg 
-                      for msg in warning_messages)
+            assert any(
+                "per_item_chars" in msg
+                and "total_chars" in msg
+                and "truncation issues" in msg
+                for msg in warning_messages
+            )
 
     def test_validate_prompt_budgets_valid_values(self):
         """Test prompt budget validation with valid values."""
@@ -222,13 +231,13 @@ class TestGenerationConfig:
                     "snippets": 10,
                     "neighbors": 5,
                     "test_exemplars": 3,
-                }
+                },
             }
         }
 
         # Should not raise or warn for valid configuration
         GenerationConfig.validate_config(config)
-        
+
         # Values should remain unchanged
         assert config["prompt_budgets"]["per_item_chars"] == 1000
         assert config["prompt_budgets"]["total_chars"] == 5000
@@ -561,7 +570,10 @@ class TestContextAssemblerAdvanced:
         """Mock context port."""
         mock = MagicMock()
         mock.retrieve.return_value = {"results": [], "total_found": 0}
-        mock.get_related_context.return_value = {"related_files": [], "relationships": []}
+        mock.get_related_context.return_value = {
+            "related_files": [],
+            "relationships": [],
+        }
         return mock
 
     @pytest.fixture
@@ -582,27 +594,29 @@ class TestContextAssemblerAdvanced:
         with tempfile.TemporaryDirectory() as temp_dir:
             source_path = Path(temp_dir) / "example.py"
             source_path.write_text("def example_func(): pass")
-            
+
             result = context_assembler._get_coverage_hints(source_path)
-            
+
             # Should return empty list for placeholder implementation
             assert isinstance(result, list)
             assert len(result) == 0
 
-    def test_get_callgraph_neighbors_with_relationships(self, context_assembler, mock_context_port):
+    def test_get_callgraph_neighbors_with_relationships(
+        self, context_assembler, mock_context_port
+    ):
         """Test call-graph neighbor extraction with relationships."""
         with tempfile.TemporaryDirectory() as temp_dir:
             source_path = Path(temp_dir) / "example.py"
             source_path.write_text("def example_func(): pass")
-            
+
             # Setup mock with relationships and related files
             mock_context_port.get_related_context.return_value = {
                 "relationships": ["calls:other_func", "imports:module"],
-                "related_files": [str(source_path)]
+                "related_files": [str(source_path)],
             }
-            
+
             result = context_assembler._get_callgraph_neighbors(source_path)
-            
+
             assert isinstance(result, list)
             assert len(result) == 1
             assert "Call-graph edges" in result[0]
@@ -613,15 +627,15 @@ class TestContextAssemblerAdvanced:
         with tempfile.TemporaryDirectory() as temp_dir:
             source_path = Path(temp_dir) / "example.py"
             source_path.write_text("def example_func(): pass")
-            
+
             # Setup mock with empty relationships
             mock_context_port.get_related_context.return_value = {
                 "relationships": [],
-                "related_files": []
+                "related_files": [],
             }
-            
+
             result = context_assembler._get_callgraph_neighbors(source_path)
-            
+
             assert isinstance(result, list)
             assert len(result) == 0
 
@@ -634,15 +648,15 @@ def example_func():
     raise ValueError("test error")
     raise TypeError("another error")
 """)
-            
+
             # Create mock plan with element that has docstring raises
             mock_element = MagicMock()
             mock_element.docstring = ":raises ValueError: When input is invalid\\n:raises KeyError: When key not found"
             mock_plan = MagicMock()
             mock_plan.elements_to_test = [mock_element]
-            
+
             result = context_assembler._get_error_paths(source_path, mock_plan)
-            
+
             assert isinstance(result, list)
             assert len(result) == 1
             assert "Error paths" in result[0]
@@ -655,63 +669,73 @@ def example_func():
         with tempfile.TemporaryDirectory() as temp_dir:
             source_path = Path(temp_dir) / "example.py"
             source_path.write_text("def example_func(): return True")
-            
+
             mock_plan = MagicMock()
             mock_plan.elements_to_test = []
-            
+
             result = context_assembler._get_error_paths(source_path, mock_plan)
-            
+
             assert isinstance(result, list)
             assert len(result) == 0
 
-    def test_get_usage_examples_with_results(self, context_assembler, mock_context_port):
+    def test_get_usage_examples_with_results(
+        self, context_assembler, mock_context_port
+    ):
         """Test usage example extraction with mock results."""
         with tempfile.TemporaryDirectory() as temp_dir:
             source_path = Path(temp_dir) / "example.py"
             source_path.write_text("def example_func(): pass")
-            
+
             # Create mock plan with elements
             mock_element = MagicMock()
             mock_element.name = "example_func"
             mock_plan = MagicMock()
             mock_plan.elements_to_test = [mock_element]
-            
+
             # Setup mock context port with usage examples
             mock_context_port.retrieve.return_value = {
                 "results": [
-                    {"snippet": "result = example_func(arg1, arg2)", "path": "test1.py"},
-                    {"snippet": "example_func()", "path": "test2.py"}
+                    {
+                        "snippet": "result = example_func(arg1, arg2)",
+                        "path": "test1.py",
+                    },
+                    {"snippet": "example_func()", "path": "test2.py"},
                 ]
             }
-            
+
             result = context_assembler._get_usage_examples(source_path, mock_plan)
-            
+
             assert isinstance(result, list)
             assert len(result) == 2
             assert all("Usage example_func" in item for item in result)
 
-    def test_get_usage_examples_deduplication(self, context_assembler, mock_context_port):
+    def test_get_usage_examples_deduplication(
+        self, context_assembler, mock_context_port
+    ):
         """Test usage example deduplication."""
         with tempfile.TemporaryDirectory() as temp_dir:
             source_path = Path(temp_dir) / "example.py"
             source_path.write_text("def example_func(): pass")
-            
+
             mock_element = MagicMock()
             mock_element.name = "example_func"
             mock_plan = MagicMock()
             mock_plan.elements_to_test = [mock_element]
-            
+
             # Setup mock with duplicate snippets
             mock_context_port.retrieve.return_value = {
                 "results": [
                     {"snippet": "example_func()", "path": "test1.py"},
                     {"snippet": "example_func()", "path": "test2.py"},  # Duplicate
-                    {"snippet": "different_call()", "path": "test3.py"}  # No call pattern
+                    {
+                        "snippet": "different_call()",
+                        "path": "test3.py",
+                    },  # No call pattern
                 ]
             }
-            
+
             result = context_assembler._get_usage_examples(source_path, mock_plan)
-            
+
             assert isinstance(result, list)
             # Should deduplicate and only include snippets with call patterns
             assert len(result) == 1
@@ -722,7 +746,7 @@ def example_func():
         with tempfile.TemporaryDirectory() as temp_dir:
             source_path = Path(temp_dir) / "example.py"
             source_path.write_text("def example_func(): pass")
-            
+
             # Create a pyproject.toml file
             pyproject_path = Path(temp_dir) / "pyproject.toml"
             pyproject_path.write_text("""
@@ -730,9 +754,9 @@ def example_func():
 markers = ["slow", "integration"]
 testpaths = ["tests"]
 """)
-            
+
             result = context_assembler._get_pytest_settings_context(source_path)
-            
+
             assert isinstance(result, list)
             # Should extract pytest settings
             assert len(result) >= 0  # May be empty if no settings found
@@ -749,15 +773,15 @@ def example_func():
     os.environ['TEST'] = 'value'
     requests.get('http://example.com')
 """)
-            
+
             # Mock parser to return realistic AST
             mock_parser_port.parse_file.return_value = {
                 "ast": ast.parse(source_path.read_text()),
-                "source_lines": source_path.read_text().splitlines()
+                "source_lines": source_path.read_text().splitlines(),
             }
-            
+
             result = context_assembler._get_side_effects_context(source_path)
-            
+
             assert isinstance(result, list)
             # Should detect side effects (implementation dependent)
             assert len(result) >= 0
@@ -771,7 +795,10 @@ class TestContextAssemblerPromptBudgets:
         """Mock context port."""
         mock = MagicMock()
         mock.retrieve.return_value = {"results": [], "total_found": 0}
-        mock.get_related_context.return_value = {"related_files": [], "relationships": []}
+        mock.get_related_context.return_value = {
+            "related_files": [],
+            "relationships": [],
+        }
         return mock
 
     @pytest.fixture
@@ -781,7 +808,9 @@ class TestContextAssemblerPromptBudgets:
         mock.parse_file.return_value = {"ast": None, "source_lines": []}
         return mock
 
-    def test_assemble_final_context_with_budget_caps(self, mock_context_port, mock_parser_port):
+    def test_assemble_final_context_with_budget_caps(
+        self, mock_context_port, mock_parser_port
+    ):
         """Test context assembly with budget caps."""
         config = GenerationConfig.get_default_config()
         config["prompt_budgets"] = {
@@ -799,14 +828,20 @@ class TestContextAssemblerPromptBudgets:
                 "usage_examples": 1,
                 "pytest_settings": 1,
                 "side_effects": 1,
-            }
+            },
         }
-        
-        context_assembler = ContextAssembler(mock_context_port, mock_parser_port, config)
-        
+
+        context_assembler = ContextAssembler(
+            mock_context_port, mock_parser_port, config
+        )
+
         # Create oversized context sections
         context_sections = [
-            ["snippet1" * 50, "snippet2" * 50, "snippet3" * 50],  # snippets (should cap at 2)
+            [
+                "snippet1" * 50,
+                "snippet2" * 50,
+                "snippet3" * 50,
+            ],  # snippets (should cap at 2)
             ["neighbor1" * 50],  # neighbors
             ["exemplar1" * 50],  # test_exemplars
             ["contract1" * 50],  # contracts
@@ -818,24 +853,28 @@ class TestContextAssemblerPromptBudgets:
             ["pytest1" * 50],  # pytest_settings
             ["side1" * 50],  # side_effects
         ]
-        
+
         result = context_assembler._assemble_final_context(context_sections)
-        
+
         assert result is not None
         assert isinstance(result, str)
         assert len(result) <= config["prompt_budgets"]["total_chars"]
-        
+
         # Should contain content from multiple sections
         assert "snippet1" in result
         assert "neighbor1" in result
 
-    def test_assemble_final_context_per_item_capping(self, mock_context_port, mock_parser_port):
+    def test_assemble_final_context_per_item_capping(
+        self, mock_context_port, mock_parser_port
+    ):
         """Test per-item character capping."""
         config = GenerationConfig.get_default_config()
         config["prompt_budgets"]["per_item_chars"] = 50  # Very small cap
-        
-        context_assembler = ContextAssembler(mock_context_port, mock_parser_port, config)
-        
+
+        context_assembler = ContextAssembler(
+            mock_context_port, mock_parser_port, config
+        )
+
         # Create context with long items
         context_sections = [
             ["A" * 200],  # Should be truncated to 50 chars
@@ -850,25 +889,33 @@ class TestContextAssemblerPromptBudgets:
             [],  # pytest_settings
             [],  # side_effects
         ]
-        
+
         result = context_assembler._assemble_final_context(context_sections)
-        
+
         assert result is not None
         # Each item should be capped
-        lines = result.split('\n\n')
+        lines = result.split("\n\n")
         for line in lines:
             if line.strip():
                 assert len(line) <= config["prompt_budgets"]["per_item_chars"]
 
-    def test_assemble_final_context_deduplication(self, mock_context_port, mock_parser_port):
+    def test_assemble_final_context_deduplication(
+        self, mock_context_port, mock_parser_port
+    ):
         """Test deduplication of context items."""
         config = GenerationConfig.get_default_config()
-        context_assembler = ContextAssembler(mock_context_port, mock_parser_port, config)
-        
+        context_assembler = ContextAssembler(
+            mock_context_port, mock_parser_port, config
+        )
+
         # Create context with duplicates
         duplicate_item = "duplicate content"
         context_sections = [
-            [duplicate_item, duplicate_item, "unique content"],  # snippets with duplicate
+            [
+                duplicate_item,
+                duplicate_item,
+                "unique content",
+            ],  # snippets with duplicate
             [],  # neighbors
             [],  # test_exemplars
             [],  # contracts
@@ -880,19 +927,23 @@ class TestContextAssemblerPromptBudgets:
             [],  # pytest_settings
             [],  # side_effects
         ]
-        
+
         result = context_assembler._assemble_final_context(context_sections)
-        
+
         assert result is not None
         # Should only appear once after deduplication
         assert result.count(duplicate_item) == 1
         assert "unique content" in result
 
-    def test_assemble_final_context_deterministic_ordering(self, mock_context_port, mock_parser_port):
+    def test_assemble_final_context_deterministic_ordering(
+        self, mock_context_port, mock_parser_port
+    ):
         """Test deterministic ordering of context sections."""
         config = GenerationConfig.get_default_config()
-        context_assembler = ContextAssembler(mock_context_port, mock_parser_port, config)
-        
+        context_assembler = ContextAssembler(
+            mock_context_port, mock_parser_port, config
+        )
+
         # Create context with identifiable markers
         context_sections = [
             ["MARKER_SNIPPETS"],  # snippets
@@ -907,53 +958,67 @@ class TestContextAssemblerPromptBudgets:
             [],  # pytest_settings
             [],  # side_effects
         ]
-        
+
         result1 = context_assembler._assemble_final_context(context_sections)
         result2 = context_assembler._assemble_final_context(context_sections)
-        
+
         # Should be identical (deterministic)
         assert result1 == result2
-        
+
         # Should maintain expected order
         if result1:
             snippets_pos = result1.find("MARKER_SNIPPETS")
             neighbors_pos = result1.find("MARKER_NEIGHBORS")
             if snippets_pos != -1 and neighbors_pos != -1:
-                assert snippets_pos < neighbors_pos  # snippets should come before neighbors
+                assert (
+                    snippets_pos < neighbors_pos
+                )  # snippets should come before neighbors
 
-    def test_assemble_final_context_empty_sections(self, mock_context_port, mock_parser_port):
+    def test_assemble_final_context_empty_sections(
+        self, mock_context_port, mock_parser_port
+    ):
         """Test handling of empty context sections."""
         config = GenerationConfig.get_default_config()
-        context_assembler = ContextAssembler(mock_context_port, mock_parser_port, config)
-        
+        context_assembler = ContextAssembler(
+            mock_context_port, mock_parser_port, config
+        )
+
         # All empty sections
         context_sections = [[], [], [], [], [], [], [], [], [], [], []]
-        
+
         result = context_assembler._assemble_final_context(context_sections)
-        
+
         # Should return None for empty context
         assert result is None
 
-    def test_assemble_final_context_section_count_mismatch(self, mock_context_port, mock_parser_port):
+    def test_assemble_final_context_section_count_mismatch(
+        self, mock_context_port, mock_parser_port
+    ):
         """Test handling of section count mismatch."""
         config = GenerationConfig.get_default_config()
-        
-        with patch("testcraft.application.generation.services.context_assembler.logger.warning") as mock_warn:
-            context_assembler = ContextAssembler(mock_context_port, mock_parser_port, config)
-            
+
+        with patch(
+            "testcraft.application.generation.services.context_assembler.logger.warning"
+        ) as mock_warn:
+            context_assembler = ContextAssembler(
+                mock_context_port, mock_parser_port, config
+            )
+
             # Wrong number of sections (should be 11, providing 3)
             context_sections = [["item1"], ["item2"], ["item3"]]
-            
+
             result = context_assembler._assemble_final_context(context_sections)
-            
+
             # Should log warning about mismatch
             mock_warn.assert_called_once()
             assert "Section count mismatch" in str(mock_warn.call_args)
-            
+
             # Should still work with available sections
             assert result is not None or result is None  # Either way is acceptable
 
-    def test_assemble_final_context_data_driven_sections(self, mock_context_port, mock_parser_port):
+    def test_assemble_final_context_data_driven_sections(
+        self, mock_context_port, mock_parser_port
+    ):
         """Test data-driven section handling with custom config."""
         config = GenerationConfig.get_default_config()
         # Customize section caps to test data-driven approach
@@ -961,9 +1026,11 @@ class TestContextAssemblerPromptBudgets:
             "snippets": 1,
             "custom_section": 2,  # Not in default order
         }
-        
-        context_assembler = ContextAssembler(mock_context_port, mock_parser_port, config)
-        
+
+        context_assembler = ContextAssembler(
+            mock_context_port, mock_parser_port, config
+        )
+
         context_sections = [
             ["snippet1", "snippet2"],  # Should be capped at 1
             [],  # neighbors
@@ -977,21 +1044,25 @@ class TestContextAssemblerPromptBudgets:
             [],  # pytest_settings
             [],  # side_effects
         ]
-        
+
         result = context_assembler._assemble_final_context(context_sections)
-        
+
         # Should respect section caps even with custom configuration
         if result:
             # Should only have one snippet due to cap
             assert result.count("snippet") <= 2  # Allow some flexibility
 
-    def test_assemble_final_context_total_budget_enforcement(self, mock_context_port, mock_parser_port):
+    def test_assemble_final_context_total_budget_enforcement(
+        self, mock_context_port, mock_parser_port
+    ):
         """Test total character budget enforcement with truncation."""
         config = GenerationConfig.get_default_config()
         config["prompt_budgets"]["total_chars"] = 100  # Very small total budget
-        
-        context_assembler = ContextAssembler(mock_context_port, mock_parser_port, config)
-        
+
+        context_assembler = ContextAssembler(
+            mock_context_port, mock_parser_port, config
+        )
+
         # Create large context that exceeds total budget
         context_sections = [
             ["A" * 50, "B" * 50, "C" * 50],  # 150 chars total
@@ -1006,9 +1077,9 @@ class TestContextAssemblerPromptBudgets:
             [],  # pytest_settings
             [],  # side_effects
         ]
-        
+
         result = context_assembler._assemble_final_context(context_sections)
-        
+
         assert result is not None
         # Should be within total budget
         assert len(result) <= config["prompt_budgets"]["total_chars"]

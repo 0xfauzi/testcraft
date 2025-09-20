@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 class FileDiscoveryError(Exception):
     """Exception raised when file discovery fails."""
 
-    def __init__(self, message: str, cause: Exception | None = None):
+    def __init__(self, message: str, cause: Exception | None = None) -> None:
         super().__init__(message)
         self.cause = cause
 
@@ -34,7 +34,7 @@ class FileDiscoveryService:
     reusable across different use cases (generate, coverage, analyze, etc.).
     """
 
-    def __init__(self, config: TestPatternConfig | None = None):
+    def __init__(self, config: TestPatternConfig | None = None) -> None:
         """
         Initialize the file discovery service.
 
@@ -141,17 +141,24 @@ class FileDiscoveryService:
             logger.debug(
                 f"Total files scanned: {total_found}, included: {len(source_files)}"
             )
-            logger.info(f"Discovered {len(source_files)} source files in {project_path} (patterns: {patterns})")
+            logger.info(
+                f"Discovered {len(source_files)} source files in {project_path} (patterns: {patterns})"
+            )
             return source_files
 
         except Exception as e:
             if isinstance(e, FileDiscoveryError):
                 raise
             logger.exception(f"Failed to discover source files: {e}")
-            raise FileDiscoveryError(f"Source file discovery failed: {e}", cause=e)
+            raise FileDiscoveryError(
+                f"Source file discovery failed: {e}", cause=e
+            ) from e
 
     def discover_test_files(
-        self, project_path: str | Path, test_patterns: list[str] | None = None, quiet: bool = False
+        self,
+        project_path: str | Path,
+        test_patterns: list[str] | None = None,
+        quiet: bool = False,
     ) -> list[str]:
         """
         Discover test files in a project using test-specific patterns.
@@ -210,16 +217,20 @@ class FileDiscoveryService:
                 f"Total test files scanned: {total_found}, included: {len(test_files)}"
             )
             if quiet:
-                logger.debug(f"Discovered {len(test_files)} test files in {project_path} (patterns: {patterns})")
+                logger.debug(
+                    f"Discovered {len(test_files)} test files in {project_path} (patterns: {patterns})"
+                )
             else:
-                logger.info(f"Discovered {len(test_files)} test files in {project_path} (patterns: {patterns})")
+                logger.info(
+                    f"Discovered {len(test_files)} test files in {project_path} (patterns: {patterns})"
+                )
             return test_files
 
         except Exception as e:
             if isinstance(e, FileDiscoveryError):
                 raise
             logger.exception(f"Failed to discover test files: {e}")
-            raise FileDiscoveryError(f"Test file discovery failed: {e}", cause=e)
+            raise FileDiscoveryError(f"Test file discovery failed: {e}", cause=e) from e
 
     def discover_all_python_files(
         self, project_path: str | Path, separate_tests: bool = True
@@ -260,7 +271,9 @@ class FileDiscoveryService:
             if isinstance(e, FileDiscoveryError):
                 raise
             logger.exception(f"Failed to discover Python files: {e}")
-            raise FileDiscoveryError(f"Python file discovery failed: {e}", cause=e)
+            raise FileDiscoveryError(
+                f"Python file discovery failed: {e}", cause=e
+            ) from e
 
     def filter_existing_files(self, file_paths: list[str | Path]) -> list[str]:
         """

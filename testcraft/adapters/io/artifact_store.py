@@ -77,7 +77,7 @@ class CleanupPolicy:
     max_age_days: int | None = None
     max_artifacts: int | None = None
     max_size_mb: int | None = None
-    preserve_tags: list[str] = None
+    preserve_tags: list[str] | None = None
 
     def __post_init__(self) -> None:
         if self.preserve_tags is None:
@@ -159,7 +159,9 @@ class ArtifactStoreAdapter:
             # Determine file extension based on content type
             if isinstance(content, dict):
                 file_ext = ".json"
-                file_content = json.dumps(content, indent=2, ensure_ascii=False)
+                file_content: str | bytes = json.dumps(
+                    content, indent=2, ensure_ascii=False
+                )
             elif isinstance(content, bytes):
                 file_ext = ".bin"
                 file_content = content
@@ -201,7 +203,7 @@ class ArtifactStoreAdapter:
             return artifact_id
 
         except Exception as e:
-            raise ArtifactStoreError(f"Failed to store artifact: {str(e)}")
+            raise ArtifactStoreError(f"Failed to store artifact: {str(e)}") from e
 
     def retrieve_artifact(self, artifact_id: str) -> dict[str, Any] | None:
         """
@@ -247,7 +249,7 @@ class ArtifactStoreAdapter:
         except Exception as e:
             raise ArtifactStoreError(
                 f"Failed to retrieve artifact {artifact_id}: {str(e)}"
-            )
+            ) from e
 
     def list_artifacts(
         self,
@@ -294,7 +296,7 @@ class ArtifactStoreAdapter:
             return results
 
         except Exception as e:
-            raise ArtifactStoreError(f"Failed to list artifacts: {str(e)}")
+            raise ArtifactStoreError(f"Failed to list artifacts: {str(e)}") from e
 
     def remove_artifact(self, artifact_id: str) -> bool:
         """
@@ -325,7 +327,7 @@ class ArtifactStoreAdapter:
         except Exception as e:
             raise ArtifactStoreError(
                 f"Failed to remove artifact {artifact_id}: {str(e)}"
-            )
+            ) from e
 
     def cleanup_expired(self) -> dict[str, int]:
         """
@@ -358,7 +360,9 @@ class ArtifactStoreAdapter:
             }
 
         except Exception as e:
-            raise ArtifactStoreError(f"Failed to cleanup expired artifacts: {str(e)}")
+            raise ArtifactStoreError(
+                f"Failed to cleanup expired artifacts: {str(e)}"
+            ) from e
 
     def apply_cleanup_policy(self) -> dict[str, int]:
         """
@@ -379,7 +383,7 @@ class ArtifactStoreAdapter:
 
                 for artifact_id, metadata in self._metadata.items():
                     if metadata.timestamp < cutoff_date and not any(
-                        tag in policy.preserve_tags for tag in metadata.tags
+                        tag in (policy.preserve_tags or []) for tag in metadata.tags
                     ):
                         old_artifacts.append((artifact_id, metadata))
 
@@ -397,7 +401,9 @@ class ArtifactStoreAdapter:
 
                 excess_count = len(self._metadata) - policy.max_artifacts
                 for artifact_id, metadata in artifacts_by_age[:excess_count]:
-                    if not any(tag in policy.preserve_tags for tag in metadata.tags):
+                    if not any(
+                        tag in (policy.preserve_tags or []) for tag in metadata.tags
+                    ):
                         if self.remove_artifact(artifact_id):
                             stats["expired_artifacts_removed"] += 1
                             stats["size_freed_bytes"] += metadata.size_bytes
@@ -420,7 +426,7 @@ class ArtifactStoreAdapter:
                             break
 
                         if not any(
-                            tag in policy.preserve_tags for tag in metadata.tags
+                            tag in (policy.preserve_tags or []) for tag in metadata.tags
                         ):
                             if self.remove_artifact(artifact_id):
                                 stats["expired_artifacts_removed"] += 1
@@ -430,7 +436,7 @@ class ArtifactStoreAdapter:
             return stats
 
         except Exception as e:
-            raise ArtifactStoreError(f"Failed to apply cleanup policy: {str(e)}")
+            raise ArtifactStoreError(f"Failed to apply cleanup policy: {str(e)}") from e
 
     def get_storage_stats(self) -> dict[str, Any]:
         """
@@ -440,7 +446,7 @@ class ArtifactStoreAdapter:
             Dictionary with storage statistics
         """
         try:
-            stats = {
+            stats: dict[str, Any] = {
                 "total_artifacts": len(self._metadata),
                 "total_size_bytes": sum(
                     metadata.size_bytes for metadata in self._metadata.values()
@@ -461,9 +467,9 @@ class ArtifactStoreAdapter:
                     }
 
                 stats["artifacts_by_type"][type_name]["count"] += 1
-                stats["artifacts_by_type"][type_name][
-                    "size_bytes"
-                ] += metadata.size_bytes
+                stats["artifacts_by_type"][type_name]["size_bytes"] += (
+                    metadata.size_bytes
+                )
 
                 # Count expired
                 if metadata.expires_at and current_time > metadata.expires_at:
@@ -472,7 +478,9 @@ class ArtifactStoreAdapter:
             return stats
 
         except Exception as e:
-            raise ArtifactStoreError(f"Failed to get storage statistics: {str(e)}")
+            raise ArtifactStoreError(
+                f"Failed to get storage statistics: {str(e)}"
+            ) from e
 
     def _load_metadata(self) -> None:
         """Load metadata from disk."""
@@ -500,7 +508,7 @@ class ArtifactStoreAdapter:
                 json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8"
             )
         except Exception as e:
-            raise ArtifactStoreError(f"Failed to save metadata: {str(e)}")
+            raise ArtifactStoreError(f"Failed to save metadata: {str(e)}") from e
 
 
 # Convenience functions for common use cases

@@ -8,12 +8,14 @@ detection, client boundary detection, fixture discovery, and side-effect detecti
 import ast
 import tempfile
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 
 from testcraft.application.generate_usecase import GenerateUseCase
-from testcraft.application.generation.services.enrichment_detectors import EnrichmentDetectors
+from testcraft.application.generation.services.enrichment_detectors import (
+    EnrichmentDetectors,
+)
 from testcraft.config.models import TestCraftConfig
 
 
@@ -88,13 +90,15 @@ app_settings = settings.DATABASE_NAME
         source_text = """
 import os
 var1 = os.environ["VAR1"]
-var2 = os.environ["VAR2"] 
+var2 = os.environ["VAR2"]
 var3 = os.environ["VAR3"]
 var4 = os.environ["VAR4"]
 """
 
         ast_tree = ast.parse(source_text)
-        result = EnrichmentDetectors.detect_env_config_usage(source_text, ast_tree, max_vars=2)
+        result = EnrichmentDetectors.detect_env_config_usage(
+            source_text, ast_tree, max_vars=2
+        )
 
         # Should be limited to max_vars
         assert len(result["env_vars"]) == 2
@@ -180,7 +184,7 @@ def sample_data():
     """Sample data fixture."""
     return {"key": "value"}
 
-@pytest.fixture(scope="module") 
+@pytest.fixture(scope="module")
 def api_client():
     """API client fixture."""
     pass
@@ -231,7 +235,9 @@ def test_with_event_loop(event_loop):
             project_root = Path(temp_dir)
 
             # Test with low fixture limit
-            result = EnrichmentDetectors.discover_comprehensive_fixtures(project_root, max_fixtures=3)
+            result = EnrichmentDetectors.discover_comprehensive_fixtures(
+                project_root, max_fixtures=3
+            )
 
             # Each category should respect the limit (max_fixtures // 3)
             assert len(result["builtin"]) <= 1  # 3 // 3 = 1 per category
@@ -255,7 +261,9 @@ files = glob.glob("*.py")
 """
 
         ast_tree = ast.parse(source_text)
-        result = EnrichmentDetectors.detect_side_effect_boundaries(source_text, ast_tree)
+        result = EnrichmentDetectors.detect_side_effect_boundaries(
+            source_text, ast_tree
+        )
 
         filesystem_effects = result.get("filesystem", [])
         assert any("open" in effect for effect in filesystem_effects)
@@ -275,13 +283,15 @@ import uuid
 time.sleep(1)
 now = datetime.datetime.now()
 
-# Random operations  
+# Random operations
 value = random.choice([1, 2, 3])
 identifier = uuid.uuid4()
 """
 
         ast_tree = ast.parse(source_text)
-        result = EnrichmentDetectors.detect_side_effect_boundaries(source_text, ast_tree)
+        result = EnrichmentDetectors.detect_side_effect_boundaries(
+            source_text, ast_tree
+        )
 
         time_effects = result.get("time", [])
         assert any("time.sleep" in effect for effect in time_effects)
@@ -309,7 +319,9 @@ response = requests.get("http://example.com")
 """
 
         ast_tree = ast.parse(source_text)
-        result = EnrichmentDetectors.detect_side_effect_boundaries(source_text, ast_tree)
+        result = EnrichmentDetectors.detect_side_effect_boundaries(
+            source_text, ast_tree
+        )
 
         process_effects = result.get("process", [])
         assert any("subprocess" in effect for effect in process_effects)
@@ -422,8 +434,8 @@ class TestContextEnrichmentConfig:
         assert config.context_enrichment.max_fixtures == 30
 
         # Test invalid max values
-        with pytest.raises(Exception):  # ValidationError from pydantic
+        with pytest.raises(ValueError):  # ValidationError from pydantic
             TestCraftConfig(context_enrichment={"max_env_vars": 0})  # Below minimum
 
-        with pytest.raises(Exception):  # ValidationError from pydantic
+        with pytest.raises(ValueError):  # ValidationError from pydantic
             TestCraftConfig(context_enrichment={"max_fixtures": 200})  # Above maximum

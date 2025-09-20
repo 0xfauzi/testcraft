@@ -25,7 +25,7 @@ class ContentBuilder:
     with import header inclusion and size capping, plus test path determination.
     """
 
-    def __init__(self, parser_port: ParserPort):
+    def __init__(self, parser_port: ParserPort) -> None:
         """
         Initialize the content builder.
 

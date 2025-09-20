@@ -10,12 +10,12 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from collections.abc import Awaitable, Callable
 from concurrent.futures import ThreadPoolExecutor
-from typing import Any, Awaitable, Callable, Optional
 
+from ....adapters.io.file_status_tracker import FileStatus, FileStatusTracker
 from ....domain.models import GenerationResult, TestGenerationPlan
 from ....ports.telemetry_port import TelemetryPort
-from ....adapters.io.file_status_tracker import FileStatusTracker, FileStatus
 
 logger = logging.getLogger(__name__)
 
@@ -29,10 +29,10 @@ class BatchExecutor:
     """
 
     def __init__(
-        self, 
-        telemetry_port: TelemetryPort, 
+        self,
+        telemetry_port: TelemetryPort,
         executor: ThreadPoolExecutor | None = None,
-        status_tracker: Optional[FileStatusTracker] = None
+        status_tracker: FileStatusTracker | None = None,
     ):
         """
         Initialize the batch executor.
@@ -72,17 +72,17 @@ class BatchExecutor:
                     file_paths = [plan.file_path for plan in plans]
                     for file_path in file_paths:
                         self._status_tracker.update_file_status(
-                            file_path, 
+                            file_path,
                             FileStatus.WAITING,
                             operation="Queued for generation",
-                            step="Waiting in batch queue"
+                            step="Waiting in batch queue",
                         )
 
                 # Process plans in batches
                 for i in range(0, len(plans), batch_size):
                     batch = plans[i : i + batch_size]
                     span.set_attribute(f"batch_{i // batch_size}_size", len(batch))
-                    
+
                     # Update status for batch start
                     if self._status_tracker:
                         for plan in batch:
@@ -91,7 +91,7 @@ class BatchExecutor:
                                 FileStatus.ANALYZING,
                                 operation="Starting generation",
                                 step="Preparing for LLM generation",
-                                progress=10.0
+                                progress=10.0,
                             )
 
                     # Process batch concurrently
@@ -99,24 +99,28 @@ class BatchExecutor:
                         batch, generation_fn
                     )
                     generation_results.extend(batch_results)
-                    
+
                     # Update status for batch completion
                     if self._status_tracker:
                         for j, result in enumerate(batch_results):
                             plan = batch[j]
-                            if hasattr(result, 'success') and result.success:
+                            if hasattr(result, "success") and result.success:
                                 self._status_tracker.update_generation_result(
                                     plan.file_path,
                                     success=True,
-                                    tests_generated=getattr(result, 'tests_generated', 0),
-                                    test_file_path=getattr(result, 'test_file_path', None)
+                                    tests_generated=getattr(
+                                        result, "tests_generated", 0
+                                    ),
+                                    test_file_path=getattr(
+                                        result, "test_file_path", None
+                                    ),
                                 )
                             else:
-                                error_msg = getattr(result, 'error_message', 'Generation failed')
+                                error_msg = getattr(
+                                    result, "error_message", "Generation failed"
+                                )
                                 self._status_tracker.update_generation_result(
-                                    plan.file_path,
-                                    success=False,
-                                    error=error_msg
+                                    plan.file_path, success=False, error=error_msg
                                 )
 
                 span.set_attribute("total_generated", len(generation_results))
@@ -140,7 +144,7 @@ class BatchExecutor:
             except Exception as e:
                 logger.exception("Test generation execution failed: %s", e)
                 span.record_exception(e)
-                
+
                 # Update status for any remaining files
                 if self._status_tracker:
                     for plan in plans:
@@ -148,9 +152,9 @@ class BatchExecutor:
                             plan.file_path,
                             FileStatus.FAILED,
                             operation="Generation failed",
-                            step=f"Batch execution error: {str(e)}"
+                            step=f"Batch execution error: {str(e)}",
                         )
-                
+
                 raise
 
     async def _process_generation_batch(
@@ -178,9 +182,9 @@ class BatchExecutor:
                     FileStatus.GENERATING,
                     operation="LLM Generation",
                     step="Sending request to language model",
-                    progress=25.0
+                    progress=25.0,
                 )
-            
+
             # Create wrapped task with status updates
             task = self._track_generation_task(plan, generation_fn)
             tasks.append(task)
@@ -237,19 +241,19 @@ class BatchExecutor:
                     generation_results.append(result)
 
         return generation_results
-    
+
     async def _track_generation_task(
-        self, 
-        plan: TestGenerationPlan, 
-        generation_fn: Callable[[TestGenerationPlan], Awaitable[GenerationResult]]
+        self,
+        plan: TestGenerationPlan,
+        generation_fn: Callable[[TestGenerationPlan], Awaitable[GenerationResult]],
     ) -> GenerationResult:
         """
         Wrapper for generation function that provides live status updates.
-        
+
         Args:
             plan: Test generation plan
             generation_fn: Original generation function
-            
+
         Returns:
             Generation result
         """
@@ -260,39 +264,39 @@ class BatchExecutor:
                     FileStatus.GENERATING,
                     operation="LLM Processing",
                     step="Generating test code with AI",
-                    progress=50.0
+                    progress=50.0,
                 )
-            
+
             # Call original generation function
             result = await generation_fn(plan)
-            
+
             if self._status_tracker:
-                if hasattr(result, 'success') and result.success:
+                if hasattr(result, "success") and result.success:
                     self._status_tracker.update_file_status(
                         plan.file_path,
                         FileStatus.WRITING,
                         operation="Writing Tests",
                         step="Saving generated test file",
-                        progress=75.0
+                        progress=75.0,
                     )
                 else:
                     self._status_tracker.update_file_status(
                         plan.file_path,
                         FileStatus.FAILED,
                         operation="Generation Failed",
-                        step=getattr(result, 'error_message', 'Unknown error'),
-                        progress=0.0
+                        step=getattr(result, "error_message", "Unknown error"),
+                        progress=0.0,
                     )
-            
+
             return result
-            
+
         except Exception as e:
             if self._status_tracker:
                 self._status_tracker.update_file_status(
                     plan.file_path,
                     FileStatus.FAILED,
-                    operation="Generation Error", 
+                    operation="Generation Error",
                     step=f"Exception: {str(e)}",
-                    progress=0.0
+                    progress=0.0,
                 )
             raise

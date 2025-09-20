@@ -123,7 +123,9 @@ def add_evaluation_commands(app: click.Group) -> None:
                 except Exception as e:
                     progress.stop()
                     console.print(f"❌ [red]A/B testing failed: {e}[/red]")
-                    raise click.ClickException(f"A/B testing pipeline failed: {e}")
+                    raise click.ClickException(
+                        f"A/B testing pipeline failed: {e}"
+                    ) from e
 
             # Display results
             if not quiet:
@@ -142,7 +144,7 @@ def add_evaluation_commands(app: click.Group) -> None:
 
         except Exception as e:
             console.print(f"❌ [red]Error: {e}[/red]")
-            raise click.ClickException(str(e))
+            raise click.ClickException(str(e)) from e
 
     @evaluation_commands.command(name="statistical-analysis")
     @click.argument("evaluation_data_file", type=click.Path(exists=True))
@@ -208,7 +210,9 @@ def add_evaluation_commands(app: click.Group) -> None:
                 except Exception as e:
                     progress.stop()
                     console.print(f"❌ [red]Statistical analysis failed: {e}[/red]")
-                    raise click.ClickException(f"Statistical analysis failed: {e}")
+                    raise click.ClickException(
+                        f"Statistical analysis failed: {e}"
+                    ) from e
 
             # Display results
             _display_statistical_analysis_results(results)
@@ -222,7 +226,7 @@ def add_evaluation_commands(app: click.Group) -> None:
 
         except Exception as e:
             console.print(f"❌ [red]Error: {e}[/red]")
-            raise click.ClickException(str(e))
+            raise click.ClickException(str(e)) from e
 
     @evaluation_commands.command(name="bias-detection")
     @click.option(
@@ -292,7 +296,7 @@ def add_evaluation_commands(app: click.Group) -> None:
                 except Exception as e:
                     progress.stop()
                     console.print(f"❌ [red]Bias detection failed: {e}[/red]")
-                    raise click.ClickException(f"Bias detection failed: {e}")
+                    raise click.ClickException(f"Bias detection failed: {e}") from e
 
             # Display results
             _display_bias_analysis_results(results)
@@ -308,7 +312,7 @@ def add_evaluation_commands(app: click.Group) -> None:
 
         except Exception as e:
             console.print(f"❌ [red]Error: {e}[/red]")
-            raise click.ClickException(str(e))
+            raise click.ClickException(str(e)) from e
 
     @evaluation_commands.command(name="campaign")
     @click.argument("campaign_config_file", type=click.Path(exists=True))
@@ -365,7 +369,7 @@ def add_evaluation_commands(app: click.Group) -> None:
                 except Exception as e:
                     progress.stop()
                     console.print(f"❌ [red]Evaluation campaign failed: {e}[/red]")
-                    raise click.ClickException(f"Campaign failed: {e}")
+                    raise click.ClickException(f"Campaign failed: {e}") from e
 
             # Display results
             _display_campaign_results(results, verbose=verbose)
@@ -381,7 +385,7 @@ def add_evaluation_commands(app: click.Group) -> None:
 
         except Exception as e:
             console.print(f"❌ [red]Error: {e}[/red]")
-            raise click.ClickException(str(e))
+            raise click.ClickException(str(e)) from e
 
 
 # =============================
@@ -403,7 +407,7 @@ def _load_ab_test_config(config_file: str) -> dict[str, Any]:
 
         return config
     except Exception as e:
-        raise click.ClickException(f"Failed to load config file: {e}")
+        raise click.ClickException(f"Failed to load config file: {e}") from e
 
 
 def _load_evaluation_data(data_file: str) -> list[dict[str, Any]]:
@@ -417,7 +421,7 @@ def _load_evaluation_data(data_file: str) -> list[dict[str, Any]]:
 
         return data
     except Exception as e:
-        raise click.ClickException(f"Failed to load evaluation data: {e}")
+        raise click.ClickException(f"Failed to load evaluation data: {e}") from e
 
 
 def _load_evaluation_history(history_file: str) -> list[dict[str, Any]]:
@@ -431,7 +435,7 @@ def _load_evaluation_history(history_file: str) -> list[dict[str, Any]]:
 
         return history
     except Exception as e:
-        raise click.ClickException(f"Failed to load evaluation history: {e}")
+        raise click.ClickException(f"Failed to load evaluation history: {e}") from e
 
 
 def _load_campaign_config(config_file: str) -> dict[str, Any]:
@@ -446,7 +450,7 @@ def _load_campaign_config(config_file: str) -> dict[str, Any]:
 
         return config
     except Exception as e:
-        raise click.ClickException(f"Failed to load campaign config: {e}")
+        raise click.ClickException(f"Failed to load campaign config: {e}") from e
 
 
 def _save_results(results: dict[str, Any], output_path: str) -> None:
@@ -455,7 +459,7 @@ def _save_results(results: dict[str, Any], output_path: str) -> None:
         with open(output_path, "w") as f:
             json.dump(results, f, indent=2, default=str)
     except Exception as e:
-        raise click.ClickException(f"Failed to save results: {e}")
+        raise click.ClickException(f"Failed to save results: {e}") from e
 
 
 def _display_ab_test_summary(config: dict[str, Any]) -> None:

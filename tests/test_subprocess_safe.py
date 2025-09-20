@@ -11,10 +11,12 @@ from unittest.mock import Mock, patch
 import pytest
 
 from testcraft.adapters.io.python_runner import run_python_module
-from testcraft.adapters.io.subprocess_safe import (SubprocessExecutionError,
-                                                   SubprocessTimeoutError,
-                                                   run_subprocess_safe,
-                                                   run_subprocess_simple)
+from testcraft.adapters.io.subprocess_safe import (
+    SubprocessExecutionError,
+    SubprocessTimeoutError,
+    run_subprocess_safe,
+    run_subprocess_simple,
+)
 
 
 class TestSubprocessSafe:

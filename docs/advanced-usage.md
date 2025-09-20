@@ -101,7 +101,7 @@ Create a configuration file for A/B testing different prompt variants:
       "prompt": "Generate comprehensive pytest tests with fixtures and edge cases for the following Python code:\n\n{source_code}\n\nInclude tests for:\n- Normal operation\n- Edge cases\n- Error conditions\n- Type validation"
     },
     {
-      "id": "focused_v1", 
+      "id": "focused_v1",
       "prompt": "Create focused pytest tests for the following code, emphasizing correctness and clarity:\n\n{source_code}\n\nPrioritize:\n- Core functionality testing\n- Clear test names\n- Minimal setup"
     }
   ],
@@ -164,7 +164,7 @@ Results include comprehensive analysis:
 for variant_eval in results['variant_evaluations']:
     variant_id = variant_eval['variant_id']
     stats = variant_eval['summary_stats']
-    
+
     print(f"\nVariant: {variant_id}")
     print(f"  Acceptance Rate: {stats['acceptance_rate']:.2%}")
     print(f"  Mean LLM Score: {stats['mean_llm_score']:.2f}")
@@ -190,7 +190,7 @@ testcraft evaluation statistical-analysis evaluation_data.json \
   --analysis-type pairwise_comparison \
   --confidence-level 0.95
 
-# Batch evaluation analysis  
+# Batch evaluation analysis
 testcraft evaluation statistical-analysis batch_results.json \
   --analysis-type batch_evaluation \
   --confidence-level 0.99
@@ -207,7 +207,7 @@ testcraft evaluation statistical-analysis batch_results.json \
 ```python
 results = harness.run_statistical_significance_analysis(
     evaluation_data=evaluation_data,
-    analysis_type="pairwise_comparison", 
+    analysis_type="pairwise_comparison",
     confidence_level=0.95
 )
 
@@ -274,7 +274,7 @@ mitigation_recs = bias_results['mitigation_recommendations']
 for action in mitigation_recs['immediate_actions']:
     print(f"🚨 Action required: {action}")
 
-# Process improvements  
+# Process improvements
 for improvement in mitigation_recs['process_improvements']:
     print(f"🔧 Process improvement: {improvement}")
 ```
@@ -350,7 +350,7 @@ Evaluation campaigns orchestrate multiple testing scenarios for comprehensive an
       "bias_mitigation": true
     },
     {
-      "name": "complex_classes", 
+      "name": "complex_classes",
       "description": "Testing on complex class hierarchies",
       "prompt_variants": [...],
       "test_dataset": [...],
@@ -388,7 +388,7 @@ consistency_analysis = cross_analysis['consistency_analysis']
 for variant_id, data in consistency_analysis.items():
     consistency_rating = data['consistency_rating']  # 'high', 'medium', 'low'
     mean_performance = data['mean_performance']
-    
+
     if consistency_rating == 'high':
         print(f"✅ {variant_id}: Consistent high performance ({mean_performance:.2f})")
 
@@ -410,12 +410,12 @@ openai_model = "gpt-3.5-turbo"  # Cheaper for development
 [evaluation]
 enabled = false  # Disable for faster development
 
-# Production configuration  
+# Production configuration
 [llm]
 default_provider = "anthropic"
 anthropic_model = "claude-3-sonnet-20240229"
 
-[evaluation] 
+[evaluation]
 enabled = true
 llm_judge_enabled = true
 statistical_testing = true
@@ -471,16 +471,16 @@ jobs:
         uses: actions/setup-python@v4
         with:
           python-version: '3.11'
-      
+
       - name: Install TestCraft
         run: |
           pip install -e .
-          
+
       - name: Run A/B Testing
         run: |
           testcraft evaluation ab-test ci_ab_config.json \
             --quiet --output evaluation_results.json
-            
+
       - name: Check for Regressions
         run: |
           python scripts/check_evaluation_regressions.py evaluation_results.json
@@ -494,17 +494,17 @@ from testcraft.adapters.evaluation.main_adapter import TestcraftEvaluationAdapte
 
 class CustomEvaluationAdapter(TestcraftEvaluationAdapter):
     """Custom evaluation adapter with domain-specific metrics."""
-    
+
     def evaluate_single(self, test_content: str, source_file: str, config) -> EvaluationResult:
         # Run base evaluation
         result = super().evaluate_single(test_content, source_file, config)
-        
+
         # Add custom metrics
         custom_metrics = self._calculate_custom_metrics(test_content, source_file)
         result.metadata['custom_metrics'] = custom_metrics
-        
+
         return result
-    
+
     def _calculate_custom_metrics(self, test_content: str, source_file: str) -> dict:
         """Calculate domain-specific quality metrics."""
         return {
@@ -526,17 +526,17 @@ telemetry = TelemetryRouter.from_config(config.telemetry)
 # Monitor evaluation quality trends
 def monitor_evaluation_trends():
     recent_evaluations = harness.analyze_evaluation_history(time_window_days=7)
-    
+
     quality_trend = recent_evaluations['quality_trend']
     if quality_trend['direction'] == 'decreasing':
         alert_message = f"Quality trend decreasing: {quality_trend['change_rate']:.2%} per day"
-        
+
         # Send alert via telemetry
         telemetry.record_metric('evaluation_quality_alert', 1, tags={
             'trend': 'decreasing',
             'change_rate': quality_trend['change_rate']
         })
-        
+
         logging.warning(alert_message)
 ```
 

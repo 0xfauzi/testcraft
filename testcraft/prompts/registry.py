@@ -156,7 +156,9 @@ class PromptRegistry:
     ) -> str:
         template = self._lookup(self._user_templates, prompt_type)
         # Sanitize additional_context by converting to JSON and sanitizing the string
-        sanitized_context_json = _sanitize_text(_to_pretty_json(additional_context or {}))
+        sanitized_context_json = _sanitize_text(
+            _to_pretty_json(additional_context or {})
+        )
         payload = {
             "code_content": _sanitize_code(code_content),
             "additional_context": sanitized_context_json,
@@ -471,7 +473,7 @@ class PromptRegistry:
             "- Fix Python dunders: __init__, __enter__, __exit__, __name__, etc.\n"
             "- Correct Python keywords: None, True, False, Exception, KeyboardInterrupt (proper casing)\n"
             "- Fix imports: Ensure correct module names and casing (e.g., from rich.table import Table)\n"
-            "- Use proper main guard: if __name__ == \"__main__\":\n"
+            '- Use proper main guard: if __name__ == "__main__":\n'
             "- Fix attribute access: Use correct attribute names (e.g., job_func.__name__ not .name)\n"
             "- Align class/function names with source code being tested\n\n"
             "IMPORT PATH RULE:\n"
@@ -503,11 +505,11 @@ class PromptRegistry:
             "Never return vague instructions like 'No obvious canonicalization issues' - always provide specific, actionable guidance.\n\n"
             "OUTPUT CONTRACT - Return EXACTLY this JSON structure:\n"
             "{{\n"
-            "  \"refined_content\": \"{{complete corrected Python test code}}\",\n"
-            "  \"changes_made\": \"{{step-by-step analysis/plan/validation summary}}\",\n"
-            "  \"confidence\": 0.8,\n"
-            "  \"improvement_areas\": [\"correctness\", \"imports\", \"fixtures\", \"timing\"],\n"
-            "  \"suspected_prod_bug\": \"{{detailed explanation if production bug suspected, or null}}\"\n"
+            '  "refined_content": "{{complete corrected Python test code}}",\n'
+            '  "changes_made": "{{step-by-step analysis/plan/validation summary}}",\n'
+            '  "confidence": 0.8,\n'
+            '  "improvement_areas": ["correctness", "imports", "fixtures", "timing"],\n'
+            '  "suspected_prod_bug": "{{detailed explanation if production bug suspected, or null}}"\n'
             "}}\n\n"
             "EDITING CONSTRAINTS:\n"
             "- Do NOT reformat unrelated code; keep unchanged lines byte-identical.\n"
@@ -842,30 +844,30 @@ class PromptRegistry:
             "6. Bias Auditing: Systematic review of evaluation patterns\n\n"
             "RESPONSE FORMAT - Return EXACTLY this JSON structure:\n"
             "{{\n"
-            "  \"bias_analysis\": {{\n"
-            "    \"detected_biases\": [\"<bias_type>\", \"...\"],\n"
-            "    \"bias_severity\": {{\n"
-            "      \"<bias_type>\": \"<low|moderate|high>\"\n"
+            '  "bias_analysis": {{\n'
+            '    "detected_biases": ["<bias_type>", "..."],\n'
+            '    "bias_severity": {{\n'
+            '      "<bias_type>": "<low|moderate|high>"\n'
             "    }},\n"
-            "    \"confidence\": <0.0-1.0>\n"
+            '    "confidence": <0.0-1.0>\n'
             "  }},\n"
-            "  \"evaluation_consistency\": {{\n"
-            "    \"consistency_score\": <0.0-1.0>,\n"
-            "    \"variance_analysis\": \"<assessment>\",\n"
-            "    \"drift_detected\": <true|false>\n"
+            '  "evaluation_consistency": {{\n'
+            '    "consistency_score": <0.0-1.0>,\n'
+            '    "variance_analysis": "<assessment>",\n'
+            '    "drift_detected": <true|false>\n'
             "  }},\n"
-            "  \"calibration_assessment\": {{\n"
-            "    \"calibration_score\": <0.0-1.0>,\n"
-            "    \"systematic_errors\": [\"<error_pattern>\", \"...\"],\n"
-            "    \"improvement_needed\": <true|false>\n"
+            '  "calibration_assessment": {{\n'
+            '    "calibration_score": <0.0-1.0>,\n'
+            '    "systematic_errors": ["<error_pattern>", "..."],\n'
+            '    "improvement_needed": <true|false>\n'
             "  }},\n"
-            "  \"mitigation_recommendations\": {{\n"
-            "    \"immediate_actions\": [\"<action>\", \"...\"],\n"
-            "    \"process_improvements\": [\"<improvement>\", \"...\"],\n"
-            "    \"monitoring_suggestions\": [\"<monitoring>\", \"...\"]\n"
+            '  "mitigation_recommendations": {{\n'
+            '    "immediate_actions": ["<action>", "..."],\n'
+            '    "process_improvements": ["<improvement>", "..."],\n'
+            '    "monitoring_suggestions": ["<monitoring>", "..."]\n'
             "  }},\n"
-            "  \"fairness_score\": <0.0-1.0>,\n"
-            "  \"summary\": \"<overall bias assessment and key recommendations>\"\n"
+            '  "fairness_score": <0.0-1.0>,\n'
+            '  "summary": "<overall bias assessment and key recommendations>"\n'
             "}}\n\n"
             "FAIRNESS SCORING:\n"
             "• 0.9-1.0: Excellent fairness, minimal bias detected\n"
@@ -995,7 +997,13 @@ class PromptRegistry:
             schema = {
                 "$schema": "https://json-schema.org/draft/2020-12/schema",
                 "type": "object",
-                "required": ["file_path", "content", "analysis", "test_strategy", "validation"],
+                "required": [
+                    "file_path",
+                    "content",
+                    "analysis",
+                    "test_strategy",
+                    "validation",
+                ],
                 "properties": {
                     "file_path": {
                         "type": "string",
@@ -1044,7 +1052,11 @@ class PromptRegistry:
                     "test_strategy": "Test plan: 1) Happy path authentication, 2) Invalid credentials, 3) Network errors...",
                     "validation": "Generated tests cover all planned scenarios with proper mocking and assertions",
                     "confidence": 0.85,
-                    "coverage_areas": ["authentication", "error_handling", "edge_cases"]
+                    "coverage_areas": [
+                        "authentication",
+                        "error_handling",
+                        "edge_cases",
+                    ],
                 }
             }
             validation_rules = {
@@ -1093,7 +1105,13 @@ class PromptRegistry:
             schema = {
                 "$schema": "https://json-schema.org/draft/2020-12/schema",
                 "type": "object",
-                "required": ["updated_files", "rationale", "issue_analysis", "refinement_strategy", "validation"],
+                "required": [
+                    "updated_files",
+                    "rationale",
+                    "issue_analysis",
+                    "refinement_strategy",
+                    "validation",
+                ],
                 "properties": {
                     "updated_files": {
                         "type": "array",
@@ -1148,7 +1166,7 @@ class PromptRegistry:
                     "refinement_strategy": "Update mocks to use current API, add parametrized tests for edge cases...",
                     "validation": "All original test failures are resolved and coverage gaps are filled",
                     "confidence": 0.90,
-                    "improvement_areas": ["error_handling", "edge_cases", "mocking"]
+                    "improvement_areas": ["error_handling", "edge_cases", "mocking"],
                 }
             }
             validation_rules = {}
@@ -1160,7 +1178,15 @@ class PromptRegistry:
             schema = {
                 "$schema": "https://json-schema.org/draft/2020-12/schema",
                 "type": "object",
-                "required": ["tests", "analysis", "test_strategy", "validation", "coverage_focus", "confidence", "reasoning"],
+                "required": [
+                    "tests",
+                    "analysis",
+                    "test_strategy",
+                    "validation",
+                    "coverage_focus",
+                    "confidence",
+                    "reasoning",
+                ],
                 "properties": {
                     "analysis": {
                         "type": "string",
@@ -1208,7 +1234,11 @@ class PromptRegistry:
                     "test_strategy": "Test plan: 1) Happy path authentication with valid credentials, 2) Invalid credentials scenarios, 3) Network error conditions",
                     "tests": "import pytest\nfrom unittest.mock import patch\n\ndef test_authenticate_success():\n    assert True",
                     "validation": "Generated tests cover all planned scenarios with proper mocking and assertions as specified in the strategy",
-                    "coverage_focus": ["authentication", "error_handling", "edge_cases"],
+                    "coverage_focus": [
+                        "authentication",
+                        "error_handling",
+                        "edge_cases",
+                    ],
                     "confidence": 0.85,
                     "reasoning": "Systematic 5-step approach ensured comprehensive coverage of authentication flows and error conditions",
                 }

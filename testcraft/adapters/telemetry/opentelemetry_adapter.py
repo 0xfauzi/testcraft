@@ -8,25 +8,25 @@ for distributed tracing and metrics collection.
 import hashlib
 import os
 from contextlib import AbstractContextManager, contextmanager
-from typing import Any, Union
+from typing import Any
 
 from ...ports.telemetry_port import MetricValue, SpanContext, SpanKind
 
 # OpenTelemetry imports (optional - graceful degradation if not available)
 try:
     from opentelemetry import metrics, trace
-    from opentelemetry.exporter.otlp.proto.grpc.metric_exporter import \
-        OTLPMetricExporter
-    from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import \
-        OTLPSpanExporter
+    from opentelemetry.exporter.otlp.proto.grpc.metric_exporter import (
+        OTLPMetricExporter,
+    )
+    from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
     from opentelemetry.sdk.metrics import MeterProvider
     from opentelemetry.sdk.metrics.export import (
-        ConsoleMetricExporter, PeriodicExportingMetricReader)
-    from opentelemetry.sdk.resources import (SERVICE_NAME, SERVICE_VERSION,
-                                             Resource)
+        ConsoleMetricExporter,
+        PeriodicExportingMetricReader,
+    )
+    from opentelemetry.sdk.resources import SERVICE_NAME, SERVICE_VERSION, Resource
     from opentelemetry.sdk.trace import TracerProvider
-    from opentelemetry.sdk.trace.export import (BatchSpanProcessor,
-                                                ConsoleSpanExporter)
+    from opentelemetry.sdk.trace.export import BatchSpanProcessor, ConsoleSpanExporter
     from opentelemetry.trace import Status, StatusCode
     from opentelemetry.util.types import AttributeValue
 
@@ -37,11 +37,11 @@ except ImportError:
 
     # Provide simple module-like stubs so tests can patch attributes
     class _TraceStub:
-        def __getattr__(self, name):
+        def __getattr__(self, name: Any) -> Any:
             return None
 
     class _MetricsStub:
-        def __getattr__(self, name):
+        def __getattr__(self, name: Any) -> Any:
             return None
 
     trace = _TraceStub()  # type: ignore
@@ -57,7 +57,7 @@ except ImportError:
     SERVICE_VERSION = "service.version"  # type: ignore
 
     # Type stubs for OpenTelemetry types
-    AttributeValue = Union[str, bool, int, float]
+    AttributeValue = str | bool | int | float
 
     class MockTracer:
         def start_as_current_span(self, *args, **kwargs):
@@ -91,10 +91,18 @@ except ImportError:
 class OtelSpanContextManager:
     """OpenTelemetry span context manager with enhanced functionality."""
 
-    def __init__(self, span, span_context: SpanContext, anonymize_paths: bool = True):
+    def __init__(
+        self, span, span_context: SpanContext, anonymize_paths: bool = True
+    ) -> None:
         self.span = span
         self.span_context = span_context
         self.anonymize_paths = anonymize_paths
+
+        # Protocol properties - delegate to span_context
+        self.trace_id = span_context.trace_id
+        self.span_id = span_context.span_id
+        self.parent_span_id = span_context.parent_span_id
+        self.baggage = span_context.baggage
 
     def set_attribute(self, key: str, value: Any) -> None:
         """Set an attribute on the current span."""
@@ -138,6 +146,10 @@ class OtelSpanContextManager:
             self.span.record_exception(exception)
         self.set_status("ERROR", str(exception))
 
+    def get_trace_context(self) -> SpanContext:
+        """Get the trace context for this span."""
+        return self.span_context
+
     def _sanitize_value(self, key: str, value: Any) -> AttributeValue | None:
         """Sanitize attribute values for privacy and OpenTelemetry compatibility."""
         # Handle file paths
@@ -172,7 +184,7 @@ class OpenTelemetryAdapter:
     using the OpenTelemetry framework.
     """
 
-    def __init__(self, config: dict[str, Any]):
+    def __init__(self, config: dict[str, Any]) -> None:
         """
         Initialize the OpenTelemetry adapter.
 
@@ -374,7 +386,7 @@ class OpenTelemetryAdapter:
         kind: SpanKind = SpanKind.INTERNAL,
         attributes: dict[str, Any] | None = None,
         parent_context: SpanContext | None = None,
-    ) -> AbstractContextManager[OtelSpanContextManager]:
+    ) -> AbstractContextManager[SpanContext]:
         """
         Create a new telemetry span.
 
@@ -537,7 +549,7 @@ class OpenTelemetryAdapter:
         name: str,
         kind: SpanKind = SpanKind.INTERNAL,
         attributes: dict[str, Any] | None = None,
-    ) -> AbstractContextManager[OtelSpanContextManager]:
+    ) -> AbstractContextManager[SpanContext]:
         """Create a child span from the current active span."""
         # The OpenTelemetry SDK automatically handles parent-child relationships
         # when using start_as_current_span within an existing span context

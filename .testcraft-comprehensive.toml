@@ -17,7 +17,7 @@ exclude = ["migrations/*", "*/deprecated/*", "__pycache__/*", "*.pyc"]
 exclude_dirs = [
     # Virtual environments
     "venv", "env", ".env", ".venv", "virtualenv",
-    # Build directories  
+    # Build directories
     "build", "dist", "*.egg-info",
     # Cache directories
     "__pycache__", ".pytest_cache", ".coverage",
@@ -348,7 +348,7 @@ bedrock_timeout = 60.0            # Timeout for Bedrock requests (seconds)
 # =============================================================================
 # ENVIRONMENT VARIABLE OVERRIDES
 # =============================================================================
-# 
+#
 # You can override any configuration value using environment variables with the prefix TESTCRAFT_
 # Use double underscores (__) to separate nested keys.
 #

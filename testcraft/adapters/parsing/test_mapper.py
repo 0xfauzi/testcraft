@@ -28,7 +28,7 @@ class TestMapper:
     missing test structures.
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         """Initialize the test mapper."""
         self._parser = CodebaseParser()
         self._test_patterns = [
@@ -93,7 +93,7 @@ class TestMapper:
         except Exception as e:
             if isinstance(e, TestMappingError):
                 raise
-            raise TestMappingError(f"Failed to map tests: {e}")
+            raise TestMappingError(f"Failed to map tests: {e}") from e
 
     def find_test_file_for_source(
         self, source_file_path: Path, test_directories: list[Path] | None = None
@@ -281,7 +281,7 @@ class TestMapper:
         for source_element in source_elements:
             mapped_tests = test_mapping.get(source_element.name, [])
 
-            gap_info = {
+            gap_info: dict[str, Any] = {
                 "element": source_element,
                 "gap_type": None,
                 "description": None,
@@ -289,14 +289,14 @@ class TestMapper:
 
             if not mapped_tests:
                 gap_info["gap_type"] = "missing_test"
-                gap_info[
-                    "description"
-                ] = f"No test found for {source_element.type} '{source_element.name}'"
+                gap_info["description"] = (
+                    f"No test found for {source_element.type} '{source_element.name}'"
+                )
             elif len(mapped_tests) == 1:
                 gap_info["gap_type"] = "single_test"
-                gap_info[
-                    "description"
-                ] = f"Only one test found for {source_element.type} '{source_element.name}'"
+                gap_info["description"] = (
+                    f"Only one test found for {source_element.type} '{source_element.name}'"
+                )
             else:
                 # Multiple tests found - this might be good coverage
                 continue
@@ -323,7 +323,7 @@ class TestMapper:
 
         # Sort by priority (high priority first)
         suggestions.sort(
-            key=lambda x: {"high": 3, "medium": 2, "low": 1}[x["priority"]],
+            key=lambda x: {"high": 3, "medium": 2, "low": 1}.get(str(x["priority"]), 1),
             reverse=True,
         )
 

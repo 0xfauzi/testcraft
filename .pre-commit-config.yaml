@@ -1,0 +1,103 @@
+# Pre-commit configuration matching GitHub CI checks
+# Install: pip install pre-commit && pre-commit install
+# Run manually: pre-commit run --all-files
+
+repos:
+  # Ruff linting and formatting (matches CI: ruff check + ruff format)
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.12.12  # Use latest ruff version
+    hooks:
+      - id: ruff
+        name: ruff check (lint)
+        args: [--fix]
+        types_or: [python, pyi]
+
+      - id: ruff-format
+        name: ruff format
+        types_or: [python, pyi]
+
+  # MyPy type checking (matches CI: mypy testcraft/)
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v1.13.0
+    hooks:
+      - id: mypy
+        name: mypy type check (staged rollout)
+        args: [--show-error-codes, --pretty, --config-file=mypy-staged.ini]
+        files: ^testcraft/
+        additional_dependencies:
+          - types-requests
+          - types-PyYAML
+          - types-toml
+          - pydantic
+          - rich
+          - textual
+          - click
+
+  # Security scanning (matches CI: safety check)
+  - repo: local
+    hooks:
+      - id: safety-check
+        name: safety security scan
+        entry: bash -c 'uv pip install safety >/dev/null 2>&1 && uv run safety check --json --output safety-report.json || echo "⚠️ Security scan completed (check safety-report.json for details)"'
+        language: system
+        always_run: true
+        pass_filenames: false
+
+  # Standard pre-commit hooks for additional safety
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace
+        name: trim trailing whitespace
+      - id: end-of-file-fixer
+        name: fix end of files
+      - id: check-yaml
+        name: check yaml syntax
+      - id: check-toml
+        name: check toml syntax
+      - id: check-json
+        name: check json syntax
+      - id: check-merge-conflict
+        name: check for merge conflicts
+      - id: check-added-large-files
+        name: check for large files
+        args: [--maxkb=1024]  # 1MB limit
+      - id: check-case-conflict
+        name: check for case conflicts
+      - id: debug-statements
+        name: check for debug statements
+
+  # Documentation check (matches CI: python scripts/doc_check.py)
+  - repo: local
+    hooks:
+      - id: docs-check
+        name: documentation check (warning only)
+        entry: bash -c 'uv run python scripts/doc_check.py --project-root=. || echo "⚠️ Docs check found issues - fix when convenient"'
+        language: system
+        files: \.(py|md)$
+        pass_filenames: false
+
+# Optional: Fast test subset for pre-commit (full tests run in CI)
+# Uncomment to run core tests before commit
+#  - repo: local
+#    hooks:
+#      - id: pytest-core
+#        name: pytest core tests
+#        entry: pytest
+#        args: [tests/test_config.py, tests/test_llm_adapters.py, -v, --tb=short, -x]
+#        language: system
+#        types: [python]
+#        pass_filenames: false
+
+# Configuration
+ci:
+  autofix_commit_msg: |
+    [pre-commit.ci] auto fixes from pre-commit hooks
+
+    for more information, see https://pre-commit.ci
+  autofix_prs: true
+  autoupdate_branch: ''
+  autoupdate_commit_msg: '[pre-commit.ci] pre-commit autoupdate'
+  autoupdate_schedule: weekly
+  skip: []
+  submodules: false

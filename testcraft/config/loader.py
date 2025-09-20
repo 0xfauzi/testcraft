@@ -12,7 +12,7 @@ from pydantic import ValidationError
 try:
     import tomli_w
 except ImportError:
-    tomli_w = None
+    tomli_w = None  # type: ignore[assignment]
 
 from .models import TestCraftConfig
 
@@ -42,7 +42,7 @@ class ConfigLoader:
 
     ENV_PREFIX = "TESTCRAFT_"
 
-    def __init__(self, config_file: str | Path | None = None):
+    def __init__(self, config_file: str | Path | None = None) -> None:
         """Initialize the configuration loader.
 
         Args:
@@ -75,7 +75,7 @@ class ConfigLoader:
 
         try:
             # Start with default configuration
-            config_dict = {}
+            config_dict: dict[str, Any] = {}
 
             # 1. Load from configuration file (TOML or YAML)
             file_config = self._load_config_file()
@@ -172,7 +172,7 @@ class ConfigLoader:
 
     def _load_env_config(self) -> dict[str, Any]:
         """Load configuration from environment variables."""
-        env_config = {}
+        env_config: dict[str, Any] = {}
 
         for key, value in os.environ.items():
             if key.startswith(self.ENV_PREFIX):

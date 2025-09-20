@@ -2,9 +2,9 @@
 
 from .base import BaseModal
 from .confirmation import ConfirmationDialog
-from .input import InputDialog
-from .file_picker import FilePickerDialog
 from .error import ErrorDialog
+from .file_picker import FilePickerDialog
+from .input import InputDialog
 from .progress import ProgressDialog
 
 __all__ = [

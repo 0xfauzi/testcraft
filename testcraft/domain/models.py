@@ -7,8 +7,15 @@ test generation and analysis system.
 """
 
 from enum import Enum
+from typing import Any
 
 from pydantic import BaseModel, Field, validator
+
+
+class TestCraftError(Exception):
+    """Base exception for TestCraft domain errors."""
+
+    pass
 
 
 class TestElementType(str, Enum):
@@ -40,7 +47,7 @@ class TestElement(BaseModel):
     )
 
     @validator("line_range")
-    def validate_line_range(cls, v):
+    def validate_line_range(cls, v: Any) -> Any:
         """Validate that line range is valid (start <= end)."""
         start, end = v
         if start > end:
@@ -75,7 +82,7 @@ class CoverageResult(BaseModel):
     )
 
     @validator("missing_lines")
-    def validate_missing_lines(cls, v):
+    def validate_missing_lines(cls, v: Any) -> Any:
         """Validate that missing lines are positive integers."""
         for line in v:
             if line < 1:
@@ -104,7 +111,7 @@ class GenerationResult(BaseModel):
     )
 
     @validator("error_message")
-    def validate_error_message(cls, v, values):
+    def validate_error_message(cls, v: Any, values: Any) -> Any:
         """Validate that error message is provided when success is False."""
         if not values.get("success", True) and not v:
             raise ValueError("Error message must be provided when success is False")
@@ -135,7 +142,7 @@ class TestGenerationPlan(BaseModel):
     )
 
     @validator("elements_to_test")
-    def validate_elements_not_empty(cls, v):
+    def validate_elements_not_empty(cls, v: Any) -> Any:
         """Validate that at least one element is provided."""
         if not v:
             raise ValueError("At least one element must be provided for testing")
@@ -162,7 +169,7 @@ class RefineOutcome(BaseModel):
     plan: str | None = Field(None, description="Detailed plan for the refinement")
 
     @validator("updated_files")
-    def validate_updated_files_not_empty(cls, v):
+    def validate_updated_files_not_empty(cls, v: Any) -> Any:
         """Validate that at least one file was updated."""
         if not v:
             raise ValueError("At least one file must be updated")
@@ -193,7 +200,7 @@ class AnalysisReport(BaseModel):
     )
 
     @validator("files_to_process")
-    def validate_files_not_empty(cls, v):
+    def validate_files_not_empty(cls, v: Any) -> Any:
         """Validate that files_to_process is a valid list."""
         # Allow empty lists for empty projects - this is a valid scenario
         if v is None:
@@ -201,7 +208,7 @@ class AnalysisReport(BaseModel):
         return v
 
     @validator("reasons")
-    def validate_reasons_match_files(cls, v, values):
+    def validate_reasons_match_files(cls, v: Any, values: Any) -> Any:
         """Validate that reasons are provided for all files."""
         files = values.get("files_to_process", [])
         for file_path in files:
@@ -210,7 +217,7 @@ class AnalysisReport(BaseModel):
         return v
 
     @validator("existing_test_presence")
-    def validate_test_presence_match_files(cls, v, values):
+    def validate_test_presence_match_files(cls, v: Any, values: Any) -> Any:
         """Validate that test presence info is provided for all files."""
         files = values.get("files_to_process", [])
         for file_path in files:

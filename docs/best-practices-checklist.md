@@ -5,7 +5,7 @@ This comprehensive checklist covers best practices for using TestCraft's evaluat
 ## Table of Contents
 
 1. [Dataset Curation](#dataset-curation)
-2. [Prompt Evaluation](#prompt-evaluation) 
+2. [Prompt Evaluation](#prompt-evaluation)
 3. [Statistical Testing](#statistical-testing)
 4. [Artifact Logging](#artifact-logging)
 5. [Continuous Monitoring](#continuous-monitoring)

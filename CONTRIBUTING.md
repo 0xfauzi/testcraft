@@ -143,29 +143,29 @@ All public classes and functions must have docstrings:
 ```python
 class TestGenerator:
     """Generates comprehensive test suites for Python code.
-    
+
     This class uses Large Language Models to analyze Python source code
     and generate appropriate test cases following best practices.
-    
+
     Attributes:
         llm_adapter: Adapter for LLM communication
         config: Generation configuration
     """
-    
+
     def generate_tests(
-        self, 
-        source_files: List[Path], 
+        self,
+        source_files: List[Path],
         config: GenerationConfig
     ) -> List[GeneratedTest]:
         """Generate tests for the provided source files.
-        
+
         Args:
             source_files: List of Python files to generate tests for
             config: Configuration options for test generation
-            
+
         Returns:
             List of generated test objects with metadata
-            
+
         Raises:
             GenerationError: If test generation fails
             ConfigurationError: If configuration is invalid
@@ -212,7 +212,7 @@ TestCraft follows Clean Architecture principles. When contributing:
 # testcraft/ports/new_port.py
 class NewServicePort(Protocol):
     """Port for new service integration."""
-    
+
     async def perform_operation(self, data: Any) -> Result:
         """Perform the required operation."""
         ...
@@ -223,11 +223,11 @@ class NewServicePort(Protocol):
 # testcraft/adapters/new_service/main_adapter.py
 class NewServiceAdapter(NewServicePort):
     """Implementation of new service integration."""
-    
+
     def __init__(self, config: NewServiceConfig):
         self.config = config
         self.client = NewServiceClient(config)
-    
+
     async def perform_operation(self, data: Any) -> Result:
         """Perform operation using external service."""
         try:
@@ -290,7 +290,7 @@ tests/
 # Unit test example
 class TestGenerationRules:
     """Test domain business rules."""
-    
+
     def test_confidence_calculation_high_quality(self):
         """Test confidence calculation for high-quality metrics."""
         metrics = {
@@ -299,15 +299,15 @@ class TestGenerationRules:
             'tests_pass': True,
             'coverage_improvement': 90.0
         }
-        
+
         confidence = TestGenerationRules.calculate_confidence(metrics)
-        
+
         assert confidence >= 0.9
 
 # Integration test example
 class TestLLMIntegration:
     """Integration tests for LLM adapters."""
-    
+
     @pytest.mark.integration
     async def test_openai_test_generation(self, openai_adapter, sample_source):
         """Test OpenAI adapter generates valid tests."""
@@ -316,7 +316,7 @@ class TestLLMIntegration:
             analysis=CodeAnalysis(),
             config=LLMConfig()
         )
-        
+
         assert len(result) > 0
         assert result[0].content.startswith("def test_")
 ```
@@ -386,7 +386,7 @@ testcraft evaluation --help
 git commit -m "feat: add statistical analysis to evaluation harness
 
 - Implement statistical significance testing
-- Add confidence interval calculations  
+- Add confidence interval calculations
 - Update evaluation port interface
 - Add comprehensive tests and documentation"
 ```
@@ -490,7 +490,7 @@ How this feature might affect the evaluation harness.
 ### Documentation Types
 
 1. **Code Documentation**: Inline docstrings and comments
-2. **User Documentation**: README, usage guides, tutorials  
+2. **User Documentation**: README, usage guides, tutorials
 3. **Developer Documentation**: Architecture, contributing, API reference
 4. **Configuration Documentation**: Complete configuration reference
 
@@ -551,8 +551,8 @@ class BusinessLogicCoverage:
 # 2. Port extension
 class EvaluationPort(Protocol):
     def calculate_business_logic_coverage(
-        self, 
-        test_content: str, 
+        self,
+        test_content: str,
         source_code: str
     ) -> BusinessLogicCoverage:
         """Calculate business logic coverage."""
@@ -561,8 +561,8 @@ class EvaluationPort(Protocol):
 # 3. Adapter implementation
 class TestcraftEvaluationAdapter(EvaluationPort):
     def calculate_business_logic_coverage(
-        self, 
-        test_content: str, 
+        self,
+        test_content: str,
         source_code: str
     ) -> BusinessLogicCoverage:
         """Implementation of business logic coverage calculation."""
@@ -628,7 +628,7 @@ Special attention for evaluation system changes:
 
 Contributors will be recognized in:
 - **CONTRIBUTORS.md**: All contributors listed
-- **Release Notes**: Major contributions highlighted  
+- **Release Notes**: Major contributions highlighted
 - **Documentation**: Expert contributors may be listed as reviewers
 
 ## Questions?

@@ -3,6 +3,7 @@
 from typing import Any
 
 from ..adapters.context.main_adapter import TestcraftContextAdapter
+
 # Import adapters
 from ..adapters.io.file_discovery import FileDiscoveryService
 from ..adapters.io.state_json import StateJsonAdapter
@@ -40,7 +41,7 @@ def create_dependency_container(config: TestCraftConfig) -> dict[str, Any]:
         DependencyError: If dependency creation fails
     """
     try:
-        container = {}
+        container: dict[str, Any] = {}
 
         # Core services
         container["config"] = config
@@ -79,24 +80,25 @@ def create_dependency_container(config: TestCraftConfig) -> dict[str, Any]:
 
             # Refine adapter
             from ..config.models import RefineConfig
+
             refine_config = RefineConfig(
                 refinement_guardrails={
                     "reject_empty": True,
                     "reject_literal_none": True,
                     "reject_identical": True,
                     "validate_syntax": True,
-                    "format_on_refine": True
+                    "format_on_refine": True,
                 }
             )
             container["refine_adapter"] = RefineAdapter(
                 llm=container["llm_adapter"],
                 config=refine_config,
                 writer_port=container["writer_adapter"],
-                telemetry_port=container["telemetry_adapter"]
+                telemetry_port=container["telemetry_adapter"],
             )
 
         except Exception as e:
-            raise DependencyError(f"Failed to create adapters: {e}")
+            raise DependencyError(f"Failed to create adapters: {e}") from e
 
         # Use cases
         try:
@@ -145,14 +147,16 @@ def create_dependency_container(config: TestCraftConfig) -> dict[str, Any]:
             )
 
         except Exception as e:
-            raise DependencyError(f"Failed to create use cases: {e}")
+            raise DependencyError(f"Failed to create use cases: {e}") from e
 
         return container
 
     except DependencyError:
         raise
     except Exception as e:
-        raise DependencyError(f"Unexpected error during dependency injection: {e}")
+        raise DependencyError(
+            f"Unexpected error during dependency injection: {e}"
+        ) from e
 
 
 def _create_coverage_adapter(config: TestCraftConfig):
@@ -160,14 +164,14 @@ def _create_coverage_adapter(config: TestCraftConfig):
 
     # This is a placeholder - actual implementation would depend on available coverage adapters
     class PlaceholderCoverageAdapter:
-        def __init__(self):
+        def __init__(self) -> None:
             pass
 
         def measure_coverage(self, source_files, test_files=None):
             # Placeholder implementation
             return {}
 
-        def get_coverage_summary(self, coverage_data):
+        def get_coverage_summary(self, coverage_data: Any) -> Any:
             return {
                 "overall_line_coverage": 0.0,
                 "overall_branch_coverage": 0.0,

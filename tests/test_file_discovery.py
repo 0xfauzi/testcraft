@@ -10,8 +10,10 @@ from unittest.mock import patch
 
 import pytest
 
-from testcraft.adapters.io.file_discovery import (FileDiscoveryError,
-                                                  FileDiscoveryService)
+from testcraft.adapters.io.file_discovery import (
+    FileDiscoveryError,
+    FileDiscoveryService,
+)
 from testcraft.config.models import TestPatternConfig
 
 

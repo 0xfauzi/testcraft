@@ -9,9 +9,13 @@ and routing/factory functionality.
 from .cost_manager import CostManager
 from .noop_adapter import NoOpTelemetryAdapter
 from .opentelemetry_adapter import OpenTelemetryAdapter
-from .router import (TelemetryContextManager, create_telemetry_adapter,
-                     create_telemetry_context, get_available_backends,
-                     register_telemetry_adapter)
+from .router import (
+    TelemetryContextManager,
+    create_telemetry_adapter,
+    create_telemetry_context,
+    get_available_backends,
+    register_telemetry_adapter,
+)
 
 __all__ = [
     "OpenTelemetryAdapter",

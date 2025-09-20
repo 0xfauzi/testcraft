@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from pydantic import BaseModel
+
 from ..config.models import TestCraftConfig
 from ..ports.ui_port import UIPort
 
@@ -22,7 +23,7 @@ class ConfigInitializationError(Exception):
 class ConfigInitializer:
     """Initialize configuration files with guided setup."""
 
-    def __init__(self, ui: UIPort):
+    def __init__(self, ui: UIPort) -> None:
         """Initialize with UI adapter."""
         self.ui = ui
 
@@ -80,7 +81,9 @@ class ConfigInitializer:
             return config_file
 
         except Exception as e:
-            raise ConfigInitializationError(f"Failed to create configuration file: {e}")
+            raise ConfigInitializationError(
+                f"Failed to create configuration file: {e}"
+            ) from e
 
     def run_guided_setup(self, config_file: Path) -> None:
         """Run guided configuration setup."""
@@ -146,7 +149,7 @@ class ConfigInitializer:
 
     def _generate_toml_config(self) -> str:
         """DEPRECATED: Generate comprehensive TOML configuration with all available options.
-        
+
         This method uses a hardcoded template and is kept for backward compatibility.
         Use _generate_dynamic_toml_config() instead for current model-based generation.
         """
@@ -172,7 +175,7 @@ openai_max_tokens = 12000             # Maximum tokens in response (auto-calcula
 openai_timeout = 60.0                 # Request timeout in seconds (5.0-600.0)
 
 # Anthropic Claude Configuration (Claude Sonnet 4 default)
-# API Key: Set ANTHROPIC_API_KEY environment variable  
+# API Key: Set ANTHROPIC_API_KEY environment variable
 anthropic_model = "claude-sonnet-4"   # Model with extended thinking capabilities
 anthropic_max_tokens = 100000         # Maximum tokens for Claude (up to 200k context)
 anthropic_timeout = 60.0              # Request timeout in seconds
@@ -205,7 +208,7 @@ enable_streaming = false              # Enable streaming responses (where suppor
 # Glob patterns for finding test files
 test_patterns = [
     "test_*.py",
-    "*_test.py", 
+    "*_test.py",
     "tests/**/test_*.py"
 ]
 
@@ -221,7 +224,7 @@ exclude = [
 exclude_dirs = [
     # Virtual environments
     "venv", "env", ".env", ".venv", "virtualenv",
-    # Build directories  
+    # Build directories
     "build", "dist", "*.egg-info", "*.dist-info",
     # Cache directories
     "__pycache__", ".pytest_cache", ".coverage", ".cache",
@@ -353,7 +356,7 @@ enable_pattern_analysis = true      # Enable failure pattern analysis for refine
 # Modern Python mutator configurations
 [quality.modern_mutators]
 enable_type_hints = true            # Enable type hint mutations
-enable_async_await = true           # Enable async/await mutations  
+enable_async_await = true           # Enable async/await mutations
 enable_dataclass = true             # Enable dataclass mutations
 # Severity levels: 'low', 'medium', 'high'
 type_hints_severity = "medium"      # Type hint mutation severity
@@ -377,12 +380,12 @@ dependency_validation = true       # Validate dependencies before running tests
 use_poetry_run = true              # Use 'poetry run' for commands
 respect_poetry_venv = true         # Respect Poetry's virtual environment
 
-# Pipenv-specific settings  
+# Pipenv-specific settings
 [environment.overrides.pipenv]
 use_pipenv_run = true              # Use 'pipenv run' for commands
 
 # Conda-specific settings
-[environment.overrides.conda] 
+[environment.overrides.conda]
 activate_environment = true        # Activate conda environment
 
 # UV-specific settings (fast Python package installer)
@@ -442,7 +445,7 @@ version = ""                      # Service version
 
 [telemetry.backends.jaeger]
 endpoint = "http://localhost:14268/api/traces"  # Jaeger endpoint
-agent_host_name = "localhost"     # Jaeger agent hostname  
+agent_host_name = "localhost"     # Jaeger agent hostname
 agent_port = 6831                 # Jaeger agent port
 
 # =============================================================================
@@ -487,7 +490,7 @@ prompt_version = ""               # Specific prompt version (empty = latest)
 # Set these environment variables in your system or .env file:
 #
 # OpenAI: OPENAI_API_KEY
-# Anthropic: ANTHROPIC_API_KEY  
+# Anthropic: ANTHROPIC_API_KEY
 # Azure OpenAI: AZURE_OPENAI_API_KEY, AZURE_OPENAI_ENDPOINT
 # AWS Bedrock: AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_REGION
 #
@@ -497,7 +500,7 @@ prompt_version = ""               # Specific prompt version (empty = latest)
 
     def _generate_yaml_config(self) -> str:
         """DEPRECATED: Generate comprehensive YAML configuration (fallback).
-        
+
         Use _generate_dynamic_yaml_config() instead for current model-based generation.
         """
         # Use existing YAML from config loader if available
@@ -508,7 +511,7 @@ prompt_version = ""               # Specific prompt version (empty = latest)
 
     def _generate_json_config(self) -> str:
         """DEPRECATED: Generate comprehensive JSON configuration.
-        
+
         Use _generate_dynamic_json_config() instead for current model-based generation.
         """
         config = TestCraftConfig()
@@ -518,96 +521,114 @@ prompt_version = ""               # Specific prompt version (empty = latest)
     def _generate_dynamic_toml_config(self) -> str:
         """Generate comprehensive TOML configuration dynamically from current models."""
         config = TestCraftConfig()
-        
+
         toml_lines = []
         toml_lines.append("# TestCraft Configuration (TOML)")
-        toml_lines.append("# Complete configuration with all available options and detailed comments")
+        toml_lines.append(
+            "# Complete configuration with all available options and detailed comments"
+        )
         toml_lines.append("# Generated dynamically from current TestCraft models")
         toml_lines.append("")
-        
+
         # Generate sections dynamically from the model
-        self._add_model_section_to_toml(config, toml_lines, "", "TestCraft Configuration")
-        
+        self._add_model_section_to_toml(
+            config, toml_lines, "", "TestCraft Configuration"
+        )
+
         # Add credential information at the end
-        toml_lines.extend([
-            "",
-            "# =============================================================================",
-            "# API CREDENTIALS",
-            "# =============================================================================",
-            "# API credentials are loaded from environment variables for security.",
-            "# Set these environment variables in your system or .env file:",
-            "#",
-            "# OpenAI: OPENAI_API_KEY",
-            "# Anthropic: ANTHROPIC_API_KEY",
-            "# Azure OpenAI: AZURE_OPENAI_API_KEY, AZURE_OPENAI_ENDPOINT", 
-            "# AWS Bedrock: AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_REGION",
-            "#",
-            "# Custom endpoints (optional):",
-            "# AZURE_OPENAI_ENDPOINT, OLLAMA_BASE_URL",
-        ])
-        
+        toml_lines.extend(
+            [
+                "",
+                "# =============================================================================",
+                "# API CREDENTIALS",
+                "# =============================================================================",
+                "# API credentials are loaded from environment variables for security.",
+                "# Set these environment variables in your system or .env file:",
+                "#",
+                "# OpenAI: OPENAI_API_KEY",
+                "# Anthropic: ANTHROPIC_API_KEY",
+                "# Azure OpenAI: AZURE_OPENAI_API_KEY, AZURE_OPENAI_ENDPOINT",
+                "# AWS Bedrock: AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_REGION",
+                "#",
+                "# Custom endpoints (optional):",
+                "# AZURE_OPENAI_ENDPOINT, OLLAMA_BASE_URL",
+            ]
+        )
+
         return "\n".join(toml_lines)
-    
+
     def _generate_dynamic_yaml_config(self) -> str:
         """Generate comprehensive YAML configuration dynamically from current models."""
         config = TestCraftConfig()
         config_dict = config.model_dump()
-        
+
         try:
             import yaml
-            
+
             # Add header comments
             header = """# TestCraft Configuration (YAML)
 # Complete configuration with all available options and detailed comments
 # Generated dynamically from current TestCraft models
 
 """
-            yaml_content = yaml.dump(config_dict, default_flow_style=False, indent=2, sort_keys=False)
+            yaml_content = yaml.dump(
+                config_dict, default_flow_style=False, indent=2, sort_keys=False
+            )
             return header + yaml_content
-            
+
         except ImportError:
             # Fallback if PyYAML not available
             return self._dict_to_simple_yaml(config_dict)
-    
+
     def _generate_dynamic_json_config(self) -> str:
         """Generate comprehensive JSON configuration dynamically from current models."""
         config = TestCraftConfig()
         config_dict = config.model_dump()
-        
+
         # JSON doesn't support comments, so we add them in a special field
         config_dict["_info"] = {
             "description": "TestCraft Configuration (JSON)",
             "note": "Generated dynamically from current TestCraft models",
-            "credentials": "Set API keys in environment variables (see documentation)"
+            "credentials": "Set API keys in environment variables (see documentation)",
         }
-        
+
         return json.dumps(config_dict, indent=2, sort_keys=False)
-    
-    def _add_model_section_to_toml(self, model: BaseModel, toml_lines: list[str], section_prefix: str, section_title: str) -> None:
+
+    def _add_model_section_to_toml(
+        self,
+        model: BaseModel,
+        toml_lines: list[str],
+        section_prefix: str,
+        section_title: str,
+    ) -> None:
         """Add a model section to TOML lines with proper formatting and comments."""
         model_fields = model.model_fields
         model_data = model.model_dump()
-        
+
         # Add section header
         if section_prefix:
-            toml_lines.extend([
-                "",
-                "# " + "=" * 77,
-                f"# {section_title.upper()}",
-                "# " + "=" * 77,
-                "",
-                f"[{section_prefix}]"
-            ])
-        
+            toml_lines.extend(
+                [
+                    "",
+                    "# " + "=" * 77,
+                    f"# {section_title.upper()}",
+                    "# " + "=" * 77,
+                    "",
+                    f"[{section_prefix}]",
+                ]
+            )
+
         # Process each field
         for field_name, field_info in model_fields.items():
             field_value = model_data.get(field_name)
-            field_description = field_info.description or f"Configuration for {field_name}"
-            
+            field_description = (
+                field_info.description or f"Configuration for {field_name}"
+            )
+
             # Check if this is a nested BaseModel
             annotation = field_info.annotation
             origin = typing.get_origin(annotation)
-            
+
             # Handle Optional/Union types
             if origin is typing.Union:
                 args = typing.get_args(annotation)
@@ -615,43 +636,51 @@ prompt_version = ""               # Specific prompt version (empty = latest)
                 non_none_args = [arg for arg in args if arg is not type(None)]
                 if len(non_none_args) == 1:
                     annotation = non_none_args[0]
-            
+
             # Check if it's a BaseModel subclass
             is_nested_model = (
-                isinstance(annotation, type) and 
-                issubclass(annotation, BaseModel) and 
-                isinstance(field_value, dict)
+                isinstance(annotation, type)
+                and issubclass(annotation, BaseModel)
+                and isinstance(field_value, dict)
             )
-            
+
             if is_nested_model:
-                nested_section = f"{section_prefix}.{field_name}" if section_prefix else field_name
+                nested_section = (
+                    f"{section_prefix}.{field_name}" if section_prefix else field_name
+                )
                 nested_model = getattr(model, field_name)
-                self._add_model_section_to_toml(nested_model, toml_lines, nested_section, field_description)
+                self._add_model_section_to_toml(
+                    nested_model, toml_lines, nested_section, field_description
+                )
                 continue
-            
+
             # Handle regular fields
             toml_lines.append(f"# {field_description}")
-            
+
             # Format value based on type
             if isinstance(field_value, str):
                 # Escape quotes in string values
                 escaped_value = field_value.replace('"', '\\"')
                 toml_lines.append(f'{field_name} = "{escaped_value}"')
             elif isinstance(field_value, bool):
-                toml_lines.append(f'{field_name} = {str(field_value).lower()}')
-            elif isinstance(field_value, (int, float)):
-                toml_lines.append(f'{field_name} = {field_value}')
+                toml_lines.append(f"{field_name} = {str(field_value).lower()}")
+            elif isinstance(field_value, int | float):
+                toml_lines.append(f"{field_name} = {field_value}")
             elif isinstance(field_value, list):
                 if not field_value:  # Empty list
-                    toml_lines.append(f'{field_name} = []')
+                    toml_lines.append(f"{field_name} = []")
                 elif all(isinstance(item, str) for item in field_value):
                     # Escape quotes in string items
                     escaped_items = [item.replace('"', '\\"') for item in field_value]
-                    formatted_list = '[' + ', '.join(f'"{item}"' for item in escaped_items) + ']'
-                    toml_lines.append(f'{field_name} = {formatted_list}')
+                    formatted_list = (
+                        "[" + ", ".join(f'"{item}"' for item in escaped_items) + "]"
+                    )
+                    toml_lines.append(f"{field_name} = {formatted_list}")
                 else:
-                    formatted_list = '[' + ', '.join(str(item) for item in field_value) + ']'
-                    toml_lines.append(f'{field_name} = {formatted_list}')
+                    formatted_list = (
+                        "[" + ", ".join(str(item) for item in field_value) + "]"
+                    )
+                    toml_lines.append(f"{field_name} = {formatted_list}")
             elif isinstance(field_value, dict):
                 if field_value:  # Non-empty dict
                     # Format dict properly for TOML
@@ -663,23 +692,25 @@ prompt_version = ""               # Specific prompt version (empty = latest)
                         else:
                             dict_items.append(f'"{k}" = {v}')
                     if dict_items:
-                        toml_lines.append(f'{field_name} = {{ {", ".join(dict_items)} }}')
+                        toml_lines.append(
+                            f"{field_name} = {{ {', '.join(dict_items)} }}"
+                        )
                     else:
-                        toml_lines.append(f'{field_name} = {{}}')
+                        toml_lines.append(f"{field_name} = {{}}")
                 else:  # Empty dict
-                    toml_lines.append(f'{field_name} = {{}}')
+                    toml_lines.append(f"{field_name} = {{}}")
             elif field_value is None:
-                toml_lines.append(f'# {field_name} = null  # Optional field')
+                toml_lines.append(f"# {field_name} = null  # Optional field")
             else:
-                toml_lines.append(f'{field_name} = {field_value}')
-            
+                toml_lines.append(f"{field_name} = {field_value}")
+
             toml_lines.append("")
-    
+
     def _dict_to_simple_yaml(self, data: dict[str, Any], indent: int = 0) -> str:
         """Convert dict to simple YAML format (fallback when PyYAML not available)."""
         lines = []
         indent_str = "  " * indent
-        
+
         for key, value in data.items():
             if isinstance(value, dict):
                 lines.append(f"{indent_str}{key}:")
@@ -688,14 +719,14 @@ prompt_version = ""               # Specific prompt version (empty = latest)
                 lines.append(f"{indent_str}{key}:")
                 for item in value:
                     if isinstance(item, str):
-                        lines.append(f"{indent_str}  - \"{item}\"")
+                        lines.append(f'{indent_str}  - "{item}"')
                     else:
                         lines.append(f"{indent_str}  - {item}")
             elif isinstance(value, str):
-                lines.append(f"{indent_str}{key}: \"{value}\"")
+                lines.append(f'{indent_str}{key}: "{value}"')
             else:
                 lines.append(f"{indent_str}{key}: {value}")
-        
+
         return "\n".join(lines)
 
     def _format_config_content(
@@ -716,7 +747,9 @@ prompt_version = ""               # Specific prompt version (empty = latest)
 
                 return yaml.dump(config_dict, default_flow_style=False, indent=2)
             except ImportError:
-                raise ConfigInitializationError("PyYAML not available for YAML format")
+                raise ConfigInitializationError(
+                    "PyYAML not available for YAML format"
+                ) from None
         elif format_type == "json":
             return json.dumps(config_dict, indent=2)
         else:
@@ -791,22 +824,25 @@ prompt_version = ""               # Specific prompt version (empty = latest)
         # Failed refinement annotation preferences
         if enable_refinement:
             self.ui.print_divider("Refinement Annotation Setup")
-            
+
             annotate_failed_tests = self.ui.get_user_confirmation(
-                "Annotate test files with fix instructions when refinement fails?", default=True
+                "Annotate test files with fix instructions when refinement fails?",
+                default=True,
             )
             preferences["annotate_failed_tests"] = annotate_failed_tests
-            
+
             if annotate_failed_tests:
                 annotation_styles = ["docstring", "hash"]
                 annotation_style = self.ui.get_user_input(
                     "Annotation style", input_type="choice", choices=annotation_styles
                 )
                 preferences["annotation_style"] = annotation_style
-                
+
                 annotation_placements = ["top", "bottom"]
                 annotation_placement = self.ui.get_user_input(
-                    "Where to place annotations", input_type="choice", choices=annotation_placements
+                    "Where to place annotations",
+                    input_type="choice",
+                    choices=annotation_placements,
                 )
                 preferences["annotation_placement"] = annotation_placement
 

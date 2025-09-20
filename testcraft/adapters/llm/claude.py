@@ -337,45 +337,59 @@ class ClaudeAdapter(LLMPort):
 
             if parsed.success and parsed.data:
                 # Use common schema validation and repair
-                from .common import normalize_refinement_response, create_repair_prompt
-                
+                from .common import create_repair_prompt, normalize_refinement_response
+
                 validation_result = normalize_refinement_response(parsed.data)
-                
+
                 if not validation_result.is_valid:
                     logger.warning(
                         "Claude returned invalid schema: %s. Attempting repair...",
-                        validation_result.error
+                        validation_result.error,
                     )
-                    
+
                     # Attempt single-shot repair with minimal prompt
-                    if "refined_content" not in parsed.data or self._is_invalid_refined_content(parsed.data.get("refined_content")):
+                    if (
+                        "refined_content" not in parsed.data
+                        or self._is_invalid_refined_content(
+                            parsed.data.get("refined_content")
+                        )
+                    ):
                         repair_prompt = create_repair_prompt(
                             validation_result.error,
-                            ["refined_content", "changes_made", "confidence", "improvement_areas"]
+                            [
+                                "refined_content",
+                                "changes_made",
+                                "confidence",
+                                "improvement_areas",
+                            ],
                         )
-                        
+
                         try:
                             repair_result = self._create_message(
                                 system=system_prompt,
                                 user_message=f"{user_prompt}\n\n{repair_prompt}",
                                 temperature=0.0,  # Deterministic repair
-                                **kwargs
+                                **kwargs,
                             )
-                            
+
                             repair_content = repair_result.get("content", "")
                             repair_parsed = parse_json_response(repair_content)
-                            
+
                             if repair_parsed.success and repair_parsed.data:
-                                repair_validation = normalize_refinement_response(repair_parsed.data)
+                                repair_validation = normalize_refinement_response(
+                                    repair_parsed.data
+                                )
                                 if repair_validation.is_valid:
                                     logger.info("Claude schema repair successful.")
                                     validation_result = repair_validation
                                 else:
-                                    logger.error(f"Claude repair failed: {repair_validation.error}")
-                            
+                                    logger.error(
+                                        f"Claude repair failed: {repair_validation.error}"
+                                    )
+
                         except Exception as repair_e:
                             logger.error(f"Claude repair attempt failed: {repair_e}")
-                
+
                 # Return consistent response structure
                 if validation_result.is_valid and validation_result.data:
                     response_data = validation_result.data
@@ -395,7 +409,9 @@ class ClaudeAdapter(LLMPort):
                     }
                 else:
                     # Schema validation failed even after repair
-                    logger.error(f"Claude schema validation failed: {validation_result.error}")
+                    logger.error(
+                        f"Claude schema validation failed: {validation_result.error}"
+                    )
                     return {
                         "refined_content": original_content,  # Safe fallback
                         "changes_made": f"Schema validation failed: {validation_result.error}",
@@ -427,7 +443,7 @@ class ClaudeAdapter(LLMPort):
         except Exception as e:
             logger.error(f"Claude content refinement failed: {e}")
             raise ClaudeError(f"Content refinement failed: {e}") from e
-    
+
     def _is_invalid_refined_content(self, content: Any) -> bool:
         """Check if refined_content is invalid (None, empty, or literal 'None'/'null')."""
         if content is None:

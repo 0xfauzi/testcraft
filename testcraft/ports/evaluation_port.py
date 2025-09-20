@@ -6,6 +6,7 @@ including automated acceptance checks, LLM-as-judge evaluation,
 and A/B testing for prompt variants.
 """
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal
@@ -20,7 +21,7 @@ class EvaluationConfig:
     golden_repos_path: Path | None = None
     acceptance_checks: bool = True
     llm_judge_enabled: bool = True
-    rubric_dimensions: list[str] = None
+    rubric_dimensions: list[str] | None = None
     statistical_testing: bool = True
     human_review_enabled: bool = False
 
@@ -37,7 +38,7 @@ class AcceptanceResult:
     imports_successfully: bool
     pytest_passes: bool
     coverage_improvement: float | None = None
-    error_messages: list[str] = None
+    error_messages: list[str] | None = None
 
     def __post_init__(self) -> None:
         if self.error_messages is None:
@@ -80,8 +81,8 @@ class EvaluationResult:
     test_content: str
     acceptance: AcceptanceResult
     llm_judge: LLMJudgeResult | None = None
-    metadata: dict[str, Any] = None
-    timestamp: str = None
+    metadata: dict[str, Any] | None = None
+    timestamp: str | None = None
 
     def __post_init__(self) -> None:
         if self.metadata is None:
@@ -266,7 +267,7 @@ class EvaluationPort(Protocol):
     def run_golden_repo_evaluation(
         self,
         golden_repo_path: Path,
-        test_generator_func: callable,
+        test_generator_func: Callable[..., Any],
         evaluation_config: EvaluationConfig | None = None,
         **kwargs: Any,
     ) -> dict[str, Any]:

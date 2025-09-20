@@ -33,6 +33,7 @@ class SafetyPolicies:
     # System files that are allowed in project root
     ALLOWED_SYSTEM_FILES = {
         ".testcraft_state.json",
+        ".testcraft_evaluation_state.json",
         ".testcraft.toml",
         "custom_state.json",
     }
@@ -51,7 +52,9 @@ class SafetyPolicies:
     }
 
     @staticmethod
-    def validate_file_path(file_path: Path, project_root: Path | None = None) -> None:
+    def validate_file_path(
+        file_path: str | Path, project_root: Path | None = None
+    ) -> None:
         """
         Validate that a file path is safe for writing.
 
@@ -78,7 +81,7 @@ class SafetyPolicies:
                 except ValueError:
                     raise SafetyError(
                         f"File path {file_path} is outside project root {project_root}"
-                    )
+                    ) from None
             else:
                 raise SafetyError(
                     f"Absolute paths not allowed without project root: {file_path}"
@@ -184,7 +187,7 @@ class SafetyPolicies:
         try:
             ast.parse(content)
         except SyntaxError as e:
-            raise SafetyError(f"Invalid Python syntax: {e}")
+            raise SafetyError(f"Invalid Python syntax: {e}") from e
 
     @staticmethod
     def get_allowed_test_extensions() -> set[str]:

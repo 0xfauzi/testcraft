@@ -303,11 +303,13 @@ class RefineConfig(BaseModel):
     )
 
     keep_failed_writes: bool = Field(
-        default=False, description="Keep test files that fail to write or have syntax errors"
+        default=False,
+        description="Keep test files that fail to write or have syntax errors",
     )
 
     refine_on_first_failure_only: bool = Field(
-        default=True, description="Stop refinement at first pytest failure within a file"
+        default=True,
+        description="Stop refinement at first pytest failure within a file",
     )
 
     refinement_backoff_sec: float = Field(
@@ -316,129 +318,126 @@ class RefineConfig(BaseModel):
 
     # Strict refinement policies (new)
     strict_assertion_preservation: bool = Field(
-        default=True, 
-        description="Prevent refinement from weakening test assertions to pass (detects production bugs)"
+        default=True,
+        description="Prevent refinement from weakening test assertions to pass (detects production bugs)",
     )
-    
+
     fail_on_xfail_markers: bool = Field(
         default=True,
-        description="Treat tests marked with xfail as refinement failures (prevents masking bugs)"
+        description="Treat tests marked with xfail as refinement failures (prevents masking bugs)",
     )
-    
+
     allow_xfail_on_suspected_bugs: bool = Field(
         default=False,
-        description="Allow adding xfail markers when production bugs are suspected (teams can opt-in)"
+        description="Allow adding xfail markers when production bugs are suspected (teams can opt-in)",
     )
-    
+
     report_suspected_prod_bugs: bool = Field(
         default=True,
-        description="Generate detailed reports when refinement suspects production bugs"
+        description="Generate detailed reports when refinement suspects production bugs",
     )
 
     # Refinement guardrails configuration
     refinement_guardrails: dict[str, Any] = Field(
         default_factory=lambda: {
             "reject_empty": True,
-            "reject_literal_none": True, 
+            "reject_literal_none": True,
             "reject_identical": True,
             "validate_syntax": True,
             "format_on_refine": True,
         },
-        description="Safety guardrails for refinement operations"
+        description="Safety guardrails for refinement operations",
     )
 
     pytest_args_for_refinement: list[str] = Field(
         default=["-vv", "--tb=short", "-x"],
-        description="Pytest arguments specifically for refinement runs"
+        description="Pytest arguments specifically for refinement runs",
     )
 
     # Content validation and equivalence checking
     allow_ast_equivalence_check: bool = Field(
         default=True,
-        description="Enable AST-based semantic equivalence checking to detect meaningful vs cosmetic changes"
+        description="Enable AST-based semantic equivalence checking to detect meaningful vs cosmetic changes",
     )
-    
+
     treat_cosmetic_as_no_change: bool = Field(
         default=True,
-        description="Treat cosmetic-only changes (whitespace, formatting) as no change to avoid unnecessary iterations"
+        description="Treat cosmetic-only changes (whitespace, formatting) as no change to avoid unnecessary iterations",
     )
-    
+
     max_diff_hunks: int = Field(
         default=3,
         ge=1,
         le=20,
-        description="Maximum number of diff hunks to include in logs and reports for readability"
+        description="Maximum number of diff hunks to include in logs and reports for readability",
     )
-    
+
     # Failed test annotation configuration
     annotate_failed_tests: bool = Field(
         default=True,
-        description="Annotate test files with fix instructions when refinement fails"
+        description="Annotate test files with fix instructions when refinement fails",
     )
-    
+
     annotation_placement: Literal["top", "bottom"] = Field(
-        default="top",
-        description="Where to place failure annotations in test files"
+        default="top", description="Where to place failure annotations in test files"
     )
-    
+
     annotation_include_failure_excerpt: bool = Field(
-        default=True,
-        description="Include trimmed failure output in annotations"
+        default=True, description="Include trimmed failure output in annotations"
     )
-    
+
     annotation_max_failure_chars: int = Field(
         default=600,
         ge=100,
         le=2000,
-        description="Maximum characters of failure output to include in annotations"
+        description="Maximum characters of failure output to include in annotations",
     )
-    
+
     annotation_style: Literal["docstring", "hash"] = Field(
         default="docstring",
-        description="Style of annotation: docstring (triple quotes) or hash (comment lines)"
+        description="Style of annotation: docstring (triple quotes) or hash (comment lines)",
     )
-    
+
     include_llm_fix_instructions: bool = Field(
-        default=True,
-        description="Include LLM fix instructions in failure annotations"
+        default=True, description="Include LLM fix instructions in failure annotations"
     )
-    
+
     # Import path resolution and targeting
     prefer_runtime_import_paths: bool = Field(
         default=True,
-        description="Prefer import paths extracted from error traces over source tree aliases for better mocking"
+        description="Prefer import paths extracted from error traces over source tree aliases for better mocking",
     )
-    
+
     # Timeout and hang prevention
     enable_timeout_detection: bool = Field(
         default=True,
-        description="Enable timeout detection and classification for hanging tests"
+        description="Enable timeout detection and classification for hanging tests",
     )
-    
+
     timeout_threshold_seconds: float = Field(
         default=30.0,
         ge=5.0,
         le=300.0,
-        description="Threshold for classifying test executions as hanging/timing out"
+        description="Threshold for classifying test executions as hanging/timing out",
     )
-    
+
     # Schema validation and repair
     enable_schema_repair: bool = Field(
         default=True,
-        description="Enable single-shot LLM schema repair for malformed refinement outputs"
+        description="Enable single-shot LLM schema repair for malformed refinement outputs",
     )
-    
+
     schema_repair_temperature: float = Field(
         default=0.0,
         ge=0.0,
         le=1.0,
-        description="Temperature for schema repair prompts (lower = more deterministic)"
+        description="Temperature for schema repair prompts (lower = more deterministic)",
     )
-    
+
     # Preflight analysis
     enable_preflight_analysis: bool = Field(
         default=True,
-        description="Enable preflight canonicalization analysis to provide proactive suggestions to LLM"
+        description="Enable preflight canonicalization analysis to provide proactive suggestions to LLM",
     )
 
 
@@ -539,9 +538,9 @@ class EnvironmentConfig(BaseModel):
         default=True, description="Auto-detect current environment manager"
     )
 
-    preferred_manager: Literal[
-        "poetry", "pipenv", "conda", "uv", "venv", "auto"
-    ] = Field(default="auto", description="Preferred environment manager")
+    preferred_manager: Literal["poetry", "pipenv", "conda", "uv", "venv", "auto"] = (
+        Field(default="auto", description="Preferred environment manager")
+    )
 
     respect_virtual_env: bool = Field(
         default=True, description="Always use current virtual env"
@@ -809,7 +808,7 @@ class LLMProviderConfig(BaseModel):
         "aws_secret_access_key",
     )
     @classmethod
-    def validate_api_keys_not_empty(cls, v):
+    def validate_api_keys_not_empty(cls, v: Any) -> Any:
         """Ensure API keys are not empty strings."""
         if v is not None and v.strip() == "":
             return None
@@ -817,7 +816,7 @@ class LLMProviderConfig(BaseModel):
 
     @field_validator("azure_openai_endpoint")
     @classmethod
-    def validate_azure_endpoint(cls, v):
+    def validate_azure_endpoint(cls, v: Any) -> Any:
         """Validate Azure endpoint URL format."""
         if v is not None and v.strip() and not v.startswith(("http://", "https://")):
             raise ValueError(
@@ -985,7 +984,7 @@ class TelemetryConfig(BaseModel):
 
     @field_validator("trace_sampling_rate")
     @classmethod
-    def validate_sampling_rate(cls, v):
+    def validate_sampling_rate(cls, v: Any) -> Any:
         """Ensure sampling rate is between 0.0 and 1.0."""
         if not (0.0 <= v <= 1.0):
             raise ValueError("trace_sampling_rate must be between 0.0 and 1.0")
@@ -1061,7 +1060,7 @@ class TestCraftConfig(BaseModel):
 
     @field_validator("coverage")
     @classmethod
-    def validate_coverage_thresholds(cls, v):
+    def validate_coverage_thresholds(cls, v: Any) -> Any:
         """Ensure coverage thresholds are logically consistent."""
         if v.regenerate_if_below > v.minimum_line_coverage:
             raise ValueError(
@@ -1075,7 +1074,7 @@ class TestCraftConfig(BaseModel):
 
     @field_validator("cost_management")
     @classmethod
-    def validate_cost_thresholds(cls, v):
+    def validate_cost_thresholds(cls, v: Any) -> Any:
         """Ensure cost thresholds are logically consistent."""
         thresholds = v.cost_thresholds
         if thresholds.warning_threshold > thresholds.per_request_limit:
@@ -1086,7 +1085,7 @@ class TestCraftConfig(BaseModel):
 
     @field_validator("quality")
     @classmethod
-    def validate_quality_scores(cls, v):
+    def validate_quality_scores(cls, v: Any) -> Any:
         """Ensure quality scores are within valid ranges."""
         if v.minimum_quality_score > 100 or v.minimum_quality_score < 0:
             raise ValueError("minimum_quality_score must be between 0 and 100")
@@ -1094,7 +1093,7 @@ class TestCraftConfig(BaseModel):
             raise ValueError("minimum_mutation_score must be between 0 and 100")
         return v
 
-    def get_nested_value(self, key: str, default=None):
+    def get_nested_value(self, key: str, default: Any = None) -> Any:
         """Get configuration value using dot notation (e.g., 'coverage.minimum_line_coverage')."""
         keys = key.split(".")
         value = self.model_dump()

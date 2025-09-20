@@ -152,9 +152,9 @@ class InMemoryHybridIndexer:
             header_match = header_pattern.match(lines[start_line])
             assert header_match is not None
             symbol = header_match.group(2)
-            start = sum(len(l) for l in lines[:start_line])
+            start = sum(len(line) for line in lines[:start_line])
             end_line = indices[idx + 1] if idx + 1 < len(indices) else len(lines)
-            end = sum(len(l) for l in lines[:end_line])
+            end = sum(len(line) for line in lines[:end_line])
             yield symbol, start, end
 
     # Utilities for retriever/summarizer

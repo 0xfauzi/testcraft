@@ -13,7 +13,7 @@ import importlib.util
 import os
 import platform
 import sys
-from typing import Any, Dict, List
+from typing import Any
 
 from ...config.models import TestCraftConfig
 
@@ -34,11 +34,11 @@ class EnvironmentValidator:
         config: TestCraftConfig,
         require_refinement: bool = True,
         require_coverage_tools: bool = False,
-    ) -> Dict[str, Any]:
-        checks: List[Dict[str, Any]] = []
-        errors: List[str] = []
-        warnings: List[str] = []
-        suggestions: List[str] = []
+    ) -> dict[str, Any]:
+        checks: list[dict[str, Any]] = []
+        errors: list[str] = []
+        warnings: list[str] = []
+        suggestions: list[str] = []
 
         # Python version
         py_ok = sys.version_info >= (3, 11)
@@ -61,7 +61,9 @@ class EnvironmentValidator:
         checks.append({"name": "pytest_installed", "ok": pytest_ok})
         if require_refinement and not pytest_ok:
             errors.append("pytest is not installed or not importable.")
-            suggestions.append("Install pytest with uv: 'uv add --dev pytest pytest-cov'")
+            suggestions.append(
+                "Install pytest with uv: 'uv add --dev pytest pytest-cov'"
+            )
 
         # LLM provider credentials (always required to generate tests)
         provider = (config.llm.default_provider or "openai").lower()
@@ -83,7 +85,9 @@ class EnvironmentValidator:
             )
             if not key_ok:
                 provider_ok = False
-                errors.append("Missing OpenAI API key (set OPENAI_API_KEY or config.llm.openai_api_key).")
+                errors.append(
+                    "Missing OpenAI API key (set OPENAI_API_KEY or config.llm.openai_api_key)."
+                )
                 suggestions.append("Export your key: 'export OPENAI_API_KEY=sk-...'")
             if not sdk_ok:
                 provider_ok = False
@@ -165,10 +169,14 @@ class EnvironmentValidator:
                 suggestions.append("Install SDK with uv: 'uv add langchain-aws'")
 
         else:
-            warnings.append(f"Unknown LLM provider '{provider}', assuming handled by router.")
+            warnings.append(
+                f"Unknown LLM provider '{provider}', assuming handled by router."
+            )
 
         if not provider_ok:
-            errors.append("LLM provider not fully configured; cannot generate tests without it.")
+            errors.append(
+                "LLM provider not fully configured; cannot generate tests without it."
+            )
 
         # Optional: Coverage toolchain checks (warn-only unless caller decides otherwise)
         if require_coverage_tools:
@@ -200,11 +208,15 @@ class EnvironmentValidator:
             ]
         )
         if not ruff_ok:
-            warnings.append("Ruff formatter not available; will fall back to Black if present.")
+            warnings.append(
+                "Ruff formatter not available; will fall back to Black if present."
+            )
             suggestions.append("Install Ruff with uv: 'uv add --dev ruff'")
         elif not black_ok:
             # Only warn if Ruff is present but Black fallback is missing
-            warnings.append("Black fallback not available; formatting will rely on Ruff only.")
+            warnings.append(
+                "Black fallback not available; formatting will rely on Ruff only."
+            )
             suggestions.append("Install Black fallback with uv: 'uv add --dev black'")
 
         ok = not errors
@@ -222,5 +234,3 @@ class EnvironmentValidator:
             "suggestions": suggestions,
             "checks": checks,
         }
-
-

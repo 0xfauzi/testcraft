@@ -77,17 +77,17 @@ logger = get_operation_logger("test_generation")
 with logger.operation_context("file_processing", batch_size=5):
     logger.file_operation_start("src/example.py", "generation")
     logger.batch_progress("generation", completed=3, total=10)
-    logger.file_operation_complete("src/example.py", "generation", 
+    logger.file_operation_complete("src/example.py", "generation",
                                    duration=2.5, success=True, tests_generated=8)
 
 # Error logging with suggestions
-logger.error_with_context("Operation failed", exception, 
+logger.error_with_context("Operation failed", exception,
                          suggestions=["Try this", "Or this"])
 
 # Performance summaries
 logger.performance_summary("generation", {
     "duration": 15.7,
-    "items_processed": 10, 
+    "items_processed": 10,
     "success_rate": 0.9
 })
 ```
@@ -109,10 +109,10 @@ ui.display_error(f"Test generation failed: {e}", "Generation Error")
 # AFTER: Rich, helpful
 suggestions = [
     "Check if the project directory exists and is readable",
-    "Verify your configuration file is valid", 
+    "Verify your configuration file is valid",
     "Try running with --verbose for more details"
 ]
-ui.display_error_with_suggestions(f"Test generation failed: {e}", 
+ui.display_error_with_suggestions(f"Test generation failed: {e}",
                                 suggestions, "Generation Error")
 logger.error_with_context("Test generation failed", e, suggestions)
 ```
@@ -222,7 +222,7 @@ from testcraft.adapters.io.enhanced_logging import get_file_logger
 file_logger = get_file_logger(file_path)
 file_logger.file_operation_start(file_path, "test_generation")
 # ... do work ...
-file_logger.file_operation_complete(file_path, "test_generation", 
+file_logger.file_operation_complete(file_path, "test_generation",
                                    duration, success, **metrics)
 ```
 

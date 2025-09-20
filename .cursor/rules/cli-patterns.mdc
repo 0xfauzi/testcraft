@@ -9,7 +9,7 @@ description: CLI patterns and command structure standards
 Follow the established pattern in [testcraft/cli/](mdc:testcraft/cli/):
 
 - **[main.py](mdc:testcraft/cli/main.py)**: Entry point and CLI app setup
-- **[commands/](mdc:testcraft/cli/commands/)**: Individual command implementations  
+- **[commands/](mdc:testcraft/cli/commands/)**: Individual command implementations
 - **[services/](mdc:testcraft/cli/services/)**: CLI-specific service layer
 - **[formatters/](mdc:testcraft/cli/formatters/)**: Output formatting utilities
 
@@ -28,10 +28,10 @@ def generate(ctx, file: str, verbose: bool):
     try:
         use_case = get_use_case('generate')
         result = use_case.execute(file_path=file)
-        
+
         if verbose:
             click.echo(f"Generated {result.test_count} tests")
-        
+
     except Exception as e:
         click.echo(f"Error: {e}", err=True)
         ctx.exit(1)

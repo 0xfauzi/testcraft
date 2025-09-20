@@ -15,7 +15,6 @@ import pytest
 
 from testcraft.application.generate_usecase import GenerateUseCase
 from testcraft.application.generation.services.context_assembler import ContextAssembler
-from testcraft.config.models import TestCraftConfig
 from testcraft.domain.models import (
     GenerationResult,
     TestElement,
@@ -115,45 +114,45 @@ API_KEY = os.environ["API_KEY"]
 
 class UserManager:
     \"\"\"User management class.
-    
+
     :raises ValueError: When user ID is invalid
     :raises KeyError: When user not found
     \"\"\"
-    
+
     def __init__(self):
         self.db_url = DATABASE_URL
-        
+
     def create_user(self, name: str, email: str) -> dict:
         \"\"\"Create a new user.
-        
+
         Args:
             name: User's name
             email: User's email address
-            
+
         Returns:
             Created user data
-            
+
         Raises:
             ValueError: If name or email is empty
         \"\"\"
         if not name or not email:
             raise ValueError("Name and email are required")
-            
+
         response = requests.post("http://api.example.com/users", {
             "name": name,
             "email": email
         })
-        
+
         if response.status_code != 201:
             raise RuntimeError("Failed to create user")
-            
+
         return response.json()
 
     def get_user(self, user_id: int) -> dict:
         \"\"\"Get user by ID.\"\"\"
         if user_id <= 0:
             raise ValueError("Invalid user ID")
-            
+
         # Database query would go here
         return {"id": user_id, "name": "Test User"}
 """)
@@ -189,16 +188,16 @@ from unittest.mock import patch
 from main import UserManager
 
 class TestUserManager:
-    
+
     def test_create_user_success(self, user_data, api_client):
         \"\"\"Test successful user creation.\"\"\"
         with patch('requests.post') as mock_post:
             mock_post.return_value.status_code = 201
             mock_post.return_value.json.return_value = {"id": 1, **user_data}
-            
+
             manager = UserManager()
             result = manager.create_user(user_data["name"], user_data["email"])
-            
+
             assert result["id"] == 1
             assert result["name"] == user_data["name"]
 
@@ -206,7 +205,7 @@ class TestUserManager:
     def test_get_user_invalid_id(self):
         \"\"\"Test get user with invalid ID.\"\"\"
         manager = UserManager()
-        
+
         with pytest.raises(ValueError, match="Invalid user ID"):
             manager.get_user(-1)
 """)
@@ -303,27 +302,31 @@ testpaths = ["tests"]
 
         # Should contain call-graph information from relationships
         assert "Call-graph edges" in enriched_context
-        assert "imports:utils" in enriched_context or "calls:helper_func" in enriched_context
+        assert (
+            "imports:utils" in enriched_context
+            or "calls:helper_func" in enriched_context
+        )
 
         # Verify context respects budget limits
         assert len(enriched_context) <= config["prompt_budgets"]["total_chars"]
 
         # Run actual generation to test end-to-end flow
         # Note: This tests the integration but with mocked LLM calls
-        results = []
-        
+
         # Mock the async generation flow
         async def run_generation():
             result = await generate_usecase.generate_async(
                 project_path, target_files=[str(main_file)]
             )
             return result
-        
+
         # The generation should complete without errors
         # (actual content verification would require running the full async pipeline)
         assert True  # Placeholder for async integration test
 
-    def test_feature_flags_comprehensive_coverage(self, mock_ports, sample_project_structure):
+    def test_feature_flags_comprehensive_coverage(
+        self, mock_ports, sample_project_structure
+    ):
         """Test all context enrichment feature flags work correctly."""
         project_path = sample_project_structure
         main_file = project_path / "main.py"
@@ -365,7 +368,9 @@ testpaths = ["tests"]
         plan = TestGenerationPlan(elements_to_test=[test_element])
 
         # Generate context with features disabled
-        context_disabled = context_assembler_disabled.context_for_generation(plan, main_file)
+        context_disabled = context_assembler_disabled.context_for_generation(
+            plan, main_file
+        )
 
         # Should have minimal context (just snippets)
         if context_disabled:
@@ -402,17 +407,21 @@ testpaths = ["tests"]
             mock_ports["context_port"], mock_ports["parser_port"], config_selective
         )
 
-        context_selective = context_assembler_selective.context_for_generation(plan, main_file)
+        context_selective = context_assembler_selective.context_for_generation(
+            plan, main_file
+        )
 
         # Should contain only enabled features
         if context_selective:
             # Should contain environment variables (enabled)
-            # Should contain HTTP clients (enabled)  
+            # Should contain HTTP clients (enabled)
             # Should contain side effects (enabled)
             # But NOT database clients (disabled) or fixtures (disabled)
             pass  # The actual content depends on the mock setup and detection logic
 
-    def test_backwards_compatibility_default_behavior(self, mock_ports, sample_project_structure):
+    def test_backwards_compatibility_default_behavior(
+        self, mock_ports, sample_project_structure
+    ):
         """Test that existing workflows work without configuration changes."""
         project_path = sample_project_structure
         main_file = project_path / "main.py"
@@ -421,7 +430,7 @@ testpaths = ["tests"]
         config_default = {}  # Empty config should use defaults
 
         generate_usecase_default = GenerateUseCase(config=config_default, **mock_ports)
-        
+
         # Create basic test plan
         test_element = TestElement(
             name="get_user",
@@ -444,7 +453,9 @@ testpaths = ["tests"]
         # Main thing is it shouldn't crash or break existing behavior
         assert context is None or isinstance(context, str)
 
-    def test_prompt_generation_with_enriched_context(self, mock_ports, sample_project_structure):
+    def test_prompt_generation_with_enriched_context(
+        self, mock_ports, sample_project_structure
+    ):
         """Test that enriched context actually appears in generated prompts."""
         project_path = sample_project_structure
         main_file = project_path / "main.py"
@@ -478,7 +489,7 @@ testpaths = ["tests"]
 
         mock_ports["llm_port"].generate_async = AsyncMock(side_effect=mock_llm_generate)
 
-        generate_usecase = GenerateUseCase(config=config_enriched, **mock_ports)
+        GenerateUseCase(config=config_enriched, **mock_ports)
 
         # Create test plan
         test_element = TestElement(
@@ -528,17 +539,17 @@ from .external_api import APIClient
 @dataclass
 class UserService:
     \"\"\"User service with multiple dependencies.
-    
-    :raises ConnectionError: When database connection fails  
+
+    :raises ConnectionError: When database connection fails
     :raises TimeoutError: When API calls timeout
     :raises ValueError: When input validation fails
     \"\"\"
-    
+
     db: DatabaseManager
     cache: CacheManager
     api_client: APIClient
     logger: logging.Logger
-    
+
     async def get_user_profile(self, user_id: int) -> Optional[dict]:
         \"\"\"Get comprehensive user profile.\"\"\"
         try:
@@ -546,20 +557,20 @@ class UserService:
             cached = await self.cache.get(f"user:{user_id}")
             if cached:
                 return cached
-                
+
             # Get from database
             user = await self.db.find_user(user_id)
             if not user:
                 return None
-                
+
             # Enrich with external API data
             external_data = await self.api_client.get_user_details(user_id)
-            
+
             profile = {**user, **external_data}
             await self.cache.set(f"user:{user_id}", profile, ttl=3600)
-            
+
             return profile
-            
+
         except Exception as e:
             self.logger.error(f"Failed to get user profile: {e}")
             raise
@@ -569,7 +580,7 @@ class UserService:
             mock_ports["context_port"].get_related_context.return_value = {
                 "relationships": [
                     "imports:database.DatabaseManager",
-                    "imports:cache.CacheManager", 
+                    "imports:cache.CacheManager",
                     "imports:external_api.APIClient",
                     "calls:cache.get",
                     "calls:db.find_user",
@@ -585,8 +596,14 @@ class UserService:
             mock_ports["context_port"].retrieve.return_value = {
                 "results": [
                     {"snippet": "user_service.get_user_profile(123)", "path": "app.py"},
-                    {"snippet": "await service.get_user_profile(user_id)", "path": "controller.py"},
-                    {"snippet": "profile = get_user_profile(current_user.id)", "path": "views.py"},
+                    {
+                        "snippet": "await service.get_user_profile(user_id)",
+                        "path": "controller.py",
+                    },
+                    {
+                        "snippet": "profile = get_user_profile(current_user.id)",
+                        "path": "views.py",
+                    },
                 ],
                 "total_found": 3,
             }
@@ -627,13 +644,16 @@ class UserService:
                 # Should handle multiple relationships
                 assert "Call-graph edges" in context
                 assert any(
-                    rel in context 
+                    rel in context
                     for rel in ["imports:database", "calls:cache", "calls:db.find_user"]
                 )
 
                 # Should contain usage examples
                 assert "Usage get_user_profile" in context
-                assert "user_service.get_user_profile" in context or "get_user_profile(user_id)" in context
+                assert (
+                    "user_service.get_user_profile" in context
+                    or "get_user_profile(user_id)" in context
+                )
 
                 # Should respect budget constraints
                 assert len(context) <= config["prompt_budgets"]["total_chars"]
@@ -656,9 +676,11 @@ class UserService:
         }
 
         # Should handle invalid config gracefully
-        with patch("testcraft.application.generation.config.logger.warning") as mock_warn:
+        with patch(
+            "testcraft.application.generation.config.logger.warning"
+        ) as mock_warn:
             generate_usecase = GenerateUseCase(config=invalid_config, **mock_ports)
-            
+
             # Should have warned about invalid values
             assert mock_warn.call_count > 0
 
@@ -669,7 +691,7 @@ class UserService:
         # Test with completely missing configuration sections
         minimal_config = {}
         generate_usecase_minimal = GenerateUseCase(config=minimal_config, **mock_ports)
-        
+
         # Should work with defaults
         assert generate_usecase_minimal is not None
         assert "context_enrichment" in generate_usecase_minimal._config

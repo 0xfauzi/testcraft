@@ -617,5 +617,5 @@ class nullcontext:
     def __enter__(self):
         return None
 
-    def __exit__(self, *args):
+    def __exit__(self, *args) -> None:
         return None
