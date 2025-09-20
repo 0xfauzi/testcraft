@@ -126,11 +126,24 @@ uv run pre-commit install --overwrite
 
 ## 📊 Benefits
 
+✅ **Perfect CI Alignment** - Local commands identical to GitHub CI
 ✅ **Catch Issues Early** - Find problems before GitHub CI
 ✅ **Faster Feedback** - Fix issues locally vs waiting for CI
 ✅ **Consistent Quality** - Same standards locally and in CI
 ✅ **Team Alignment** - Everyone uses the same quality checks
 ✅ **No Broken Commits** - Maintain clean git history
+
+## 🔄 **Perfect Local-to-CI Consistency**
+
+**MyPy Commands (IDENTICAL):**
+- **Local pre-commit:** `uv run mypy testcraft/ --config-file=mypy-staged.ini --show-error-codes --pretty`
+- **GitHub CI:** `uv run mypy testcraft/ --config-file=mypy-staged.ini --show-error-codes --pretty`
+
+**Configuration:**
+- Both use the same `mypy-staged.ini` configuration file
+- Both check the same scope (`testcraft/` directory)
+- Both use the same ignore patterns and strict settings
+- Both use the same external dependency handling
 
 ## 🔧 Customization
 

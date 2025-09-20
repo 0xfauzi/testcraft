@@ -21,9 +21,9 @@ repos:
     rev: v1.13.0
     hooks:
       - id: mypy
-        name: mypy type check (syntax focus)
-        args: [--show-error-codes, --pretty, --no-error-summary, --config-file=mypy-staged.ini]
-        files: ^testcraft/(domain|config/models|ports)/
+        name: mypy type check (staged rollout)
+        args: [--show-error-codes, --pretty, --config-file=mypy-staged.ini]
+        files: ^testcraft/
         additional_dependencies:
           - types-requests
           - types-PyYAML

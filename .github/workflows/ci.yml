@@ -63,7 +63,7 @@ jobs:
 
     - name: Run mypy
       run: |
-        uv run mypy testcraft/ --show-error-codes --pretty
+        uv run mypy testcraft/ --show-error-codes --pretty --config-file=mypy-staged.ini
 
   test:
     name: Test Suite
