@@ -1,0 +1,123 @@
+---
+description: Two-session Cursor chat workflow for Taskmaster (planning handoff then implementation)
+globs: **/*
+alwaysApply: true
+---
+
+## Two-Session Cursor Chat Workflow for Taskmaster
+
+This rule defines a strict two-session workflow for working with Taskmaster inside Cursor. It complements and does not replace the standards in [workflow-patterns.mdc](mdc:.cursor/rules/workflow-patterns.mdc) and the detailed guidance in [dev_workflow.mdc](mdc:.cursor/rules/taskmaster/dev_workflow.mdc).
+
+- **Session 1 — Planning & Handoff (no coding)**
+  - **Pick up the task**: Identify task via `get_tasks` / `next_task`; confirm ID, title, tag context
+  - **Create branch immediately**: Use the naming scheme `feature/task-{task_id}-{brief-description}` and push upstream
+  - **Baseline assessment**: Run full test suite to understand the current state; capture results (pass/fail, failures summary)
+  - **Deep research**: Analyze architecture, relevant files, ports/adapters, tests; use Taskmaster research where beneficial
+  - **Produce a DETAILED plan**: Include objectives, scope, step-by-step implementation with file paths/functions, testing strategy, risks with mitigations, acceptance criteria, and rollout/backout considerations
+  - **Output a complete handoff**: Provide a copy/paste artifact to start Session 2 with everything needed
+
+- **Session 2 — Implementation & Delivery**
+  - **Start from handoff**: Validate branch and environment match the handoff
+  - **Execute the plan end-to-end**: Implement step-by-step, updating Taskmaster subtasks and logging progress
+  - **Verification**: Run test suite; fix failures; re-run until green
+  - **Quality gates**: Ensure linting/formatting and pre-commit hooks pass
+  - **Finalize**: Commit with descriptive message referencing the task; push branch; mark task/subtasks done per standards
+
+### Session 1 — Commands and Required Outputs
+
+- **Create and push branch**
+```bash
+git checkout -b feature/task-{task_id}-{brief-description}
+git push -u origin feature/task-{task_id}-{brief-description}
+```
+
+- **Baseline tests**
+```bash
+pytest tests/ -v
+```
+
+- **If tests fail in baseline**
+  - Document failing tests (names, brief error summaries)
+  - Do not implement fixes yet; plan them as the first steps in Session 2 unless trivial
+
+- **Handoff package must include**
+  - **Task meta**: ID, title, tag, branch name
+  - **Current state**: Test results summary, notable failing tests, environment notes
+  - **Objectives**: Clear, measurable outcomes
+  - **Implementation plan**: Concrete steps with file paths, functions/classes, expected edits/diffs, config changes
+  - **Testing strategy**: Unit/integration/e2e updates and how to validate
+  - **Risks & mitigations**: Technical risks, fallbacks, and safeguards
+  - **Acceptance criteria**: What must be true to consider the task done
+  - **Runbook**: Ordered commands to execute during Session 2
+
+### Copy/Paste Handoff Template (Session 1 output)
+
+```markdown
+Task: {id} — {title}
+Tag: {tag}
+Branch: feature/task-{id}-{brief-description}
+
+Current State
+- Test suite status: {all green | N failing}
+- Summary of failing tests (if any):
+  - {test_path::name} — {short error}
+  - {test_path::name} — {short error}
+- Notable environment/config notes: {notes}
+
+Objectives
+- {objective 1}
+- {objective 2}
+
+Detailed Implementation Plan
+1) {file/path.py}: {function_or_class}
+   - Edit: {what exactly changes}
+   - Rationale: {why}
+2) {file/path2.py}: {function_or_class}
+   - Add: {new elements}
+   - Rationale: {why}
+...
+
+Testing Strategy
+- Update/add tests: {tests to touch}
+- How to validate: {commands, expected outputs}
+
+Risks & Mitigations
+- Risk: {risk} → Mitigation: {mitigation}
+- Risk: {risk} → Mitigation: {mitigation}
+
+Acceptance Criteria
+- {criterion 1}
+- {criterion 2}
+
+Session 2 Runbook (Commands)
+```bash
+pytest tests/ -v
+pre-commit run -a
+git add .
+git commit -m "feat(task-{id}): {concise change}
+
+- Implementation per plan
+- Tests: {passing}
+- Pre-commit: {passing}
+"
+git push origin feature/task-{id}-{brief-description}
+```
+```
+
+### Session 2 — Execution Requirements
+
+- **Follow the handoff plan strictly**: If deviations arise, update the plan and call them out
+- **Run tests and fix**: Keep iterating until all tests pass
+- **Pre-commit and style**: Use repository hooks and ruff/formatting; ensure everything passes
+```bash
+pytest tests/ -v
+pre-commit run -a
+```
+- **Commit & push** with clear message referencing the task ID; then mark subtasks and the task as done
+
+### Alignment with Existing Standards
+
+- **This rule augments**: [workflow-patterns.mdc](mdc:.cursor/rules/workflow-patterns.mdc)
+- **Detailed process & tooling**: [dev_workflow.mdc](mdc:.cursor/rules/taskmaster/dev_workflow.mdc)
+
+Keep rules DRY by referencing the above for full command and tool references. This document focuses only on the two-session split and the required handoff structure.

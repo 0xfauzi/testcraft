@@ -461,19 +461,26 @@ class OpenAIAdapter(LLMPort):
                 }
             else:
                 # Fallback if JSON parsing fails
+                from .common import normalize_metadata
+
+                metadata = normalize_metadata(
+                    provider="openai",
+                    model_identifier=self.model,
+                    usage_data=result.get("usage"),
+                    parsed=False,
+                    extras={
+                        "analysis_type": analysis_type,
+                        "raw_content": content,
+                        "parse_error": parsed.error,
+                    },
+                )
+
                 return {
                     "testability_score": 5.0,
                     "complexity_metrics": {},
                     "recommendations": [],
                     "potential_issues": [],
-                    "metadata": {
-                        "model": self.model,
-                        "analysis_type": analysis_type,
-                        "parsed": False,
-                        "raw_content": content,
-                        "parse_error": parsed.error,
-                        **result.get("usage", {}),
-                    },
+                    "metadata": metadata,
                 }
 
         except Exception as e:
@@ -593,51 +600,71 @@ class OpenAIAdapter(LLMPort):
                 if validation_result.is_valid and validation_result.data:
                     response_data = validation_result.data
 
+                    from .common import normalize_metadata
+
+                    metadata = normalize_metadata(
+                        provider="openai",
+                        model_identifier=self.model,
+                        usage_data=result.get("usage"),
+                        parsed=True,
+                        extras={
+                            "repaired": validation_result.repaired,
+                            "repair_type": validation_result.repair_type,
+                        },
+                    )
+
                     return {
                         "refined_content": response_data["refined_content"],
                         "changes_made": response_data["changes_made"],
                         "confidence": response_data["confidence"],
                         "improvement_areas": response_data["improvement_areas"],
                         "suspected_prod_bug": response_data.get("suspected_prod_bug"),
-                        "metadata": {
-                            "model": self.model,
-                            "parsed": True,
-                            "repaired": validation_result.repaired,
-                            "repair_type": validation_result.repair_type,
-                            **result.get("usage", {}),
-                        },
+                        "metadata": metadata,
                     }
                 else:
                     # Schema validation failed even after repair
                     logger.error(
                         f"OpenAI schema validation failed: {validation_result.error}"
                     )
+
+                    from .common import normalize_metadata
+
+                    metadata = normalize_metadata(
+                        provider="openai",
+                        model_identifier=self.model,
+                        usage_data=result.get("usage"),
+                        parsed=False,
+                        extras={"schema_error": validation_result.error},
+                    )
+
                     return {
                         "refined_content": original_content,  # Safe fallback
                         "changes_made": f"Schema validation failed: {validation_result.error}",
                         "confidence": 0.0,
                         "improvement_areas": ["schema_error"],
                         "suspected_prod_bug": None,
-                        "metadata": {
-                            "model": self.model,
-                            "parsed": False,
-                            "schema_error": validation_result.error,
-                            **result.get("usage", {}),
-                        },
+                        "metadata": metadata,
                     }
             else:
                 # Fallback if JSON parsing fails
+                from .common import normalize_metadata
+
+                metadata = normalize_metadata(
+                    provider="openai",
+                    model_identifier=self.model,
+                    usage_data=result.get("usage"),
+                    parsed=False,
+                    extras={
+                        "raw_content": content,
+                        "parse_error": parsed.error,
+                    },
+                )
+
                 return {
                     "refined_content": content or original_content,
                     "changes_made": "Refinement applied (JSON parse failed)",
                     "confidence": 0.3,
-                    "metadata": {
-                        "model": self.model,
-                        "parsed": False,
-                        "raw_content": content,
-                        "parse_error": parsed.error,
-                        **result.get("usage", {}),
-                    },
+                    "metadata": metadata,
                 }
 
         except Exception as e:

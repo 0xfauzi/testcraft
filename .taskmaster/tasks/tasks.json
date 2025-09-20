@@ -1207,7 +1207,7 @@
         "description": "Make all LLM providers (OpenAI, Anthropic Claude, Azure OpenAI, AWS Bedrock) interchangeable with a uniform API, consistent token budgeting, prompt sourcing, response schemas, and metadata, while preserving provider-specific capabilities like reasoning/thinking modes and model-specific limits.",
         "details": "Objectives:\n- Uniform `LLMPort` contract across providers; consistent return schemas and metadata\n- Centralized token budgeting and prompt sourcing\n- Provider-specific features preserved (Claude extended thinking, OpenAI o-series Responses API, model-specific limits)\n- Router conforms 1:1 to `LLMPort`\n\nAcceptance criteria:\n- Any provider can be swapped in `LLMRouter(default_provider=...)` with no call-site changes\n- All four operations (`generate_tests`, `analyze_code`, `refine_content`, `generate_test_plan`) succeed on all providers and return the same top-level structure\n- Per-request token budgeting works for all providers\n- Claude thinking budgets applied when supported; OpenAI o-series uses Responses API and ignores custom temperature\n- Router method signatures match `LLMPort` exactly\n- Parity tests pass across providers (with and without credentials/stub mode)",
         "testStrategy": "- Add parameterized provider tests for all operations; verify consistent schemas and metadata\n- Add budgeting tests to assert per-request max_tokens/thinking tokens computed\n- Add OpenAI o-series branch test (Responses API path taken) and temperature behavior\n- Add router signature and pass-through tests\n- Add metadata normalization tests (model mapping for Azure/Bedrock)\n- Ensure cost tracking doesn't fail operations",
-        "status": "in-progress",
+        "status": "done",
         "dependencies": [],
         "priority": "high",
         "subtasks": [
@@ -1217,7 +1217,7 @@
             "description": "Define and implement a uniform LLMPort interface for all providers (OpenAI, Anthropic Claude, Azure OpenAI, AWS Bedrock), ensuring consistent method signatures, return schemas, and metadata fields. Normalize response structures and metadata to enable seamless provider interchangeability.",
             "dependencies": [],
             "details": "Specify a canonical LLMPort contract with strict input/output types and metadata keys. Refactor all provider adapters to conform to this contract. Ensure all four core operations (`generate_tests`, `analyze_code`, `refine_content`, `generate_test_plan`) return identical top-level structures regardless of provider.",
-            "status": "pending",
+            "status": "done",
             "testStrategy": "Unit and integration tests for each provider adapter to verify schema and metadata normalization. Parity tests to assert identical response structures across providers."
           },
           {
@@ -1228,7 +1228,7 @@
               "29.1"
             ],
             "details": "Develop a shared budgeting module that calculates and enforces max tokens for each request, including provider-specific constraints (e.g., Claude thinking budgets, OpenAI o-series output limits). Integrate prompt sourcing so all adapters use the same prompt construction logic.",
-            "status": "pending",
+            "status": "done",
             "testStrategy": "Budgeting tests for each provider to verify correct enforcement of token limits, including edge cases for provider-specific caps and thinking tokens."
           },
           {
@@ -1240,7 +1240,7 @@
               "29.2"
             ],
             "details": "Add conditional logic and capability flags to adapters and router to ensure provider-specific features are accessible and correctly routed. For example, apply Claude thinking budgets only when supported, use OpenAI o-series Responses API and ignore custom temperature, and map Azure/Bedrock models appropriately.",
-            "status": "pending",
+            "status": "done",
             "testStrategy": "Feature-specific tests for each provider to verify correct behavior and preservation of unique capabilities. Branch tests for OpenAI o-series and Claude thinking modes."
           },
           {
@@ -1253,7 +1253,7 @@
               "29.3"
             ],
             "details": "Update router implementation to strictly enforce LLMPort method signatures and pass-through logic. Ensure that swapping providers via `LLMRouter(default_provider=...)` requires no changes at call sites and that all operations are routed correctly.",
-            "status": "pending",
+            "status": "done",
             "testStrategy": "Signature and pass-through tests to verify router methods match LLMPort exactly. Provider swap tests to confirm no call-site changes are needed and all operations succeed across providers."
           },
           {
@@ -1267,7 +1267,7 @@
               "29.4"
             ],
             "details": "Design tests to run all core operations across all providers, verifying consistent schemas, correct budgeting, feature branches (e.g., o-series, Claude thinking), router signature, and metadata normalization. Include stub-mode tests for environments without credentials. Document backwards compatibility and deprecation plan.",
-            "status": "pending",
+            "status": "done",
             "testStrategy": "Automated test suite with provider parameterization, regression checks, and stub-mode coverage. Manual review of backwards compatibility and documentation updates."
           }
         ]
@@ -1429,7 +1429,7 @@
     ],
     "metadata": {
       "created": "2025-01-27T20:16:58.061Z",
-      "updated": "2025-09-20T16:57:10.941Z",
+      "updated": "2025-09-20T17:10:10.614Z",
       "description": "Tasks for master context"
     }
   }
