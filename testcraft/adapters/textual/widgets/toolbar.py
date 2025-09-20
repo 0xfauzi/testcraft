@@ -22,7 +22,7 @@ class Toolbar(Horizontal):
     current_screen: reactive[str] = reactive("generate")
     operation_active: reactive[bool] = reactive(False)
 
-    def __init__(self, **kwargs):
+    def __init__(self, **kwargs) -> None:
         super().__init__(**kwargs)
         self.add_class("toolbar")
 
@@ -151,7 +151,7 @@ class SimpleToolbar(Horizontal):
     Used in compact layouts where space is limited.
     """
 
-    def __init__(self, **kwargs):
+    def __init__(self, **kwargs) -> None:
         super().__init__(**kwargs)
         self.add_class("simple-toolbar")
 

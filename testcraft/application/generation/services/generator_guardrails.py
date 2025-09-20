@@ -47,7 +47,7 @@ class GeneratorGuardrails:
     Performs static analysis to catch common issues before tests are written.
     """
 
-    def __init__(self, enriched_context: dict[str, Any]):
+    def __init__(self, enriched_context: dict[str, Any]) -> None:
         """
         Initialize guardrails with enriched context.
 

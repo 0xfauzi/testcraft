@@ -349,7 +349,7 @@ class ProgressDialog(BaseModal):
         title: str = "Processing",
         message: str = "Please wait...",
         total: int | None = None,
-        callback: callable = None,
+        callback: Callable[..., Any] = None,
     ) -> "ProgressDialog":
         """
         Convenience method to show a progress dialog.

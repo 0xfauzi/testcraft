@@ -210,7 +210,7 @@ class InputDialog(BaseModal):
         password: bool = False,
         validator: Validator | None = None,
         help_text: str = "",
-        callback: callable = None,
+        callback: Callable[..., Any] = None,
     ) -> "InputDialog":
         """
         Convenience method to show an input dialog.

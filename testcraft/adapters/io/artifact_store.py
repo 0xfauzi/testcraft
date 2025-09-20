@@ -77,7 +77,7 @@ class CleanupPolicy:
     max_age_days: int | None = None
     max_artifacts: int | None = None
     max_size_mb: int | None = None
-    preserve_tags: list[str] = None
+    preserve_tags: list[str] | None = None
 
     def __post_init__(self) -> None:
         if self.preserve_tags is None:
@@ -159,7 +159,9 @@ class ArtifactStoreAdapter:
             # Determine file extension based on content type
             if isinstance(content, dict):
                 file_ext = ".json"
-                file_content = json.dumps(content, indent=2, ensure_ascii=False)
+                file_content: str | bytes = json.dumps(
+                    content, indent=2, ensure_ascii=False
+                )
             elif isinstance(content, bytes):
                 file_ext = ".bin"
                 file_content = content
@@ -381,7 +383,7 @@ class ArtifactStoreAdapter:
 
                 for artifact_id, metadata in self._metadata.items():
                     if metadata.timestamp < cutoff_date and not any(
-                        tag in policy.preserve_tags for tag in metadata.tags
+                        tag in (policy.preserve_tags or []) for tag in metadata.tags
                     ):
                         old_artifacts.append((artifact_id, metadata))
 
@@ -399,7 +401,9 @@ class ArtifactStoreAdapter:
 
                 excess_count = len(self._metadata) - policy.max_artifacts
                 for artifact_id, metadata in artifacts_by_age[:excess_count]:
-                    if not any(tag in policy.preserve_tags for tag in metadata.tags):
+                    if not any(
+                        tag in (policy.preserve_tags or []) for tag in metadata.tags
+                    ):
                         if self.remove_artifact(artifact_id):
                             stats["expired_artifacts_removed"] += 1
                             stats["size_freed_bytes"] += metadata.size_bytes
@@ -422,7 +426,7 @@ class ArtifactStoreAdapter:
                             break
 
                         if not any(
-                            tag in policy.preserve_tags for tag in metadata.tags
+                            tag in (policy.preserve_tags or []) for tag in metadata.tags
                         ):
                             if self.remove_artifact(artifact_id):
                                 stats["expired_artifacts_removed"] += 1
@@ -442,7 +446,7 @@ class ArtifactStoreAdapter:
             Dictionary with storage statistics
         """
         try:
-            stats = {
+            stats: dict[str, Any] = {
                 "total_artifacts": len(self._metadata),
                 "total_size_bytes": sum(
                     metadata.size_bytes for metadata in self._metadata.values()

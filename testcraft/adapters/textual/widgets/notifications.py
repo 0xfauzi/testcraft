@@ -60,7 +60,7 @@ class NotificationWidget(Static):
         NotificationSeverity.ERROR: ("red", "✗"),
     }
 
-    def __init__(self, notification: Notification, **kwargs):
+    def __init__(self, notification: Notification, **kwargs) -> None:
         super().__init__(**kwargs)
         self.notification = notification
         self.add_class("notification")
@@ -126,7 +126,7 @@ class Notifications(Vertical):
     # Maximum number of notifications to show
     max_notifications: reactive[int] = reactive(5)
 
-    def __init__(self, **kwargs):
+    def __init__(self, **kwargs) -> None:
         super().__init__(**kwargs)
         self.add_class("notifications-container")
 
@@ -242,7 +242,7 @@ class ToastNotifications(Static):
     without requiring user interaction.
     """
 
-    def __init__(self, **kwargs):
+    def __init__(self, **kwargs) -> None:
         super().__init__(**kwargs)
         self.add_class("toast-notifications")
         self._current_toast: str | None = None

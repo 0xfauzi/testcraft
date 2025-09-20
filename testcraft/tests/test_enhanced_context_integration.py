@@ -41,7 +41,7 @@ class TestPackagingDetection:
             scheduler_file = weather_pkg / "scheduler.py"
             scheduler_file.write_text("""
 class WeatherScheduler:
-    def __init__(self):
+    def __init__(self) -> None:
         pass
 """)
 
@@ -112,7 +112,7 @@ class City(Base):
     name = Column(String(100))
     country = Column(String(100))
 
-    def __init__(self, name, country, latitude, longitude, timezone_offset=0):
+    def __init__(self, name, country, latitude, longitude, timezone_offset=0) -> None:
         self.name = name
         self.country = country
 
@@ -142,10 +142,10 @@ class WeatherReading(Base):
             service_file = Path(temp_dir) / "service.py"
             service_file.write_text("""
 class WeatherAPIClient:
-    def __init__(self, api_key):
+    def __init__(self, api_key) -> None:
         self.api_key = api_key
 
-    def get_current_weather(self, city):
+    def get_current_weather(self, city: Any) -> Any:
         pass
 """)
 
@@ -181,7 +181,7 @@ class TestEnrichedContextBuilder:
 import logging
 import time
 from datetime import datetime
-from typing import List, Optional
+from typing import List, Optio, Anynal
 import schedule
 from rich.console import Console
 from rich.table import Table
@@ -193,7 +193,7 @@ console = Console()
 logger = logging.getLogger(__name__)
 
 class WeatherScheduler:
-    def __init__(self):
+    def __init__(self) -> None:
         self.api_client = WeatherAPIClient()
         self.running = False
 
@@ -401,7 +401,7 @@ class TestIntegrationScenario:
             scheduler_file = weather_pkg / "scheduler.py"
             scheduler_file.write_text("""
 class WeatherScheduler:
-    def __init__(self):
+    def __init__(self) -> None:
         self.api_client = None
         self.running = False
 """)
@@ -413,7 +413,7 @@ Base = declarative_base()
 
 class City(Base):
     __tablename__ = 'cities'
-    def __init__(self, name, country, latitude, longitude, timezone_offset=0):
+    def __init__(self, name, country, latitude, longitude, timezone_offset=0) -> None:
         pass
 """)
 

@@ -5,6 +5,9 @@ Provides a simple yes/no confirmation dialog with customizable
 messages and button text.
 """
 
+from collections.abc import Callable
+from typing import Any
+
 from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal
@@ -131,7 +134,7 @@ class ConfirmationDialog(BaseModal):
         yes_text: str = "Yes",
         no_text: str = "No",
         dangerous: bool = False,
-        callback: callable = None,
+        callback: Callable[..., Any] = None,
     ) -> "ConfirmationDialog":
         """
         Convenience method to show a confirmation dialog.

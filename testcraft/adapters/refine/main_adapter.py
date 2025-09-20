@@ -754,8 +754,6 @@ class RefineAdapter:
         - Must not end with common non-Python extensions (toml, md, txt, json, yaml, yml, ini, cfg, lock)
         - Must not contain spaces
         """
-        if not isinstance(module_path, str):
-            return False
         module_path = module_path.strip()
         if not module_path or " " in module_path:
             return False
@@ -804,8 +802,6 @@ class RefineAdapter:
             return candidates
 
         def add_candidate(mod: str) -> None:
-            if not isinstance(mod, str):
-                return
             mod = mod.strip()
             if not mod:
                 return
@@ -838,14 +834,13 @@ class RefineAdapter:
 
         for node in ast.walk(tree):
             if isinstance(node, ast.ImportFrom):
-                if getattr(node, "level", 0) == 0 and isinstance(
-                    getattr(node, "module", None), str
-                ):
-                    add_candidate(node.module)
+                module_name = getattr(node, "module", None)
+                if getattr(node, "level", 0) == 0 and isinstance(module_name, str):
+                    add_candidate(module_name)
             elif isinstance(node, ast.Import):
                 for alias in getattr(node, "names", []) or []:
                     name = getattr(alias, "name", None)
-                    if isinstance(name, str) and "." in name:
+                    if name and isinstance(name, str) and "." in name:
                         add_candidate(name)
 
         # Prefer dotted modules and plausible module paths
@@ -887,7 +882,7 @@ class RefineAdapter:
         """
         # The refine_content method returns a dict with 'refined_content' key
         if isinstance(llm_response, dict) and "refined_content" in llm_response:
-            return llm_response["refined_content"].strip()
+            return str(llm_response["refined_content"]).strip()
 
         # Fallback: treat as string and extract code if needed
         response_str = str(llm_response)
@@ -956,6 +951,7 @@ class RefineAdapter:
                 "diff_snippet": "N/A - None content",
             }
 
+        # This check is needed for runtime safety even if MyPy thinks it's unreachable
         if not isinstance(refined_content, str):
             return {
                 "is_valid": False,

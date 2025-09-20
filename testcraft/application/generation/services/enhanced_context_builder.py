@@ -31,7 +31,7 @@ class EnrichedContextBuilder:
     comprehensive context for test generation.
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         self._packaging_cache: dict[str, PackagingInfo] = {}
 
     def build_enriched_context(

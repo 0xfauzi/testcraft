@@ -26,7 +26,7 @@ class CodebaseParser:
     and source code content from Python files using AST analysis.
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         """Initialize the codebase parser."""
         self._cache: dict[str, dict[str, Any]] = {}
 
@@ -242,7 +242,7 @@ class CodebaseParser:
         return "python"
 
     def _extract_elements(
-        self, tree: ast.AST, source_code: str, file_path: Path
+        self, tree: ast.Module, source_code: str, file_path: Path
     ) -> tuple[list[TestElement], dict[str, str]]:
         """
         Extract TestElement objects and their source code from the AST.
@@ -334,7 +334,7 @@ class CodebaseParser:
 
         return element, source_code
 
-    def _extract_imports(self, tree: ast.AST) -> list[dict[str, Any]]:
+    def _extract_imports(self, tree: ast.Module) -> list[dict[str, Any]]:
         """Extract import information from the AST."""
         imports = []
 

@@ -123,7 +123,7 @@ class CredentialManager:
         "aws_region": ["AWS_REGION", "AWS_DEFAULT_REGION"],
     }
 
-    def __init__(self, config_overrides: dict[str, Any] | None = None):
+    def __init__(self, config_overrides: dict[str, Any] | None = None) -> None:
         """Initialize credential manager.
 
         Args:
@@ -167,7 +167,11 @@ class CredentialManager:
                     if value and str(value).strip():
                         credential_data[field_name] = value
 
-            self._credentials_cache = LLMCredentials(**credential_data)
+            # Create LLMCredentials with proper SecretStr conversion
+            secret_credentials: dict[str, SecretStr | None] = {}
+            for key, value in credential_data.items():
+                secret_credentials[key] = SecretStr(value) if value else None
+            self._credentials_cache = LLMCredentials(**secret_credentials)
 
             # Log available providers (without exposing secrets)
             available = self._credentials_cache.get_available_providers()

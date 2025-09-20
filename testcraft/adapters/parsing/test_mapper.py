@@ -28,7 +28,7 @@ class TestMapper:
     missing test structures.
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         """Initialize the test mapper."""
         self._parser = CodebaseParser()
         self._test_patterns = [
@@ -281,7 +281,7 @@ class TestMapper:
         for source_element in source_elements:
             mapped_tests = test_mapping.get(source_element.name, [])
 
-            gap_info = {
+            gap_info: dict[str, Any] = {
                 "element": source_element,
                 "gap_type": None,
                 "description": None,
@@ -323,7 +323,7 @@ class TestMapper:
 
         # Sort by priority (high priority first)
         suggestions.sort(
-            key=lambda x: {"high": 3, "medium": 2, "low": 1}[x["priority"]],
+            key=lambda x: {"high": 3, "medium": 2, "low": 1}.get(str(x["priority"]), 1),
             reverse=True,
         )
 

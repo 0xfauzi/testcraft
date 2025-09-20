@@ -5,8 +5,6 @@ Provides a DataTable-based widget for showing real-time file processing
 status, including progress indicators, test counts, and duration.
 """
 
-from typing import Any
-
 from textual.reactive import reactive
 from textual.widgets import DataTable
 
@@ -45,7 +43,7 @@ class FileTable(DataTable):
         "skipped": "status-warning",
     }
 
-    def __init__(self, **kwargs):
+    def __init__(self, **kwargs) -> None:
         super().__init__(**kwargs)
         self.add_class("file-table")
         self._file_data: dict[str, dict[str, Any]] = {}

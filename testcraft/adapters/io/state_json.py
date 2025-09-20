@@ -29,7 +29,9 @@ class StateJsonAdapter:
     and generation logs.
     """
 
-    def __init__(self, project_root: Path | None = None, state_file: str | None = None):
+    def __init__(
+        self, project_root: Path | None = None, state_file: str | None = None
+    ) -> None:
         """
         Initialize the JSON state adapter.
 
@@ -236,9 +238,6 @@ class StateJsonAdapter:
                     return result
 
                 filtered_state = _build_filtered_dict(current, state_prefix)
-            else:
-                # If it's not a dict, return the value with the prefix as key
-                filtered_state[state_prefix] = current
 
             return filtered_state
 
@@ -529,7 +528,7 @@ class StateJsonAdapter:
             self._initialize_default_structure()
             self._cache_dirty = False
 
-            return data
+            return data if isinstance(data, dict) else {}
 
         except (OSError, json.JSONDecodeError) as e:
             raise StateJsonError(f"Failed to load state from file: {e}") from e
@@ -576,7 +575,9 @@ class StateJsonAdapter:
             {"timestamp": datetime.utcnow().isoformat(), **decision_data},
         )
 
-    def get_coverage_history(self, file_path: str | None = None) -> dict[str, Any]:
+    def get_coverage_history(
+        self, file_path: str | None = None
+    ) -> dict[str, Any] | list[Any]:
         """Get coverage history, optionally for a specific file."""
         if file_path:
             # Always return list (history entries) for specific file
@@ -597,9 +598,11 @@ class StateJsonAdapter:
     def get_generation_log(self, limit: int | None = None) -> list[dict[str, Any]]:
         """Get generation log entries, optionally limited to recent entries."""
         log = self.get_state("generation_log", [])
-        if limit:
-            return log[-limit:]
-        return log
+        if isinstance(log, list):
+            if limit:
+                return log[-limit:]
+            return log
+        return []
 
     def should_regenerate_file(self, file_path: str, current_hash: str) -> bool:
         """Determine if a file should be regenerated based on state."""
@@ -607,4 +610,5 @@ class StateJsonAdapter:
         if not file_state:
             return True
 
-        return file_state.get("hash") != current_hash
+        stored_hash = file_state.get("hash") if isinstance(file_state, dict) else None
+        return stored_hash != current_hash

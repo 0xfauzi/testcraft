@@ -27,7 +27,7 @@ class WriterAppendAdapter:
     using Black and isort. It includes dry-run support and safety validation.
     """
 
-    def __init__(self, project_root: Path | None = None, dry_run: bool = False):
+    def __init__(self, project_root: Path | None = None, dry_run: bool = False) -> None:
         """
         Initialize the writer append adapter.
 

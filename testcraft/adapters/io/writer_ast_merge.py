@@ -25,7 +25,7 @@ class ASTMerger:
     """Helper class for merging AST structures."""
 
     @staticmethod
-    def extract_elements(tree: ast.AST) -> dict[str, Any]:
+    def extract_elements(tree: ast.Module) -> dict[str, Any]:
         """
         Extract elements from an AST tree.
 
@@ -35,7 +35,7 @@ class ASTMerger:
         Returns:
             Dictionary containing extracted elements
         """
-        elements = {
+        elements: dict[str, list[Any]] = {
             "imports": [],
             "from_imports": [],
             "functions": [],
@@ -202,7 +202,7 @@ class WriterASTMergeAdapter:
     to avoid duplicates, and formats the result with Black and isort.
     """
 
-    def __init__(self, project_root: Path | None = None, dry_run: bool = False):
+    def __init__(self, project_root: Path | None = None, dry_run: bool = False) -> None:
         """
         Initialize the AST merge writer adapter.
 

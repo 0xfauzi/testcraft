@@ -12,6 +12,12 @@ from typing import Any
 from pydantic import BaseModel, Field, validator
 
 
+class TestCraftError(Exception):
+    """Base exception for TestCraft domain errors."""
+
+    pass
+
+
 class TestElementType(str, Enum):
     """Enumeration of test element types."""
 

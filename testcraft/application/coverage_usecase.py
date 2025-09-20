@@ -25,7 +25,7 @@ logger = logging.getLogger(__name__)
 class CoverageUseCaseError(Exception):
     """Base exception for Coverage Use Case errors."""
 
-    def __init__(self, message: str, cause: Exception | None = None):
+    def __init__(self, message: str, cause: Exception | None = None) -> None:
         super().__init__(message)
         self.cause = cause
 

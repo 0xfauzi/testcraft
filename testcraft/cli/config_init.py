@@ -23,7 +23,7 @@ class ConfigInitializationError(Exception):
 class ConfigInitializer:
     """Initialize configuration files with guided setup."""
 
-    def __init__(self, ui: UIPort):
+    def __init__(self, ui: UIPort) -> None:
         """Initialize with UI adapter."""
         self.ui = ui
 

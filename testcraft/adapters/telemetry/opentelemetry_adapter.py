@@ -8,7 +8,6 @@ for distributed tracing and metrics collection.
 import hashlib
 import os
 from contextlib import AbstractContextManager, contextmanager
-from typing import Any
 
 from ...ports.telemetry_port import MetricValue, SpanContext, SpanKind
 
@@ -37,11 +36,11 @@ except ImportError:
 
     # Provide simple module-like stubs so tests can patch attributes
     class _TraceStub:
-        def __getattr__(self, name):
+        def __getattr__(self, name: Any) -> Any:
             return None
 
     class _MetricsStub:
-        def __getattr__(self, name):
+        def __getattr__(self, name: Any) -> Any:
             return None
 
     trace = _TraceStub()  # type: ignore
@@ -91,7 +90,9 @@ except ImportError:
 class OtelSpanContextManager:
     """OpenTelemetry span context manager with enhanced functionality."""
 
-    def __init__(self, span, span_context: SpanContext, anonymize_paths: bool = True):
+    def __init__(
+        self, span, span_context: SpanContext, anonymize_paths: bool = True
+    ) -> None:
         self.span = span
         self.span_context = span_context
         self.anonymize_paths = anonymize_paths
@@ -182,7 +183,7 @@ class OpenTelemetryAdapter:
     using the OpenTelemetry framework.
     """
 
-    def __init__(self, config: dict[str, Any]):
+    def __init__(self, config: dict[str, Any]) -> None:
         """
         Initialize the OpenTelemetry adapter.
 

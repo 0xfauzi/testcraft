@@ -31,7 +31,7 @@ class FooterProgress(Static):
     status_message: reactive[str] = reactive("Ready")
     operation_active: reactive[bool] = reactive(False)
 
-    def __init__(self, **kwargs):
+    def __init__(self, **kwargs) -> None:
         super().__init__(**kwargs)
         self.add_class("footer-progress")
 
@@ -195,7 +195,7 @@ class SimpleProgressBar(ProgressBar):
     Shows just the progress bar without additional text.
     """
 
-    def __init__(self, **kwargs):
+    def __init__(self, **kwargs) -> None:
         super().__init__(**kwargs)
         self.add_class("simple-progress")
 

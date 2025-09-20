@@ -27,7 +27,7 @@ class StatsPanel(Static):
     # Reactive stats data
     stats_data: reactive[dict[str, Any]] = reactive({})
 
-    def __init__(self, **kwargs):
+    def __init__(self, **kwargs) -> None:
         super().__init__(**kwargs)
         self.add_class("stats-panel")
 
@@ -182,7 +182,7 @@ class CompactStatsPanel(Static):
     Shows only the most important metrics in a horizontal layout.
     """
 
-    def __init__(self, **kwargs):
+    def __init__(self, **kwargs) -> None:
         super().__init__(**kwargs)
         self.add_class("stats-panel", "compact")
         self._stats = {

@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 class FileDiscoveryError(Exception):
     """Exception raised when file discovery fails."""
 
-    def __init__(self, message: str, cause: Exception | None = None):
+    def __init__(self, message: str, cause: Exception | None = None) -> None:
         super().__init__(message)
         self.cause = cause
 
@@ -34,7 +34,7 @@ class FileDiscoveryService:
     reusable across different use cases (generate, coverage, analyze, etc.).
     """
 
-    def __init__(self, config: TestPatternConfig | None = None):
+    def __init__(self, config: TestPatternConfig | None = None) -> None:
         """
         Initialize the file discovery service.
 

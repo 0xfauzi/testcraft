@@ -58,7 +58,7 @@ def detect_ui_style(ui_flag: str | None) -> UIStyle:
 class ClickContext:
     """Context object for Click commands."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.config: TestCraftConfig | None = None
         self.container: dict[str, Any] | None = None
         self.ui: EnhancedUIAdapter | None = None  # Will be initialized in app()

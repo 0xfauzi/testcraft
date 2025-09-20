@@ -16,7 +16,7 @@ from .opentelemetry_adapter import OpenTelemetryAdapter
 class TelemetryAdapterRegistry:
     """Registry for telemetry adapter implementations."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         self._adapters: dict[str, type[TelemetryPort]] = {}
         self._register_builtin_adapters()
 
@@ -166,7 +166,7 @@ class TelemetryContextManager:
         ).__enter__()
         return self._span_context
 
-    def __exit__(self, exc_type, exc_val, exc_tb):
+    def __exit__(self, exc_type, exc_val, exc_tb) -> None:
         """Exit the telemetry context."""
         if self._span_context:
             # Record exception if one occurred

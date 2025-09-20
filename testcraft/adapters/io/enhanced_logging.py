@@ -36,7 +36,7 @@ class LogMode(str, Enum):
 class StructuredLogger:
     """Enhanced logger with rich formatting and structured messages."""
 
-    def __init__(self, name: str, console: Console | None = None):
+    def __init__(self, name: str, console: Console | None = None) -> None:
         """Initialize structured logger with Rich formatting."""
         self.name = name
         self.console = console or Console(theme=TESTCRAFT_THEME)

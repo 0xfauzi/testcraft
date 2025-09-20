@@ -455,10 +455,10 @@ class RichCliComponents:
             def __enter__(self):
                 return self._inner.__enter__()
 
-            def __exit__(self, exc_type, exc_val, exc_tb):
+            def __exit__(self, exc_type, exc_val, exc_tb) -> None:
                 return self._inner.__exit__(exc_type, exc_val, exc_tb)
 
-            def __getattr__(self, item):  # delegate other attrs
+            def __getattr__(self, item: Any) -> Any:  # delegate other attrs
                 return getattr(self._inner, item)
 
         return _StatusWrapper(status, message)  # type: ignore[return-value]
@@ -559,9 +559,12 @@ class RichCliComponents:
         Returns:
             User's input
         """
-        return Prompt.ask(
-            f"[highlight]{prompt}[/]", default=default, console=self.console
-        )
+        if default is not None:
+            return Prompt.ask(
+                f"[highlight]{prompt}[/]", default=default, console=self.console
+            )
+        else:
+            return Prompt.ask(f"[highlight]{prompt}[/]", console=self.console)
 
     def create_comprehensive_layout(
         self,
@@ -603,15 +606,7 @@ class RichCliComponents:
         # Footer with recommendations
         layout["footer"].update(self.create_recommendations_panel(recommendations))
 
-        # Expose section names for tests expecting _layout_items keys
-        try:
-            layout._layout_items = {
-                "header": layout["header"],
-                "body": layout["body"],
-                "footer": layout["footer"],
-            }  # type: ignore[attr-defined]
-        except Exception:
-            pass
+        # Note: _layout_items is not available in Rich Layout API
         return layout
 
     def _format_coverage_percentage(
@@ -796,11 +791,14 @@ class RichCliComponents:
                                 ),
                                 console=self.console,
                             )
-                            value = (
-                                int(num_input)
-                                if field.get("integer", False)
-                                else float(num_input)
-                            )
+                            if num_input is None:
+                                value = 0 if field.get("integer", False) else 0.0
+                            else:
+                                value = (
+                                    int(num_input)
+                                    if field.get("integer", False)
+                                    else float(num_input)
+                                )
                             break
                         except ValueError:
                             self.console.print("[error]Please enter a valid number[/]")

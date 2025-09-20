@@ -97,7 +97,7 @@ class FilePickerDialog(BaseModal):
     def __init__(
         self,
         title: str = "Select File",
-        initial_path: Path = None,
+        initial_path: Path | None = None,
         file_filter: str = "*",
         select_directory: bool = False,
         multiple: bool = False,
@@ -319,10 +319,10 @@ class FilePickerDialog(BaseModal):
         cls,
         app,
         title: str = "Select File",
-        initial_path: Path = None,
+        initial_path: Path | None = None,
         file_filter: str = "*",
         multiple: bool = False,
-        callback: callable = None,
+        callback: Callable[..., Any] = None,
     ) -> "FilePickerDialog":
         """
         Convenience method to show a file picker dialog.
@@ -357,8 +357,8 @@ class FilePickerDialog(BaseModal):
         cls,
         app,
         title: str = "Select Directory",
-        initial_path: Path = None,
-        callback: callable = None,
+        initial_path: Path | None = None,
+        callback: Callable[..., Any] = None,
     ) -> "FilePickerDialog":
         """
         Convenience method to show a directory picker dialog.

@@ -142,7 +142,7 @@ class EnhancedUIAdapter(RichUIAdapter):
             )
 
         class OperationTracker:
-            def __init__(self, progress_instance, task_id, ui_adapter):
+            def __init__(self, progress_instance, task_id, ui_adapter) -> None:
                 self.progress = progress_instance
                 self.task_id = task_id
                 self.ui = ui_adapter
@@ -527,7 +527,7 @@ class MinimalRenderer:
 class DashboardManager:
     """Manager for real-time updating dashboards."""
 
-    def __init__(self, ui_adapter: EnhancedUIAdapter, title: str):
+    def __init__(self, ui_adapter: EnhancedUIAdapter, title: str) -> None:
         self.ui = ui_adapter
         self.title = title
         self.layout = Layout()
@@ -561,20 +561,20 @@ class DashboardManager:
         self.live_display.start()
         return self
 
-    def __exit__(self, exc_type, exc_val, exc_tb):
+    def __exit__(self, exc_type, exc_val, exc_tb) -> None:
         """Stop the live dashboard."""
         if self.live_display:
             self.live_display.stop()
 
-    def update_main_content(self, content):
+    def update_main_content(self, content: Any) -> Any:
         """Update the main content area."""
         self.layout["left"].update(content)
 
-    def update_sidebar(self, content):
+    def update_sidebar(self, content: Any) -> Any:
         """Update the sidebar content."""
         self.layout["right"].update(content)
 
-    def update_footer(self, content):
+    def update_footer(self, content: Any) -> Any:
         """Update the footer content."""
         self.layout["footer"].update(content)
 

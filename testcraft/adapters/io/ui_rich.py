@@ -10,6 +10,7 @@ from enum import Enum
 from typing import Any
 
 from rich.console import Console
+from rich.progress import Progress
 from rich.status import Status
 
 from ...ports.ui_port import UIPort
@@ -47,8 +48,8 @@ class RichUIAdapter(UIPort):
         """
         self._console = console or Console(theme=TESTCRAFT_THEME)
         self.rich_cli = RichCliComponents(self._console)
-        self._active_progress = None
-        self._active_status = None
+        self._active_progress: Progress | None = None
+        self._active_status: Status | None = None
 
     def display_progress(
         self,

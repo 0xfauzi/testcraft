@@ -32,7 +32,7 @@ class WizardScreen(Screen):
         ("escape", "cancel_wizard", "Cancel"),
     ]
 
-    def __init__(self, **kwargs):
+    def __init__(self, **kwargs) -> None:
         super().__init__(**kwargs)
         self.current_step = 0
         self.config_data = {}

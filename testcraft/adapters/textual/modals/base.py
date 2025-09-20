@@ -5,6 +5,7 @@ Provides a foundation for all modal dialogs with consistent styling
 and behavior.
 """
 
+from collections.abc import Callable
 from typing import Any
 
 from textual.app import ComposeResult
@@ -74,7 +75,7 @@ class BaseModal(ModalScreen):
         Binding("escape", "cancel", "Cancel", show=False),
     ]
 
-    def __init__(self, title: str = "", dismissable: bool = True, **kwargs):
+    def __init__(self, title: str = "", dismissable: bool = True, **kwargs) -> None:
         """
         Initialize the base modal.
 
@@ -87,7 +88,7 @@ class BaseModal(ModalScreen):
         self.title = title
         self.dismissable = dismissable
         self.result: Any = None
-        self._callback: callable | None = None
+        self._callback: Callable[..., Any] | None = None
 
     def compose(self) -> ComposeResult:
         """Compose the base modal structure."""
@@ -140,7 +141,7 @@ class BaseModal(ModalScreen):
         # Dismiss the modal screen
         self.app.pop_screen()
 
-    def set_callback(self, callback: callable) -> None:
+    def set_callback(self, callback: Callable[..., Any]) -> None:
         """
         Set a callback to be called when the modal is dismissed.
 

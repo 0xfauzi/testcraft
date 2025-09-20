@@ -14,7 +14,6 @@ from collections.abc import Callable
 from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
-from typing import Any
 
 
 class StateManager:
@@ -25,7 +24,7 @@ class StateManager:
     and history tracking for undo/redo operations.
     """
 
-    def __init__(self, persist_path: Path | None = None):
+    def __init__(self, persist_path: Path | None = None) -> None:
         """
         Initialize the state manager.
 

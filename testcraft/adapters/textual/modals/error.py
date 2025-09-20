@@ -5,6 +5,9 @@ Provides a dialog for displaying errors with detailed information
 and recovery suggestions.
 """
 
+from collections.abc import Callable
+from typing import Any
+
 from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, ScrollableContainer, Vertical
@@ -288,7 +291,7 @@ Suggestions:
         title: str = "Error",
         message: str | None = None,
         suggestions: list[str] | None = None,
-        callback: callable = None,
+        callback: Callable[..., Any] = None,
     ) -> "ErrorDialog":
         """
         Convenience method to show an error dialog.

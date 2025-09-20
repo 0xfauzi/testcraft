@@ -14,7 +14,7 @@ from ...ports.telemetry_port import MetricValue, SpanContext, SpanKind
 class NoOpSpanContext:
     """No-op span context that does nothing."""
 
-    def __init__(self, name: str):
+    def __init__(self, name: str) -> None:
         self.name = name
         self.trace_id: str = "noop-trace"
         self.span_id: str = "noop-span"
@@ -60,7 +60,7 @@ class NoOpTelemetryAdapter:
     telemetry is disabled.
     """
 
-    def __init__(self, config: dict[str, Any] | None = None):
+    def __init__(self, config: dict[str, Any] | None = None) -> None:
         """
         Initialize the no-op adapter.
 

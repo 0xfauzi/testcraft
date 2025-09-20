@@ -157,7 +157,7 @@ class InlineCodeSnippet(Static):
     without taking up too much space.
     """
 
-    def __init__(self, code: str = "", language: str = "python", **kwargs):
+    def __init__(self, code: str = "", language: str = "python", **kwargs) -> None:
         super().__init__(**kwargs)
         self.add_class("inline-code")
 

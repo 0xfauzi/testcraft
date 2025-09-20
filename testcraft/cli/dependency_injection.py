@@ -1,7 +1,5 @@
 """Dependency injection container for CLI commands."""
 
-from typing import Any
-
 from ..adapters.context.main_adapter import TestcraftContextAdapter
 
 # Import adapters
@@ -41,7 +39,7 @@ def create_dependency_container(config: TestCraftConfig) -> dict[str, Any]:
         DependencyError: If dependency creation fails
     """
     try:
-        container = {}
+        container: dict[str, Any] = {}
 
         # Core services
         container["config"] = config
@@ -164,14 +162,14 @@ def _create_coverage_adapter(config: TestCraftConfig):
 
     # This is a placeholder - actual implementation would depend on available coverage adapters
     class PlaceholderCoverageAdapter:
-        def __init__(self):
+        def __init__(self) -> None:
             pass
 
         def measure_coverage(self, source_files, test_files=None):
             # Placeholder implementation
             return {}
 
-        def get_coverage_summary(self, coverage_data):
+        def get_coverage_summary(self, coverage_data: Any) -> Any:
             return {
                 "overall_line_coverage": 0.0,
                 "overall_branch_coverage": 0.0,

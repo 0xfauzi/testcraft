@@ -25,7 +25,9 @@ class CoverageEvaluator:
     coverage-based decision making for the test generation workflow.
     """
 
-    def __init__(self, coverage_port: CoveragePort, telemetry_port: TelemetryPort):
+    def __init__(
+        self, coverage_port: CoveragePort, telemetry_port: TelemetryPort
+    ) -> None:
         """
         Initialize the coverage evaluator.
 

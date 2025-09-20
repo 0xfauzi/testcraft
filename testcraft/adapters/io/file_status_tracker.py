@@ -114,7 +114,7 @@ class FileStatusTracker:
     the generation pipeline, with detailed information about each phase.
     """
 
-    def __init__(self, ui_adapter: EnhancedUIAdapter):
+    def __init__(self, ui_adapter: EnhancedUIAdapter) -> None:
         """Initialize the file status tracker."""
         self.ui = ui_adapter
         self.console = ui_adapter.console
@@ -288,7 +288,11 @@ class FileStatusTracker:
                     file_state.generation_error = error
 
     def update_refinement_result(
-        self, file_path: str, iteration: int, success: bool, errors: list[str] = None
+        self,
+        file_path: str,
+        iteration: int,
+        success: bool,
+        errors: list[str] | None = None,
     ) -> None:
         """Update refinement results for a file."""
         with self._lock:
@@ -514,7 +518,9 @@ class FileStatusTracker:
 class LiveFileTracking:
     """Context manager for live file status tracking."""
 
-    def __init__(self, ui_adapter: EnhancedUIAdapter, title: str = "File Processing"):
+    def __init__(
+        self, ui_adapter: EnhancedUIAdapter, title: str = "File Processing"
+    ) -> None:
         self.tracker = FileStatusTracker(ui_adapter)
         self.title = title
         self._initialized = False
@@ -522,7 +528,7 @@ class LiveFileTracking:
     def __enter__(self) -> "LiveFileTracking":
         return self
 
-    def __exit__(self, exc_type, exc_val, exc_tb):
+    def __exit__(self, exc_type, exc_val, exc_tb) -> None:
         self.tracker.stop_live_tracking()
 
     def initialize_and_start(self, file_paths: list[str]) -> FileStatusTracker:

@@ -46,7 +46,7 @@ class Logs(Vertical):
         "CRITICAL": 50,
     }
 
-    def __init__(self, **kwargs):
+    def __init__(self, **kwargs) -> None:
         super().__init__(**kwargs)
         self.add_class("logs-widget")
 
@@ -192,7 +192,7 @@ class SimpleLogHandler(logging.Handler):
     application logs and display them in the TUI.
     """
 
-    def __init__(self, logs_widget: Logs):
+    def __init__(self, logs_widget: Logs) -> None:
         super().__init__()
         self.logs_widget = logs_widget
 

@@ -10,7 +10,6 @@ import logging
 import time
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Any
 
 from rich.console import Console
 from textual.app import ComposeResult
@@ -226,7 +225,7 @@ class TextualUIAdapter:
             self._app.start_operation(operation_name, f"Starting {operation_name}...")
 
         class OperationTracker:
-            def __init__(self, ui_adapter):
+            def __init__(self, ui_adapter) -> None:
                 self.ui = ui_adapter
                 self.current_step = 0
                 self.total_steps = total_steps
@@ -556,7 +555,9 @@ class TextualUIAdapter:
 class TextualInputDialog(ModalScreen):
     """Modal dialog for user input."""
 
-    def __init__(self, prompt: str, input_type: str = "string", default: Any = None):
+    def __init__(
+        self, prompt: str, input_type: str = "string", default: Any = None
+    ) -> None:
         super().__init__()
         self.prompt = prompt
         self.input_type = input_type
@@ -609,7 +610,7 @@ class TextualInputDialog(ModalScreen):
 class TextualConfirmDialog(ModalScreen):
     """Modal dialog for confirmation."""
 
-    def __init__(self, message: str, default: bool = False):
+    def __init__(self, message: str, default: bool = False) -> None:
         super().__init__()
         self.message = message
         self.default = default

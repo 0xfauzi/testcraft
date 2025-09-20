@@ -27,7 +27,7 @@ logger = logging.getLogger(__name__)
 class UtilityUseCaseError(Exception):
     """Exception for Utility Use Case specific errors."""
 
-    def __init__(self, message: str, cause: Exception | None = None):
+    def __init__(self, message: str, cause: Exception | None = None) -> None:
         super().__init__(message)
         self.cause = cause
 
@@ -271,7 +271,7 @@ class UtilityUseCase:
     async def reset_state(
         self,
         state_categories: list[str] | None = None,
-        create_backup: bool = None,
+        create_backup: bool | None = None,
         confirm_reset: bool = True,
         **kwargs: Any,
     ) -> dict[str, Any]:

@@ -110,7 +110,7 @@ class TokenCalculator:
         "refinement": 1.2,  # Refinement needs moderate tokens
     }
 
-    def __init__(self, provider: str, model: str):
+    def __init__(self, provider: str, model: str) -> None:
         """Initialize token calculator for a specific provider and model.
 
         Args:

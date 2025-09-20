@@ -25,7 +25,7 @@ logger = logging.getLogger(__name__)
 class AnalyzeUseCaseError(Exception):
     """Exception for Analyze Use Case specific errors."""
 
-    def __init__(self, message: str, cause: Exception | None = None):
+    def __init__(self, message: str, cause: Exception | None = None) -> None:
         super().__init__(message)
         self.cause = cause
 

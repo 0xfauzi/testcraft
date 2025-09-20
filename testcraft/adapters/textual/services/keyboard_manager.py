@@ -85,7 +85,7 @@ class KeyboardManager:
         "f11": ("fullscreen", "Toggle fullscreen"),
     }
 
-    def __init__(self, vi_mode_enabled: bool = True):
+    def __init__(self, vi_mode_enabled: bool = True) -> None:
         """
         Initialize the keyboard manager.
 

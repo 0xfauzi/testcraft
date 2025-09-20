@@ -56,7 +56,7 @@ class GenerateScreen(Screen):
     files_processed: reactive[int] = reactive(0)
     total_files: reactive[int] = reactive(0)
 
-    def __init__(self, **kwargs):
+    def __init__(self, **kwargs) -> None:
         super().__init__(**kwargs)
 
         # Configuration state

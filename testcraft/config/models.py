@@ -808,7 +808,7 @@ class LLMProviderConfig(BaseModel):
         "aws_secret_access_key",
     )
     @classmethod
-    def validate_api_keys_not_empty(cls, v):
+    def validate_api_keys_not_empty(cls, v: Any) -> Any:
         """Ensure API keys are not empty strings."""
         if v is not None and v.strip() == "":
             return None
@@ -816,7 +816,7 @@ class LLMProviderConfig(BaseModel):
 
     @field_validator("azure_openai_endpoint")
     @classmethod
-    def validate_azure_endpoint(cls, v):
+    def validate_azure_endpoint(cls, v: Any) -> Any:
         """Validate Azure endpoint URL format."""
         if v is not None and v.strip() and not v.startswith(("http://", "https://")):
             raise ValueError(
@@ -984,7 +984,7 @@ class TelemetryConfig(BaseModel):
 
     @field_validator("trace_sampling_rate")
     @classmethod
-    def validate_sampling_rate(cls, v):
+    def validate_sampling_rate(cls, v: Any) -> Any:
         """Ensure sampling rate is between 0.0 and 1.0."""
         if not (0.0 <= v <= 1.0):
             raise ValueError("trace_sampling_rate must be between 0.0 and 1.0")
@@ -1060,7 +1060,7 @@ class TestCraftConfig(BaseModel):
 
     @field_validator("coverage")
     @classmethod
-    def validate_coverage_thresholds(cls, v):
+    def validate_coverage_thresholds(cls, v: Any) -> Any:
         """Ensure coverage thresholds are logically consistent."""
         if v.regenerate_if_below > v.minimum_line_coverage:
             raise ValueError(
@@ -1074,7 +1074,7 @@ class TestCraftConfig(BaseModel):
 
     @field_validator("cost_management")
     @classmethod
-    def validate_cost_thresholds(cls, v):
+    def validate_cost_thresholds(cls, v: Any) -> Any:
         """Ensure cost thresholds are logically consistent."""
         thresholds = v.cost_thresholds
         if thresholds.warning_threshold > thresholds.per_request_limit:
@@ -1085,7 +1085,7 @@ class TestCraftConfig(BaseModel):
 
     @field_validator("quality")
     @classmethod
-    def validate_quality_scores(cls, v):
+    def validate_quality_scores(cls, v: Any) -> Any:
         """Ensure quality scores are within valid ranges."""
         if v.minimum_quality_score > 100 or v.minimum_quality_score < 0:
             raise ValueError("minimum_quality_score must be between 0 and 100")
@@ -1093,7 +1093,7 @@ class TestCraftConfig(BaseModel):
             raise ValueError("minimum_mutation_score must be between 0 and 100")
         return v
 
-    def get_nested_value(self, key: str, default=None):
+    def get_nested_value(self, key: str, default: Any = None) -> Any:
         """Get configuration value using dot notation (e.g., 'coverage.minimum_line_coverage')."""
         keys = key.split(".")
         value = self.model_dump()

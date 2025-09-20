@@ -204,7 +204,7 @@ class ThemeManager:
         ),
     }
 
-    def __init__(self, initial_theme: str = "default"):
+    def __init__(self, initial_theme: str = "default") -> None:
         """
         Initialize the theme manager.
 

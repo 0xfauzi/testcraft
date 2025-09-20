@@ -90,7 +90,7 @@ class TestCraftTextualApp(App[None]):
 
         # Create a custom handler that sends logs to the TUI
         class TUILogHandler(logging.Handler):
-            def __init__(self, app: "TestCraftTextualApp"):
+            def __init__(self, app: "TestCraftTextualApp") -> None:
                 super().__init__()
                 self.app = app
 
