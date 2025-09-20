@@ -1,24 +1,20 @@
-from __future__ import annotations
+from typing import Any
 
-from collections.abc import Callable, Iterator
-from dataclasses import dataclass
-
-
-@dataclass
-class StreamConfig:
-    temperature: float = 0.2
-    chunk_size: int = 128
+# TODO: Replace with specific imports when ports are implemented
 
 
-def stream_text(
-    full_text: str,
-    *,
-    on_chunk: Callable[[str], None] | None = None,
-    config: StreamConfig | None = None,
-) -> Iterator[str]:
-    cfg = config or StreamConfig()
-    for i in range(0, len(full_text), cfg.chunk_size):
-        chunk = full_text[i : i + cfg.chunk_size]
-        if on_chunk:
-            on_chunk(chunk)
-        yield chunk
+class StreamAdapter:
+    """Adapter implementation for stream operations."""
+
+    def __init__(self) -> None:
+        """Initialize the adapter."""
+        pass
+
+    def placeholder_method(self) -> Any:
+        """Placeholder method that needs implementation."""
+        raise NotImplementedError("This method needs to be implemented")
+
+
+def placeholder_function() -> None:
+    """Placeholder function."""
+    pass

@@ -1,11 +1,4 @@
-"""
-Evaluation adapters for test quality assessment and A/B testing.
+"""Package initialization."""
 
-This package provides adapters for evaluating generated tests using
-automated acceptance checks, LLM-as-judge evaluation, and statistical
-analysis for prompt optimization.
-"""
-
-from .main_adapter import TestcraftEvaluationAdapter
-
-__all__ = ["TestcraftEvaluationAdapter"]
+__version__ = "0.1.0"
+__all__ = []  # Add public API here

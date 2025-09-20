@@ -1,8 +1,4 @@
-"""Prompt package exports."""
+"""Package initialization."""
 
-from .registry import PromptError, PromptRegistry
-
-__all__ = [
-    "PromptRegistry",
-    "PromptError",
-]
+__version__ = "0.1.0"
+__all__ = []  # Add public API here

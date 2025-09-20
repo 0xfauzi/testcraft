@@ -1,19 +1,4 @@
-"""
-Context adapters for indexing, retrieval, and summarization.
+"""Package initialization."""
 
-This package provides simple, in-memory implementations to satisfy the
-`ContextPort` interface without external dependencies. They are designed
-to be lightweight scaffolds that can be evolved as requirements grow.
-"""
-
-from .indexer import InMemoryHybridIndexer
-from .main_adapter import TestcraftContextAdapter
-from .retriever import SimpleContextRetriever
-from .summarizer import ContextSummarizer
-
-__all__ = [
-    "InMemoryHybridIndexer",
-    "SimpleContextRetriever",
-    "ContextSummarizer",
-    "TestcraftContextAdapter",
-]
+__version__ = "0.1.0"
+__all__ = []  # Add public API here

@@ -1,18 +1,4 @@
-"""
-Adapters for the testcraft system.
+"""Package initialization."""
 
-This module contains all adapter implementations that provide concrete
-implementations of the port interfaces defined in the ports module.
-"""
-
-from . import context, coverage, io, llm, parsing, refine, telemetry
-
-__all__ = [
-    "coverage",
-    "context",
-    "io",
-    "llm",
-    "parsing",
-    "refine",
-    "telemetry",
-]
+__version__ = "0.1.0"
+__all__ = []  # Add public API here

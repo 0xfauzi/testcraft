@@ -1,10 +1,4 @@
-"""
-Refine adapters for test refinement operations.
+"""Package initialization."""
 
-This module contains adapters for refining existing tests based on various inputs,
-including pytest failures, code coverage gaps, and quality analysis.
-"""
-
-from .main_adapter import RefineAdapter
-
-__all__ = ["RefineAdapter"]
+__version__ = "0.1.0"
+__all__ = []  # Add public API here

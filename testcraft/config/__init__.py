@@ -1,17 +1,4 @@
-"""Configuration management for TestCraft."""
+"""Package initialization."""
 
-from .credentials import (CredentialError, CredentialManager, LLMCredentials,
-                          load_credentials)
-from .loader import ConfigLoader, load_config
-from .models import LLMProviderConfig, TestCraftConfig
-
-__all__ = [
-    "TestCraftConfig",
-    "LLMProviderConfig",
-    "ConfigLoader",
-    "load_config",
-    "CredentialManager",
-    "LLMCredentials",
-    "CredentialError",
-    "load_credentials",
-]
+__version__ = "0.1.0"
+__all__ = []  # Add public API here

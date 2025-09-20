@@ -1,6 +1,4 @@
-"""
-Generation services - Focused services for test generation workflow.
+"""Package initialization."""
 
-Contains the individual services that implement specific responsibilities
-of the test generation process.
-"""
+__version__ = "0.1.0"
+__all__ = []  # Add public API here

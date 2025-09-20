@@ -1,6 +1,4 @@
-"""
-Generation module - Modular test generation services.
+"""Package initialization."""
 
-This module contains the refactored test generation components, breaking down
-the monolithic GenerateUseCase into focused, testable services.
-"""
+__version__ = "0.1.0"
+__all__ = []  # Add public API here

@@ -1,11 +1,4 @@
-"""Service layer for Textual UI components."""
+"""Package initialization."""
 
-from .state_manager import StateManager
-from .keyboard_manager import KeyboardManager
-from .theme_manager import ThemeManager
-
-__all__ = [
-    "StateManager",
-    "KeyboardManager",
-    "ThemeManager",
-]
+__version__ = "0.1.0"
+__all__ = []  # Add public API here

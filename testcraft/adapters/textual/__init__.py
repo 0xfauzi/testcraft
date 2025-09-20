@@ -1,12 +1,4 @@
-"""
-Textual UI adapter for TestCraft.
+"""Package initialization."""
 
-Provides a modern terminal user interface using the Textual framework.
-Includes both standalone TUI applications and UI adapters that implement
-the UIPort interface.
-"""
-
-from .app import TestCraftTextualApp
-from .ui_textual import TextualUIAdapter
-
-__all__ = ["TestCraftTextualApp", "TextualUIAdapter"]
+__version__ = "0.1.0"
+__all__ = []  # Add public API here
