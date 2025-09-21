@@ -1,6 +1,6 @@
 # Task ID: 10
 # Title: Implement Reporting and Artifact Storage
-# Status: pending
+# Status: done
 # Dependencies: 4
 # Priority: medium
 # Description: Create adapters for generating reports and storing artifacts from test generation runs.
@@ -23,3 +23,53 @@
 
 # Test Strategy:
 Unit tests for report generation with various inputs. Test artifact storage and retrieval. Verify cleanup policies work correctly. Test formatting functions for CLI output.
+
+# Subtasks:
+## 1. Design JSON Report Schema and Adapter [done]
+### Dependencies: None
+### Description: Define the structure for JSON reports and implement the reporter_json.py adapter to generate structured reports including coverage delta, tests generated, pass rate, prompts, schemas, and retrieval diagnostics.
+### Details:
+Establish a clear schema for all required report fields. Implement logic to serialize test run data into this schema, supporting both standard and verbose modes.
+
+## 2. Implement Artifact Storage Adapter [done]
+### Dependencies: None
+### Description: Develop artifact_store.py to store coverage reports, generated tests, LLM responses, and manage run history with cleanup policies.
+### Details:
+Create methods for saving, retrieving, and cleaning up artifacts. Ensure compatibility with different artifact types and implement configurable cleanup strategies.
+
+## 3. Develop Rich-based Table Formatting Helpers [done]
+### Dependencies: None
+### Description: Create helper functions using Rich to format tables for CLI output, ensuring clear and visually appealing presentation of report data.
+### Details:
+Utilize Rich's Table and Console APIs to render tabular data such as test results, coverage summaries, and diagnostics in the CLI.
+
+## 4. Implement Spinners and Progress Indicators with Rich [done]
+### Dependencies: None
+### Description: Develop CLI helpers for spinners and progress bars using Rich to provide real-time feedback during long-running operations.
+### Details:
+Leverage Rich's Progress and Spinner components to indicate activity during report generation, artifact storage, and test runs.
+
+## 5. Create Concise Summary Generation Helpers [done]
+### Dependencies: None
+### Description: Implement functions to generate concise, human-readable summaries of test runs and diagnostics for CLI output.
+### Details:
+Summarize key metrics and outcomes using Rich panels or layouts for quick user comprehension.
+
+## 6. Integrate Theming and Layouts for Professional CLI [done]
+### Dependencies: 10.3, 10.4, 10.5
+### Description: Apply Rich theming, panels, and layouts to ensure a visually professional and consistent CLI interface.
+### Details:
+Define a color palette and layout strategy. Use Rich's theming and layout features to unify the appearance of all CLI outputs.
+
+## 7. Implement UIPort Integration for CLI Output [done]
+### Dependencies: 10.6
+### Description: Integrate all Rich-based UI components with the UIPort abstraction to standardize CLI output routing and enable future extensibility.
+### Details:
+Ensure all output (tables, spinners, summaries) is routed through UIPort, supporting both interactive and non-interactive modes.
+
+## 8. Document and Test the Complete Reporting and Storage System [done]
+### Dependencies: 10.1, 10.2, 10.3, 10.4, 10.5, 10.6, 10.7
+### Description: Write comprehensive documentation and end-to-end tests for the reporting and artifact storage adapters, including UI helpers and integration points.
+### Details:
+Document usage, configuration, and extension points. Develop integration tests covering typical and edge-case workflows.
+

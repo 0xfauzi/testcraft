@@ -1,0 +1,144 @@
+# TestCraft Model Catalog — Single source of truth for limits, pricing, and flags
+# Units: pricing stored per-million tokens. Runtime cost = tokens * (price_per_million / 1_000_000)
+
+[[models]]
+provider = "openai"
+model_id = "gpt-4.1"
+
+[models.limits]
+max_context = 1000000
+default_max_output = 32768  # conservative runtime default derived from vendor caps
+
+[models.flags]
+beta = false
+supports_thinking = false
+reasoning = false
+deprecated = false
+
+[models.pricing.per_million]
+input = 5000     # $5.00 per 1M input tokens (example)
+output = 15000   # $15.00 per 1M output tokens (example)
+
+[models.source]
+url = "https://platform.openai.com/docs/models/gpt-4-1"
+last_verified = "2025-07-01T00:00:00Z"
+
+
+[[models]]
+provider = "openai"
+model_id = "gpt-5"
+
+[models.limits]
+max_context = 400000
+default_max_output = 128000
+
+[models.flags]
+beta = false
+supports_thinking = false
+reasoning = false
+deprecated = false
+
+[models.pricing.per_million]
+input = 8000     # $8.00/M (example)
+output = 24000   # $24.00/M (example)
+
+[models.source]
+url = "https://platform.openai.com/docs/models/gpt-5"
+last_verified = "2025-07-01T00:00:00Z"
+
+
+[[models]]
+provider = "openai"
+model_id = "o4-mini"
+
+[models.limits]
+max_context = 200000
+default_max_output = 16384
+
+[models.flags]
+beta = false
+supports_thinking = false
+reasoning = true
+deprecated = false
+
+[models.pricing.per_million]
+input = 150     # $0.15/M
+output = 600    # $0.60/M
+
+[models.source]
+url = "https://platform.openai.com/docs/models/o-series"
+last_verified = "2025-07-01T00:00:00Z"
+
+
+[[models]]
+provider = "anthropic"
+model_id = "claude-3-7-sonnet"
+
+[models.limits]
+max_context = 200000
+default_max_output = 128000
+max_thinking = 64000
+
+[models.flags]
+beta = true
+supports_thinking = true
+reasoning = true
+deprecated = false
+
+[models.pricing.per_million]
+input = 3000   # $3.00/M (example)
+output = 15000 # $15.00/M (example)
+
+[models.source]
+url = "https://docs.anthropic.com/claude/docs/models-overview"
+last_verified = "2025-07-01T00:00:00Z"
+
+
+[[models]]
+provider = "anthropic"
+model_id = "claude-sonnet-4"
+
+[models.limits]
+max_context = 200000
+default_max_output = 64000
+max_thinking = 32000
+
+[models.flags]
+beta = false
+supports_thinking = true
+reasoning = true
+deprecated = false
+
+[models.pricing.per_million]
+input = 3000
+output = 15000
+
+[models.source]
+url = "https://docs.anthropic.com/claude/docs/models-overview"
+last_verified = "2025-07-01T00:00:00Z"
+
+
+[[models]]
+provider = "anthropic"
+model_id = "claude-opus-4"
+
+[models.limits]
+max_context = 200000
+default_max_output = 32000
+max_thinking = 48000
+
+[models.flags]
+beta = false
+supports_thinking = true
+reasoning = true
+deprecated = false
+
+[models.pricing.per_million]
+input = 5000
+output = 25000
+
+[models.source]
+url = "https://docs.anthropic.com/claude/docs/models-overview"
+last_verified = "2025-07-01T00:00:00Z"
+
+

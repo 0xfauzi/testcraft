@@ -1,25 +1,55 @@
 # Task ID: 17
 # Title: Implement Generate Use Case
-# Status: pending
+# Status: done
 # Dependencies: 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14
 # Priority: high
-# Description: Create the application layer use case for generating tests, the core functionality of the system.
+# Description: The core Generate Use Case is now fully implemented as a production-ready application layer orchestrator for test generation. It coordinates the end-to-end workflow, leveraging all finalized LLM adapters, refinement, coverage, context, and writer systems. The implementation strictly follows clean architecture principles, with pure business logic separated from adapters and robust dependency injection for all ports. The workflow is asynchronous, supports batching and concurrency, and includes comprehensive telemetry, error handling, and resource management. All integration points are validated with real adapters, and the system gracefully degrades on non-critical failures. The use case is highly configurable and supports iterative refinement, context gathering, and detailed reporting.
 # Details:
-1. Create application/generate_usecase.py with the following steps:
-   - Sync state; discover files; coverage.measure
-   - Decide files to process; build TestGenerationPlan per file
-   - Build directory tree; gather codebase info; retrieve context if enabled
-   - Apply batching policy (streaming or batch N)
-   - Build prompts with system and user content
-   - Call LLMPort.generate_tests with JSON Schema; validate; normalize
-   - Use WriterPort.write per file with configured strategy
-   - Optionally run pytest via CoveragePort; parse failures
-   - Optionally refine via RefinePort based on failure category
-   - Measure coverage delta; record state; report; telemetry + cost summary
-2. Use dependency injection for all ports
-3. Keep business logic pure (no direct adapter calls)
-4. Implement batching and concurrency strategies
-5. Add proper error handling and recovery
+Implementation highlights:
+- Full class structure with dependency injection for all required ports (LLM, Writer, Coverage, Refine, Context, Parser, State, Telemetry)
+- Async/await pattern throughout for optimal concurrency
+- State synchronization and file discovery logic
+- File processing decision logic and TestGenerationPlan creation
+- Directory tree building and context retrieval (configurable)
+- Batching and concurrency strategies for LLM calls and writing
+- LLM test generation with prompt building, validation, and normalization
+- Test file writing with configured strategies
+- Pytest execution and iterative refinement logic with capped attempts and no-change detection
+- Coverage delta measurement and comprehensive reporting
+- Telemetry and metrics recording with detailed spans and attributes
+- Robust error handling and graceful degradation on non-critical failures (context, coverage, etc.)
+- Resource cleanup and management
+- Pure business logic in orchestration, no direct adapter calls
+- Fully integrated with real LLM adapters and refinement system
+- Configurable batching, refinement, and context gathering
+- Thread pool for concurrent operations
+- All blocking notes and references to incomplete dependencies removed
+
+Workflow steps:
+1. Sync state & discover files
+2. Measure initial coverage
+3. Decide files to process
+4. Build generation plans
+5. Gather project context
+6. Execute test generation (batched)
+7. Write test files
+8. Execute & refine tests
+9. Measure final coverage
+10. Record state & telemetry
 
 # Test Strategy:
-Unit tests with mocked ports to verify correct generation flow. Test with various repository states, coverage levels, and configuration options. Verify correct handling of LLM responses, writing strategies, and refinement. Test error handling and recovery scenarios.
+Unit tests with mocked ports to verify correct generation flow, including async and concurrency scenarios. Test with various repository states, coverage levels, and configuration options. Verify correct handling of LLM responses, writing strategies, and iterative refinement. Test error handling, graceful degradation, and resource cleanup. Integration tests with real LLM and refinement adapters to ensure end-to-end functionality, correct adapter wiring, and telemetry reporting.
+
+# Subtasks:
+## 1. Document architecture and workflow [done]
+### Dependencies: None
+### Description: Write comprehensive documentation for the Generate Use Case, covering class structure, dependency injection, async workflow, configuration options, and integration points. Include diagrams and code samples illustrating the orchestration logic and adapter separation.
+### Details:
+
+
+## 2. Expand integration test coverage [done]
+### Dependencies: None
+### Description: Add additional integration tests targeting edge cases in batching, concurrency, error handling, and graceful degradation. Ensure tests cover real adapter interactions and telemetry reporting.
+### Details:
+
+

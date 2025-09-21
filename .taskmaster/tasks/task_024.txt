@@ -1,6 +1,6 @@
 # Task ID: 24
 # Title: Conduct Comprehensive Configuration Parameter Audit Across Codebase
-# Status: done
+# Status: pending
 # Dependencies: 3
 # Priority: high
 # Description: The comprehensive configuration parameter audit for the TestCraft codebase is now complete. The audit covered over 200 configuration parameters across 18+ files, tracing usage in 50+ files. Key findings include that only ~10% of parameters are actively used, with ~90% defined but unused. The audit identified inconsistent usage patterns, hardcoded defaults, and significant configuration bloat. A detailed report with actionable recommendations has been produced, including immediate removal of unused parameters, standardization of configuration access patterns, and integration of missing parameters into actual functionality. All findings are validated and deliverables are ready for systematic parameter removal, codebase cleanup, and documentation alignment.
@@ -57,7 +57,7 @@ All audit deliverables are ready and the team is ready to proceed with systemati
 9. Test that configuration access is consistent across the codebase and that parameter validation is enforced at runtime.
 
 # Subtasks:
-## 1. Catalog All Configuration Parameters in Primary Files [done]
+## 1. Catalog All Configuration Parameters in Primary Files [pending]
 ### Dependencies: None
 ### Description: Enumerate all configuration parameters in testcraft/config/models.py, loader.py, credentials.py, and pyproject.toml. Include all supported file formats and environment variable sources.
 ### Details:
@@ -69,7 +69,7 @@ CONFIGURATION PARAMETER CATALOG:
 Primary Configuration Files:
 1. testcraft/config/models.py (1,092 lines) - Main Pydantic configuration models
 2. testcraft/config/loader.py (644 lines) - Configuration loading with TOML/YAML/env support
-3. testcraft/config/credentials.py (360 lines) - Secure LLM credential management
+3. testcraft/config/credentials.py (360 lines) - Secure LLM credential management  
 4. pyproject.toml (102 lines) - Project configuration and tool settings
 
 Configuration Sections with Usage Levels:
@@ -83,7 +83,7 @@ MEDIUM USAGE (5-10 references):
 - cost_management.* (10 references): max_file_size_kb, cost_thresholds (daily_limit, per_request_limit)
 - quality.* (6 references): enable_quality_analysis, enable_mutation_testing, minimum_quality_score
 
-LOW USAGE (1-4 references):
+LOW USAGE (1-4 references):  
 - environment.* (4 references): auto_detect, preferred_manager
 - test_patterns.* (4 references): exclude patterns, test patterns
 - generation.* (3 references): include_docstrings, generate_fixtures, max_test_methods_per_class
@@ -104,7 +104,7 @@ Key Findings:
 Next: Trace detailed usage patterns for each configuration parameter to identify unused/partially implemented parameters.
 </info added on 2025-09-09T09:42:09.076Z>
 
-## 2. Trace Parameter Usage Across Codebase [done]
+## 2. Trace Parameter Usage Across Codebase [pending]
 ### Dependencies: None
 ### Description: For each parameter, systematically trace and document all usage locations throughout the codebase, including nested and overridden parameters. Use code search and static analysis.
 ### Details:
@@ -158,25 +158,25 @@ CRITICAL IMPACT:
 ~25+ configuration parameters (out of ~100 total) are defined but have NO EFFECT on system behavior, creating false expectations for users.
 </info added on 2025-09-09T09:43:57.570Z>
 
-## 3. Verify Parameter Behavior and Documentation [done]
+## 3. Verify Parameter Behavior and Documentation [pending]
 ### Dependencies: None
 ### Description: Check that each parameter's documented behavior matches its actual effect in code. Flag parameters with unclear or missing documentation. For all parameters identified as unused or unimplemented, ensure documentation is updated to reflect their true status and remove or mark misleading feature descriptions.
 ### Details:
 Audit findings require documentation updates for all unused or unimplemented parameters (e.g., PromptEngineeringConfig, ContextConfig, SecurityConfig, QualityConfig.ModernMutatorConfig). Documentation must be aligned with actual implementation to prevent user confusion. Remove or update documentation for all parameters targeted for cleanup.
 
-## 4. Identify Unused and Missing Parameters [done]
+## 4. Identify Unused and Missing Parameters [pending]
 ### Dependencies: None
 ### Description: Detect parameters that are defined but unused, and code that references non-existent or missing parameters. Use static analysis and test coverage tools. Prepare a list of all unused parameters for removal and document any code references to missing parameters.
 ### Details:
 The audit identified 25+ unused parameters (see audit report). Prepare a definitive list of these parameters for removal, including all in PromptEngineeringConfig, 4 in ContextConfig, 3 in SecurityConfig, and 6 in QualityConfig.ModernMutatorConfig. Cross-check for any code that references parameters not present in configuration definitions.
 
-## 5. Audit Configuration Loading Mechanisms [done]
+## 5. Audit Configuration Loading Mechanisms [pending]
 ### Dependencies: None
 ### Description: Review and document all configuration loading mechanisms: TOML/YAML file support, environment variable overrides (TESTCRAFT_ prefix), CLI argument overrides, and nested config support. Confirm that only implemented parameters are exposed through these mechanisms.
 ### Details:
 Ensure that configuration loading logic does not expose or validate unused parameters. Update loading schemas and validation logic to match the cleaned-up parameter set. Remove support for all parameters targeted for cleanup from loader.py, CLI templates, and environment variable handling.
 
-## 6. Compile Comprehensive Audit Report [done]
+## 6. Compile Comprehensive Audit Report [pending]
 ### Dependencies: None
 ### Description: Produce a detailed report summarizing findings: parameters that work as documented, unused/partially implemented/missing parameters, and actionable recommendations for cleanup and improvement.
 ### Details:
@@ -237,7 +237,7 @@ Conclusion
 The TestCraft configuration system is architecturally robust but suffers from significant implementation gaps. Immediate removal of unused parameters will reduce complexity and technical debt, while systematic implementation of missing features will align the system with its documented capabilities. Estimated impact: eliminating ~25% of configuration complexity with no loss of actual functionality.
 </info added on 2025-09-09T09:44:56.135Z>
 
-## 7. Prepare Implementation Plan for Configuration Cleanup [done]
+## 7. Prepare Implementation Plan for Configuration Cleanup [pending]
 ### Dependencies: 24.3, 24.4, 24.5
 ### Description: Based on the audit findings, prepare a concrete implementation plan to remove all unused configuration parameters, update documentation, and align configuration loading logic. Specify required code, schema, and documentation changes, and outline communication steps for users.
 ### Details:
@@ -249,7 +249,7 @@ Draft a step-by-step plan for:
 - Communicating changes to users (release notes, migration guide, feature matrix)
 - Ensuring all changes are peer reviewed and tested before release
 
-## 8. Systematically Remove Unused Configuration Parameters and References [done]
+## 8. Systematically Remove Unused Configuration Parameters and References [pending]
 ### Dependencies: 24.3, 24.4, 24.5, 24.7
 ### Description: Remove all unused configuration parameters identified in the audit from configuration models (testcraft/config/models.py), documentation (docs/configuration.md, loader.py sample configs), test files, CLI templates, and any remaining references in examples or documentation. Ensure only implemented parameters remain in the codebase and documentation.
 ### Details:
@@ -335,26 +335,27 @@ IMPACT ACHIEVED:
 Configuration cleanup is now complete and ready for deployment!
 </info added on 2025-09-09T10:02:10.394Z>
 
-## 9. Standardize Configuration Access Patterns [done]
+## 9. Standardize Configuration Access Patterns [pending]
 ### Dependencies: 24.8
 ### Description: Refactor all code locations to use a single, consistent configuration access pattern (e.g., config.get('parameter') or attribute access). Replace mixed usage of dict-style, attribute-style, and hardcoded values with the chosen standard. Update documentation and code comments to reflect the new pattern.
 ### Details:
 Identify all locations in the codebase where configuration parameters are accessed. Refactor to use a single, project-approved access pattern. Remove or update any code that uses hardcoded defaults where configuration should be used. Ensure all developers are informed of the new standard.
 
-## 10. Replace Hardcoded Defaults with Configuration Parameters [done]
+## 10. Replace Hardcoded Defaults with Configuration Parameters [pending]
 ### Dependencies: 24.8
 ### Description: Identify all instances of hardcoded defaults (e.g., in GenerateUseCase and similar classes) and replace them with values sourced from the configuration system. Ensure that all relevant defaults are now configurable and documented.
 ### Details:
 Audit the codebase for hardcoded default values that should be configurable. Refactor code to use configuration parameters instead. Update documentation and sample configs to reflect new configurable defaults.
 
-## 11. Integrate Previously Unused Parameters into Functionality [done]
+## 11. Integrate Previously Unused Parameters into Functionality [pending]
 ### Dependencies: 24.8
 ### Description: For parameters that are defined but not used, and are relevant to existing or planned features (e.g., cost management, quality analysis, telemetry, security validation, test pattern exclusion), implement their integration into the appropriate code paths. Remove any parameters that remain unused and are not planned for future use.
 ### Details:
 Review all unused parameters for potential integration into the codebase. For those that are relevant and feasible to implement, add the necessary logic to use them as intended. For parameters that are not relevant or feasible, remove them from the configuration and documentation.
 
-## 12. Add Configuration Integration Tests and Validation [done]
+## 12. Add Configuration Integration Tests and Validation [pending]
 ### Dependencies: 24.9, 24.10, 24.11
 ### Description: Develop integration tests to verify that all remaining configuration parameters are actively used and that configuration-driven values are respected throughout the codebase. Implement runtime validation to ensure configuration consistency and catch invalid or unused parameters.
 ### Details:
 Create integration tests covering all actively used configuration parameters. Implement runtime validation logic to enforce configuration consistency and detect unused or invalid parameters. Update CI to run these tests and validation checks.
+

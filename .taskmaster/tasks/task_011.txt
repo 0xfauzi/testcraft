@@ -1,6 +1,6 @@
 # Task ID: 11
 # Title: Implement Prompt Registry and Templates
-# Status: pending
+# Status: done
 # Dependencies: 2, 3
 # Priority: high
 # Description: Create a registry for versioned prompt templates with system and user prompts for generation and refinement.

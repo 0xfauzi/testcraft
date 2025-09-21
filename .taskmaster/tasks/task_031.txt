@@ -21,6 +21,38 @@ Acceptance criteria:
 - All adapters (OpenAI/Claude/Azure/Bedrock) read limits/pricing from the catalog
 - CLI commands present accurate data and verification passes
 - Docs updated with configuration examples and links to vendor docs
+<info added on 2025-09-21T22:52:20.237Z>
+Expanded scope and references:
+
+- OpenAI Models Pricing: https://platform.openai.com/docs/pricing
+- Claude Models pricing: https://claude.com/pricing#api
+- OpenAI Models We use for this project:
+    - gpt-5: https://platform.openai.com/docs/models/gpt-5
+    - gpt-4.1: https://platform.openai.com/docs/models/gpt-4.1
+    - o4-mini: https://platform.openai.com/docs/models/o4-mini
+- Claude Models We use for this project:
+    - 4 Sonnet
+    - 3.7 Sonnet
+    - Opus 4
+
+When inventorying and reconciling models, explicitly flag any models not present in official documentation (e.g., o4-mini, GPT-5 if not listed) and propose canonical alias mappings for Anthropic variants.
+
+The model_catalog.toml schema must include: provider, model_id, limits (max_context, default_max_output, max_thinking if applicable), flags, beta headers, pricing (per_million.input, per_million.output), source.url, and last_verified. Use conservative defaults where documentation omits explicit output caps and document the rationale for these choices.
+
+Adapters and TokenCalculator must error on unknown models; adding a new model requires explicit catalog entry.
+
+Pricing logic must be centralized in a single module (pricing.py), exposing get_pricing(model) for per-million input/output rates, and all adapters must use this module—removing embedded pricing tables.
+
+Extended context/output and beta features must be opt-in, controlled by explicit config flags (models.beta.enable_extended_output/context per provider), with Anthropic beta headers set only when the flag is true. Default limits must be enforced when flags are off, and structured logs should be added when extended features are enabled.
+
+Provider parameter compliance must ensure all request parameters match provider expectations and never exceed catalog caps. For OpenAI, use max_completion_tokens where required and block temperature on reasoning models; for Anthropic, use max_tokens and respect thinking tokens only when supported; for Azure/Bedrock, map deployments to canonical model entries and enforce the same caps.
+
+CLI commands must include 'models show' (displaying metadata, provenance, last_verified) and 'models verify' (ensuring all referenced models exist and caps are not exceeded), with tests for golden outputs and failure cases.
+
+Documentation must be updated to include configuration examples, CLI usage, and direct links to official vendor documentation. Add a monthly review checklist and record last_verified in the catalog. Include a changelog entry and migration notes.
+
+During migration and rollout, remove any unknown models, add alias mapping for Anthropic dated variants, switch adapters to catalog-driven limits/pricing behind a feature flag, enable by default after soak, and deprecate/remove all hardcoded paths.
+</info added on 2025-09-21T22:52:20.237Z>
 
 # Test Strategy:
 - Unit tests for catalog loader validation, TokenCalculator caps, pricing math
@@ -33,89 +65,90 @@ Acceptance criteria:
 ### Dependencies: None
 ### Description: Enumerate all model IDs and defaults used in code and config; identify non-doc and aliased names.
 ### Details:
-- Scan: testcraft/adapters/llm/router.py, token_calculator.py, openai.py, claude.py, azure.py, bedrock.py
-- Collect: provider, model_id, context/output/thinking defaults, pricing snippets
-- Flag: models not present in official docs (e.g., o4-mini, GPT-5 if not listed)
-- Propose canonical alias mapping (dated Anthropic variants -> canonical)
+Scan: testcraft/adapters/llm/router.py, token_calculator.py, openai.py, claude.py, azure.py, bedrock.py
+Collect: provider, model_id, context/output/thinking defaults, pricing snippets
+Flag: models not present in official docs (e.g., o4-mini, GPT-5 if not listed)
+Propose canonical alias mapping (dated Anthropic variants -> canonical)
 
 ## 2. Create model_catalog.toml (single source of truth) [pending]
 ### Dependencies: None
 ### Description: Define TOML schema and seed with OpenAI/Claude models from official docs, including provenance.
 ### Details:
-- File: testcraft/config/model_catalog.toml
-- Schema: provider, model_id, limits.{max_context, default_max_output, max_thinking?}, flags, beta headers, pricing.{per_million.input, per_million.output}, source.url, last_verified
-- Populate: gpt-4.1, gpt-4o-mini (if using), claude-3-7-sonnet, claude-sonnet-4, opus 4.x
-- Conservative defaults where docs omit explicit output caps; document rationale
+File: testcraft/config/model_catalog.toml
+Schema: provider, model_id, limits.{max_context, default_max_output, max_thinking?}, flags, beta headers, pricing.{per_million.input, per_million.output}, source.url, last_verified
+Populate: gpt-4.1, claude-3-7-sonnet, claude-sonnet-4, opus 4, o4-mini, gpt-5
+Conservative defaults where docs omit explicit output caps; document rationale
 
 ## 3. Refactor TokenCalculator to load limits from catalog [pending]
 ### Dependencies: None
 ### Description: Replace hardcoded PROVIDER_LIMITS with loader; enforce caps and context ceiling.
 ### Details:
-- Implement loader: read TOML once (cached), validate schema
-- Update calculate_max_tokens/thinking to use catalog values and safety margins
-- Unknown models -> safe defaults, structured warning
-- Add unit tests for limits math and guardrails
+Implement loader: read TOML once (cached), validate schema
+Update calculate_max_tokens/thinking to use catalog values and safety margins
+Unknown models -> error; adding a new model requires adding data to catalog
+Add unit tests for limits math and guardrails
 
 ## 4. Centralize pricing into pricing.py [pending]
 ### Dependencies: None
 ### Description: Move pricing tables to a single module backed by the catalog; compute costs per request.
 ### Details:
-- New module: testcraft/adapters/llm/pricing.py
-- Expose get_pricing(model) returning per-million input/output; helper for per-1k
-- Update openai.py/claude.py to use pricing module; remove embedded dicts
-- Unit tests for pricing math across SDK usage variants
+New module: testcraft/adapters/llm/pricing.py
+Expose get_pricing(model) returning per-million input/output; helper for per-1k
+Update openai.py/claude.py to use pricing module; remove embedded dicts
+Unit tests for pricing math across SDK usage variants
 
 ## 5. Gate beta/extended features behind config [pending]
 ### Dependencies: None
 ### Description: Make extended context/output opt-in and header-driven with explicit flags.
 ### Details:
-- Add config keys: models.beta.enable_extended_output/context per provider
-- Adapters: set Anthropic beta headers only when flag is true; never by default
-- Enforce default limits when flags are off; add structured logs when enabled
-- Tests: verify headers present/absent and caps enforced
+Add config keys: models.beta.enable_extended_output/context per provider
+Adapters: set Anthropic beta headers only when flag is true; never by default
+Enforce default limits when flags are off; add structured logs when enabled
+Tests: verify headers present/absent and caps enforced
 
 ## 6. Provider parameter compliance and ceilings [pending]
 ### Dependencies: None
 ### Description: Ensure request params match provider expectations and never exceed catalog caps.
 ### Details:
-- OpenAI: use max_completion_tokens where required; block temperature on reasoning models
-- Anthropic: use max_tokens; respect thinking tokens only when supported
-- Azure/Bedrock: map deployments to canonical model entries and enforce same caps
-- Tests per adapter path
+OpenAI: use max_completion_tokens where required; block temperature on reasoning models
+Anthropic: use max_tokens; respect thinking tokens only when supported
+Azure/Bedrock: map deployments to canonical model entries and enforce same caps
+Tests per adapter path
 
-## 7. CLI: models show/verify/diff [pending]
+## 7. CLI: models show/verify [pending]
 ### Dependencies: None
-### Description: Add commands to view/verify/diff catalog data and code usage.
+### Description: Add commands to view/verify catalog data and code usage.
 ### Details:
-- models show: print table of limits/pricing with provenance and last_verified
-- models verify: ensure all referenced models exist and caps not exceeded
-- models diff --since=DATE: display changes in catalog
-- Tests: golden outputs and failure cases
+models show: print table of limits/pricing with provenance and last_verified
+models verify: ensure all referenced models exist and caps not exceeded
+Tests: golden outputs and failure cases
 
 ## 8. Validation and tests [pending]
 ### Dependencies: None
 ### Description: Comprehensive unit/contract tests for limits, pricing, gating, and parameter compliance.
 ### Details:
-- Unit: catalog loader schema validation with bad/missing fields
-- Unit: TokenCalculator respects catalog caps and contexts; thinking budgets only when supported
-- Unit: pricing math consistent per-million → per-1k and request totals
-- Contract: adapters never exceed caps; beta flags affect headers and budgets
-- E2E smoke: typical flows capped by catalog limits
+Unit: catalog loader schema validation with bad/missing fields
+Unit: TokenCalculator respects catalog caps and contexts; thinking budgets only when supported
+Unit: pricing math consistent per-million → per-1k and request totals
+Contract: adapters never exceed caps; beta flags affect headers and budgets
+E2E smoke: typical flows capped by catalog limits
 
 ## 9. Docs and governance [pending]
 ### Dependencies: None
 ### Description: Document the catalog, CLI, beta flags, and update cadence with links to official docs.
 ### Details:
-- Update docs/configuration.md: where the catalog lives, examples, beta flags
-- Add docs/models.md: how to verify & diff; links to OpenAI/Claude official pages
-- Add monthly review checklist; record last_verified in catalog
-- Changelog entry and migration notes
+Update docs/configuration.md: where the catalog lives, examples, beta flags
+Add docs/models.md: how to verify & diff; links to OpenAI/Claude official pages
+Add monthly review checklist; record last_verified in catalog
+Changelog entry and migration notes
 
 ## 10. Migration and rollout [pending]
 ### Dependencies: None
 ### Description: Remove non-doc models, add aliases, wire adapters to catalog, staged rollout.
 ### Details:
-- Remove unknown: o4-mini, any unlisted GPT-5
-- Add alias mapping for Anthropic dated variants
-- Switch adapters to catalog-driven limits/pricing behind feature flag
-- Enable by default after soak; deprecate hardcoded paths; final removal next release
+Remove any unknown models
+Add alias mapping for Anthropic dated variants
+Switch adapters to catalog-driven limits/pricing behind feature flag
+Enable by default after soak; deprecate hardcoded paths
+Final removal and clean up of deprecated/hardcoded paths
+

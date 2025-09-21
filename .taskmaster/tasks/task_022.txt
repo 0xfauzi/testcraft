@@ -1,6 +1,6 @@
 # Task ID: 22
 # Title: Integrate Real LLM APIs and Fix Adapter Interface Issues
-# Status: pending
+# Status: done
 # Dependencies: 3, 11, 13, 14
 # Priority: high
 # Description: Replace all fake LLM adapter implementations with real API integrations (at minimum OpenAI), resolve method signature mismatches, and ensure all adapters are production-ready for real use.
@@ -45,7 +45,7 @@ The latest official Python SDKs for LLM integration as of September 2025 are: Op
 7. Ensure that configuration and API key handling works in various environments (local, CI, production).
 
 # Subtasks:
-## 1. Replace Mock LLM Adapters with Real API Integrations [pending]
+## 1. Replace Mock LLM Adapters with Real API Integrations [done]
 ### Dependencies: None
 ### Description: Remove all mock or fake LLM adapter implementations and integrate real API calls using the latest official Python SDKs for OpenAI, Anthropic Claude, Azure OpenAI, and AWS Bedrock. Ensure adapters use the correct SDK versions and support both synchronous and asynchronous methods as required.
 ### Details:
@@ -57,26 +57,27 @@ Update SDK versions to use openai (v1.106.1, released Sep 4, 2025) and anthropic
 Update AWS Bedrock integration to use the ChatBedrock class from the langchain-aws package instead of direct boto3 calls. This approach ensures a more consistent interface across providers, leverages built-in retry logic and error handling, and enables advanced features such as prompt caching. Add langchain-aws as a dependency and update all relevant adapter code and configuration to utilize ChatBedrock for Bedrock LLM operations.
 </info added on 2025-09-07T22:57:55.388Z>
 
-## 2. Implement Secure API Key and Credential Management [pending]
+## 2. Implement Secure API Key and Credential Management [done]
 ### Dependencies: 22.1
 ### Description: Integrate robust API key and credential management for all LLM providers, leveraging the existing configuration system. Ensure secrets are never hardcoded and are loaded securely at runtime.
 ### Details:
 Use environment variables or secret managers for OpenAI and Anthropic API keys, Azure OpenAI API key and endpoint, and AWS credentials (environment variables, profiles, or IAM roles). Validate credentials at startup and provide clear error messages if missing. Use Pydantic models for config validation and dependency injection for adapter setup.
 
-## 3. Refactor and Standardize Adapter Interfaces and Method Signatures [pending]
+## 3. Refactor and Standardize Adapter Interfaces and Method Signatures [done]
 ### Dependencies: 22.1
 ### Description: Audit all LLM adapters for interface mismatches and refactor method signatures to match the unified LLMPort protocol and SDK requirements. Ensure all calls use the correct methods and update usages and tests accordingly.
 ### Details:
 Update RefineAdapter and other adapters to expose methods like generate_tests(), analyze_code(), and refine_content() as defined in the interface. Replace direct llm.generate() calls with the appropriate adapter methods. Ensure consistency across all providers and update all usages and tests to match the new signatures.
 
-## 4. Integrate Prompt Registry and Robust Prompt Construction [pending]
+## 4. Integrate Prompt Registry and Robust Prompt Construction [done]
 ### Dependencies: 22.3
 ### Description: Ensure all LLM adapters use the prompt registry for constructing prompts, utilizing versioned prompt templates and robust formatting. Validate that prompt construction is consistent and resilient to template changes.
 ### Details:
 Refactor adapters to fetch and format prompts using the prompt registry. Implement logic to select the correct prompt version and handle formatting errors gracefully. Ensure all LLM calls use the constructed prompts and that prompt changes are tracked and versioned.
 
-## 5. Implement and Validate Real LLM Response Parsing and Output Validation [pending]
+## 5. Implement and Validate Real LLM Response Parsing and Output Validation [done]
 ### Dependencies: 22.1, 22.3
 ### Description: Implement robust parsing, schema validation, and error handling for real LLM API responses. Ensure adapters handle malformed or partial outputs and validate all outputs against JSON schemas.
 ### Details:
 Use common helpers for response parsing and validation. Extend or update JSON schema validation logic as needed to handle real-world LLM outputs. Implement error handling with retries and logging for API failures or malformed responses. Remove or clearly separate any remaining mock/test-only code.
+

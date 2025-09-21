@@ -801,6 +801,17 @@ class LLMProviderConfig(BaseModel):
         description="Temperature for LLM responses (lower = more deterministic)",
     )
 
+    # Beta/extended feature gating
+    class BetaFeaturesConfig(BaseModel):
+        anthropic_enable_extended_thinking: bool = False
+        anthropic_enable_extended_output: bool = False
+        openai_enable_extended_output: bool = False
+
+    beta: BetaFeaturesConfig = Field(
+        default_factory=BetaFeaturesConfig,
+        description="Feature gates for beta/extended capabilities",
+    )
+
     @field_validator(
         "openai_api_key",
         "anthropic_api_key",

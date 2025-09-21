@@ -6,6 +6,13 @@ import logging
 from dataclasses import dataclass
 from typing import Any, Literal
 
+from ...config.model_catalog import (
+    ModelLimits,
+    get_flags as catalog_get_flags,
+    get_limits as catalog_get_limits,
+    normalize_model_id as catalog_normalize,
+)
+
 logger = logging.getLogger(__name__)
 
 
@@ -23,86 +30,6 @@ class TokenLimits:
 class TokenCalculator:
     """Calculates optimal token allocation for different providers and use cases."""
 
-    # Provider-specific token limits (Latest models as of September 2025)
-    PROVIDER_LIMITS: dict[str, dict[str, TokenLimits]] = {
-        "openai": {
-            # GPT-5: Released August 7, 2025 - Flagship model
-            "gpt-5": TokenLimits(
-                max_context=400000, max_output=128000, recommended_output=100000
-            ),
-            # GPT-4.1: Released April 2025 - Extended context model
-            "gpt-4.1": TokenLimits(
-                max_context=1000000, max_output=32768, recommended_output=25000
-            ),
-            # o4-mini: Reasoning model with visual capabilities and built-in reasoning
-            "o4-mini": TokenLimits(
-                max_context=200000, max_output=16384, recommended_output=12000
-            ),
-        },
-        "anthropic": {
-            # Claude 3.7 Sonnet: Released February 2025 - Extended thinking mode with configurable reasoning budget
-            "claude-3-7-sonnet": TokenLimits(
-                max_context=200000,
-                max_output=128000,
-                recommended_output=100000,
-                max_thinking=64000,
-                recommended_thinking=32000,
-            ),
-            # Claude Sonnet 4: Released May 22, 2025 - Next-gen balanced model with reasoning
-            "claude-sonnet-4": TokenLimits(
-                max_context=200000,
-                max_output=64000,
-                recommended_output=50000,
-                max_thinking=32000,
-                recommended_thinking=16000,
-            ),
-            # Claude Opus 4: Released May 22, 2025 - Premium reasoning model with deep thinking
-            "claude-opus-4": TokenLimits(
-                max_context=200000,
-                max_output=32000,
-                recommended_output=25000,
-                max_thinking=48000,
-                recommended_thinking=24000,
-            ),
-        },
-        "azure-openai": {
-            # Azure deployments of latest OpenAI models
-            "gpt-5": TokenLimits(
-                max_context=400000, max_output=128000, recommended_output=100000
-            ),
-            "gpt-4.1": TokenLimits(
-                max_context=1000000, max_output=32768, recommended_output=25000
-            ),
-            "o4-mini": TokenLimits(
-                max_context=200000, max_output=16384, recommended_output=12000
-            ),
-        },
-        "bedrock": {
-            # AWS Bedrock deployments of latest Claude models with extended thinking
-            "anthropic.claude-3-7-sonnet-v1:0": TokenLimits(
-                max_context=200000,
-                max_output=128000,
-                recommended_output=100000,
-                max_thinking=64000,
-                recommended_thinking=32000,
-            ),
-            "anthropic.claude-sonnet-4-v1:0": TokenLimits(
-                max_context=200000,
-                max_output=64000,
-                recommended_output=50000,
-                max_thinking=32000,
-                recommended_thinking=16000,
-            ),
-            "anthropic.claude-opus-4-v1:0": TokenLimits(
-                max_context=200000,
-                max_output=32000,
-                recommended_output=25000,
-                max_thinking=48000,
-                recommended_thinking=24000,
-            ),
-        },
-    }
-
     # Use case specific multipliers for recommended output
     USE_CASE_MULTIPLIERS: dict[str, float] = {
         "test_generation": 1.5,  # Test generation needs more tokens
@@ -117,34 +44,32 @@ class TokenCalculator:
             provider: Provider name (openai, anthropic, azure-openai, bedrock)
             model: Model identifier
         """
-        self.provider = provider
-        self.model = model
-        self.limits = self._get_model_limits()
+        # Normalize to canonical provider/model for lookup in catalog
+        canonical_provider, canonical_model = catalog_normalize(provider, model)
+        self.provider = canonical_provider
+        self.model = canonical_model
+        try:
+            cat_limits: ModelLimits = catalog_get_limits(self.provider, self.model)
+            self.flags = catalog_get_flags(self.provider, self.model)
+        except ValueError as e:  # Unknown model
+            raise ValueError(
+                f"Unknown model {provider}/{model}: add it to the catalog"
+            ) from e
+
+        # Adapt catalog limits to internal structure expected by methods
+        self.limits = TokenLimits(
+            max_context=cat_limits.max_context,
+            max_output=cat_limits.default_max_output,
+            recommended_output=cat_limits.default_max_output,
+            max_thinking=cat_limits.max_thinking,
+            recommended_thinking=(
+                (cat_limits.max_thinking // 2) if cat_limits.max_thinking else None
+            ),
+        )
 
     def _get_model_limits(self) -> TokenLimits:
-        """Get token limits for the current model."""
-        try:
-            return self.PROVIDER_LIMITS[self.provider][self.model]
-        except KeyError:
-            # Fallback to modern defaults (reasonable for 2025-era models)
-            logger.warning(
-                f"Unknown model {self.provider}/{self.model}, using modern defaults"
-            )
-
-            # Only add thinking tokens for providers that support it (Anthropic)
-            if self.provider in ["anthropic", "bedrock"]:
-                return TokenLimits(
-                    max_context=200000,
-                    max_output=32000,
-                    recommended_output=25000,
-                    max_thinking=32000,
-                    recommended_thinking=16000,
-                )
-            else:
-                # OpenAI and Azure OpenAI use built-in reasoning, no configurable thinking tokens
-                return TokenLimits(
-                    max_context=200000, max_output=32000, recommended_output=25000
-                )
+        """Deprecated: limits are fetched from the catalog in __init__."""
+        return self.limits
 
     def calculate_max_tokens(
         self,
@@ -212,7 +137,8 @@ class TokenCalculator:
         Returns:
             Recommended thinking tokens, or None if model doesn't support thinking
         """
-        if self.limits.max_thinking is None:
+        # Only if catalog indicates support and a cap exists
+        if (self.limits.max_thinking is None) or (not getattr(self, "flags", None) or not self.flags.supports_thinking):
             return None  # Model doesn't support thinking mode
 
         # Base thinking tokens from model limits
@@ -251,15 +177,19 @@ class TokenCalculator:
 
     def supports_thinking_mode(self) -> bool:
         """Check if the model supports extended thinking mode (Claude-style configurable thinking)."""
-        return self.limits.max_thinking is not None
+        return (self.limits.max_thinking is not None) and getattr(self, "flags", None) and self.flags.supports_thinking
 
     def is_reasoning_model(self) -> bool:
         """Check if the model has built-in reasoning capabilities (OpenAI o-series style)."""
-        # OpenAI o-series models have built-in reasoning
-        openai_reasoning_models = ["o4-mini", "o3", "o4"]
-        return self.provider in ["openai", "azure-openai"] and any(
-            reasoning_model in self.model for reasoning_model in openai_reasoning_models
-        )
+        # Prefer catalog flag when available
+        try:
+            return bool(getattr(self, "flags", None) and self.flags.reasoning)
+        except Exception:
+            # Fallback heuristic
+            openai_reasoning_models = ["o4-mini", "o3", "o4"]
+            return self.provider in ["openai", "azure-openai"] and any(
+                reasoning_model in self.model for reasoning_model in openai_reasoning_models
+            )
 
     def has_reasoning_capabilities(self) -> bool:
         """Check if the model has any form of reasoning capabilities."""

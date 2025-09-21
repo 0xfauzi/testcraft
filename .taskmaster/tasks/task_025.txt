@@ -1,6 +1,6 @@
 # Task ID: 25
 # Title: Implement Smart Formatter Selection System with Ruff Support
-# Status: done
+# Status: pending
 # Dependencies: 7, 19
 # Priority: medium
 # Description: Production-ready: Replaced the Black+isort formatting approach with an intelligent system that prioritizes Ruff, detects available formatters at runtime, and gracefully falls back as needed. The new system is robust, performant, and fully tested.

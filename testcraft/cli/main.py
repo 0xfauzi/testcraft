@@ -25,6 +25,7 @@ from ..config.models import TestCraftConfig
 from .dependency_injection import DependencyError, create_dependency_container
 from .evaluation_commands import add_evaluation_commands
 from .utility_commands import add_utility_commands
+from .commands.models import add_model_commands
 
 
 def detect_ui_style(ui_flag: str | None) -> UIStyle:
@@ -150,7 +151,7 @@ def app(
         logger.debug("🔍 [cyan]Debug mode enabled[/] - verbose logging active")
 
     # Allow running certain commands without a valid config
-    skip_config_commands = {"init-config"}
+    skip_config_commands = {"init-config", "models"}
     invoked = None
     try:
         # Best-effort detection of invoked subcommand from argv
@@ -930,6 +931,9 @@ add_evaluation_commands(app)
 
 # Add utility commands
 add_utility_commands(app)
+
+# Add model catalog commands
+add_model_commands(app)
 
 
 if __name__ == "__main__":

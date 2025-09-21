@@ -44,6 +44,7 @@ class LLMRouter(LLMPort):
                 "temperature": self.config.get("temperature", 0.1),
                 "max_retries": self.config.get("max_retries", 3),
                 "base_url": self.config.get("openai_base_url"),
+                "beta": self.config.get("beta", {}),
             }
         elif provider == "anthropic":
             provider_config = {
@@ -52,6 +53,7 @@ class LLMRouter(LLMPort):
                 "timeout": self.config.get("anthropic_timeout", 180.0),
                 "temperature": self.config.get("temperature", 0.1),
                 "max_retries": self.config.get("max_retries", 3),
+                "beta": self.config.get("beta", {}),
             }
         elif provider == "azure-openai":
             provider_config = {
@@ -65,6 +67,7 @@ class LLMRouter(LLMPort):
                 "temperature": self.config.get("temperature", 0.1),
                 "max_retries": self.config.get("max_retries", 3),
                 "max_tokens": self.config.get("azure_openai_max_tokens", 4000),
+                "beta": self.config.get("beta", {}),
             }
         elif provider == "bedrock":
             provider_config = {
@@ -75,6 +78,7 @@ class LLMRouter(LLMPort):
                 "timeout": self.config.get("bedrock_timeout", 180.0),
                 "temperature": self.config.get("temperature", 0.1),
                 "max_retries": self.config.get("max_retries", 3),
+                "beta": self.config.get("beta", {}),
             }
 
         return provider_config

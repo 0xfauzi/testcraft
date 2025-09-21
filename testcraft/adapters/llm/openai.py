@@ -16,6 +16,7 @@ from ...ports.llm_port import LLMPort
 from ...prompts.registry import PromptRegistry
 from .common import parse_json_response, with_retries
 from .token_calculator import TokenCalculator
+from .pricing import calculate_cost as pricing_calculate_cost
 
 logger = logging.getLogger(__name__)
 
@@ -49,6 +50,7 @@ class OpenAIAdapter(LLMPort):
         credential_manager: CredentialManager | None = None,
         prompt_registry: PromptRegistry | None = None,
         cost_port: CostPort | None = None,
+        beta: dict[str, Any] | None = None,
         **kwargs: Any,
     ):
         """Initialize OpenAI adapter.
@@ -78,6 +80,7 @@ class OpenAIAdapter(LLMPort):
 
         # Initialize cost tracking
         self.cost_port = cost_port
+        self.beta = beta or {}
 
         # Initialize token calculator
         self.token_calculator = TokenCalculator(provider="openai", model=model)
@@ -825,15 +828,13 @@ class OpenAIAdapter(LLMPort):
         Returns:
             True if model supports temperature adjustment, False if only default
         """
-        # Reasoning models that only support default temperature (1.0)
-        reasoning_models = [
-            "o4-mini",
-            "o3",
-            "o4",
-            # Add other reasoning models as they're released
-        ]
-
-        return not any(model_name in self.model for model_name in reasoning_models)
+        # Prefer catalog flags via token calculator
+        try:
+            if self.token_calculator.is_reasoning_model():
+                return False
+        except Exception:
+            pass
+        return True
 
     def _estimate_complexity(
         self, code_content: str
@@ -898,6 +899,12 @@ class OpenAIAdapter(LLMPort):
         """Make a chat completion request to OpenAI."""
         # Use provided max_tokens or fallback to instance default
         tokens_to_use = max_tokens if max_tokens is not None else self.max_tokens
+        # Clamp to catalog cap for safety
+        try:
+            cap = self.token_calculator.limits.max_output
+            tokens_to_use = min(int(tokens_to_use or cap), int(cap))
+        except Exception:
+            pass
 
         # Branch: Use Responses API for o-series reasoning models
         if self._is_o_series_reasoning_model():
@@ -1017,37 +1024,26 @@ class OpenAIAdapter(LLMPort):
                 try:
                     if self.cost_port and getattr(response, "usage", None):
                         usage = response.usage
-                        # Only proceed if usage exposes token fields we can read
-                        if any(
-                            hasattr(usage, attr)
-                            for attr in (
-                                "input_tokens",
-                                "output_tokens",
-                                "total_tokens",
-                            )
-                        ) or isinstance(usage, dict):
-                            cost = self._calculate_api_cost(
-                                usage, getattr(response, "model", self.model)
-                            )
-                            tokens_total = getattr(usage, "total_tokens", None) or (
-                                getattr(usage, "input_tokens", 0)
-                                + getattr(usage, "output_tokens", 0)
-                            )
-                            cost_data = {
-                                "cost": cost,
-                                "tokens_used": tokens_total,
-                                "api_calls": 1,
-                                "model": getattr(response, "model", self.model),
-                                "prompt_tokens": getattr(usage, "input_tokens", None),
-                                "completion_tokens": getattr(
-                                    usage, "output_tokens", None
-                                ),
-                            }
-                            self.cost_port.track_usage(
-                                service="openai",
-                                operation="responses",
-                                cost_data=cost_data,
-                            )
+                        cost = pricing_calculate_cost(
+                            usage, "openai", getattr(response, "model", self.model)
+                        )
+                        tokens_total = getattr(usage, "total_tokens", None) or (
+                            getattr(usage, "input_tokens", 0)
+                            + getattr(usage, "output_tokens", 0)
+                        )
+                        cost_data = {
+                            "cost": cost,
+                            "tokens_used": tokens_total,
+                            "api_calls": 1,
+                            "model": getattr(response, "model", self.model),
+                            "prompt_tokens": getattr(usage, "input_tokens", None),
+                            "completion_tokens": getattr(usage, "output_tokens", None),
+                        }
+                        self.cost_port.track_usage(
+                            service="openai",
+                            operation="responses",
+                            cost_data=cost_data,
+                        )
                 except Exception as e:
                     logger.debug(f"Cost tracking skipped due to usage format: {e}")
 
@@ -1160,7 +1156,7 @@ class OpenAIAdapter(LLMPort):
             # Track costs if cost port is available
             if self.cost_port and response.usage:
                 try:
-                    cost = self._calculate_api_cost(response.usage, response.model)
+                    cost = pricing_calculate_cost(response.usage, "openai", response.model)
                     cost_data = {
                         "cost": cost,
                         "tokens_used": response.usage.total_tokens,
@@ -1202,70 +1198,5 @@ class OpenAIAdapter(LLMPort):
             raise OpenAIError(f"Chat completion failed: {e}") from e
 
     def _calculate_api_cost(self, usage: Any, model: str) -> float:
-        """Calculate the API cost based on token usage and model pricing.
-
-        Args:
-            usage: OpenAI usage object with token counts
-            model: Model name used for the request
-
-        Returns:
-            Calculated cost in USD
-        """
-        # OpenAI pricing (as of 2024) - costs per 1,000 tokens
-        # Prices may change, so this should ideally be configurable
-        model_pricing = {
-            "gpt-4": {"input": 0.03, "output": 0.06},
-            "gpt-4-turbo": {"input": 0.01, "output": 0.03},
-            "gpt-4o": {"input": 0.005, "output": 0.015},
-            "gpt-4o-mini": {"input": 0.00015, "output": 0.0006},
-            "o4-mini": {"input": 0.00015, "output": 0.0006},  # Same as gpt-4o-mini
-            "gpt-3.5-turbo": {"input": 0.0015, "output": 0.002},
-            # Add more models as needed
-        }
-
-        # Default pricing if model not found (use gpt-4o-mini rates)
-        pricing = model_pricing.get(model, {"input": 0.00015, "output": 0.0006})
-
-        # Extract token counts across SDK variants
-        try:
-            # Support object-style usage with prompt/completion or input/output tokens
-            prompt_tokens = (
-                getattr(usage, "prompt_tokens", None)
-                if hasattr(usage, "prompt_tokens")
-                else None
-            )
-            if prompt_tokens is None:
-                prompt_tokens = getattr(usage, "input_tokens", None)
-            completion_tokens = (
-                getattr(usage, "completion_tokens", None)
-                if hasattr(usage, "completion_tokens")
-                else None
-            )
-            if completion_tokens is None:
-                completion_tokens = getattr(usage, "output_tokens", None)
-        except Exception:
-            prompt_tokens = None
-            completion_tokens = None
-
-        # Dict-style fallback
-        if prompt_tokens is None and isinstance(usage, dict):
-            prompt_tokens = usage.get("prompt_tokens") or usage.get("input_tokens")
-        if completion_tokens is None and isinstance(usage, dict):
-            completion_tokens = usage.get("completion_tokens") or usage.get(
-                "output_tokens"
-            )
-
-        # Final safety defaults
-        prompt_tokens = int(prompt_tokens or 0)
-        completion_tokens = int(completion_tokens or 0)
-
-        # Calculate cost based on token usage
-        prompt_cost = (prompt_tokens / 1000) * pricing["input"]
-        completion_cost = (completion_tokens / 1000) * pricing["output"]
-        total_cost = prompt_cost + completion_cost
-
-        logger.debug(
-            f"Cost calculation for {model}: prompt={prompt_cost:.6f}, completion={completion_cost:.6f}, total={total_cost:.6f}"
-        )
-
-        return total_cost
+        # Backward-compat method: delegate to centralized pricing
+        return pricing_calculate_cost(usage, "openai", model)

@@ -686,6 +686,19 @@ bedrock_timeout = 60.0            # Timeout for Bedrock requests (seconds)
 - `anthropic.claude-3-sonnet-20240229-v1:0`
 - `anthropic.claude-3-haiku-20240307-v1:0`
 
+### Beta/Extended Feature Gates
+
+Add feature gates under the LLM section to control beta features:
+
+```toml
+[llm.beta]
+anthropic_enable_extended_thinking = false
+anthropic_enable_extended_output = false
+openai_enable_extended_output = false
+```
+
+These flags gate extended provider capabilities (e.g., configurable thinking budgets) even when a model supports them. Defaults are disabled.
+
 ## Environment Variable Overrides
 
 Override any configuration value using environment variables with the prefix `TESTCRAFT_`. Use double underscores (`__`) to separate nested keys.

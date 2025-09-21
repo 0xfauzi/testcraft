@@ -1,24 +1,28 @@
 # Task ID: 5
 # Title: Implement Parser Adapters
-# Status: pending
+# Status: done
 # Dependencies: 4
 # Priority: high
-# Description: Create adapters for parsing Python code and mapping tests to source code elements.
+# Description: Create adapters for parsing Python code and mapping tests to source code elements. The parser must extract both structural metadata and the actual source code content for each code element to support test generation.
 # Details:
 1. Create adapters/parsing/codebase_parser.py:
    - Implement AST-based parsing of Python files
    - Extract functions, classes, methods with signatures
    - Parse docstrings and type annotations
    - Identify import statements and dependencies
+   - Extract the raw source code content for each code element (function, class, method) in addition to metadata
+   - Ensure parsing results include both metadata (name, type, line_range, docstring) and the actual implementation code
+   - Consider whether the TestElement domain model should be extended with a 'source_code' field, or if this content should be handled separately in the parsing pipeline
 2. Create adapters/parsing/test_mapper.py:
    - Map test functions to source code elements
    - Identify existing test coverage for elements
    - Support pytest naming conventions
+   - Ensure mapping logic can access both metadata and source code content for each element
 3. Implement helper functions for:
    - Building directory trees with bounded depth/width
-   - Extracting element signatures
+   - Extracting element signatures and source code
    - Identifying uncovered elements
-4. Add caching for parsed files to improve performance
+   - Caching parsed files to improve performance, including both metadata and source code content
 
 # Test Strategy:
-Unit tests with sample Python files to verify correct parsing of functions, classes, methods, and imports. Test mapping of test functions to source elements with various naming conventions. Verify directory tree generation with different depth/width constraints.
+Unit tests with sample Python files to verify correct parsing of functions, classes, methods, and imports. Test that both metadata and actual source code content are extracted for each code element. Test mapping of test functions to source elements with various naming conventions, ensuring access to source code content. Verify directory tree generation with different depth/width constraints.

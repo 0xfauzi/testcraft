@@ -1,6 +1,6 @@
 # Task ID: 20
 # Title: Implement Evaluation Harness and Documentation
-# Status: pending
+# Status: done
 # Dependencies: 17, 19
 # Priority: low
 # Description: Create an evaluation system for testing the quality of generated tests and comprehensive documentation.
@@ -25,6 +25,241 @@
    - Type-check with mypy
    - Run tests with pytest
    - Verify documentation builds
+<info added on 2025-09-08T12:59:20.901Z>
+Latest trends and best practices for LLM-as-judge evaluation systems (2025):
+
+Integrate a rubric-driven LLM-as-judge workflow into evaluation/harness.py, leveraging explicit, versioned rubrics for test quality dimensions such as correctness, coverage, clarity, and safety. Implement prompt engineering to instruct the LLM judge to provide both numeric scores and concise rationales for each dimension, storing all scores, rationales, and prompt versions as structured artifacts for traceability and auditability. Support both single-output scoring and pairwise (A/B) comparison for prompt variant evaluation, with standardized prompts to mitigate bias and ensure repeatability. For reliability, optionally aggregate scores from multiple LLM judges and rerun evaluations to detect inconsistencies. Combine LLM-based semantic assessment with automated acceptance checks (syntactic validity, importability, pytest success, coverage delta) to detect hallucinations and subtle bugs. Document the evaluation methodology, including rubric definitions, prompt templates, and artifact storage patterns, in README and advanced usage docs. Recommended frameworks and patterns include Langfuse for rubric-driven scoring and rationale logging, MT-Bench/Chatbot Arena for pairwise comparison, and custom golden repo pipelines for offline evaluation. Monitor and audit LLM judge outputs for consistency, especially when updating prompts or switching LLM providers.
+</info added on 2025-09-08T12:59:20.901Z>
+<info added on 2025-09-08T13:00:27.355Z>
+Append the following best practices and implementation guidance for prompt A/B testing and evaluation:
+
+Integrate a systematic, multi-layered prompt evaluation pipeline into evaluation/harness.py, following 2025 best practices:
+
+- Implement side-by-side (SxS) A/B testing by executing all prompt variants on curated, representative datasets that include real-world cases and edge scenarios.
+- Support both automated LLM-based scoring (LLM-as-judge) and human-in-the-loop review. Use explicit, versioned rubrics for dimensions such as correctness, coverage, clarity, and safety. Instruct LLM judges to provide numeric scores and concise rationales for each dimension, storing all results and prompt versions as structured artifacts for traceability.
+- Enable pairwise (A/B) comparison workflows, using standardized prompts to minimize bias and ensure repeatability. Optionally aggregate scores from multiple LLM judges and rerun evaluations to detect inconsistencies.
+- Incorporate statistical significance testing (e.g., t-tests, bootstrap) to determine if observed differences between prompt variants are meaningful.
+- Combine LLM-based semantic assessment with automated acceptance checks (syntactic validity, importability, pytest success, coverage delta) to detect hallucinations and subtle bugs.
+- Continuously monitor prompt performance on live data and feed results back into the evaluation loop for ongoing optimization.
+- Document the evaluation methodology, including rubric definitions, prompt templates, and artifact storage patterns, in README and advanced usage docs.
+
+Recommended tools and frameworks for systematic prompt evaluation and optimization include:
+- Helicone (prompt analytics, A/B testing, production monitoring)
+- OpenAI Eval (custom evals, LLM-as-judge integration)
+- PromptFoo (prompt variant testing, regression tracking)
+- PromptLayer (version control, analytics, human-in-the-loop)
+- Agenta (side-by-side LLM comparisons)
+- LangChain (modular evaluation chains)
+- OpenPrompt (advanced templates, dynamic evaluation)
+- Traceloop (prompt tracing, debugging)
+- Braintrust (collaborative human review)
+- Langfuse (rubric-driven scoring and rationale logging)
+- MT-Bench/Chatbot Arena (pairwise comparison frameworks)
+
+Ensure the evaluation harness supports:
+- Batch execution of prompt variants and logging of all input/output pairs, variant IDs, and evaluation scores via the state management system.
+- CLI commands for running A/B tests, viewing evaluation results, and comparing prompt performance, with Rich-based UI for displaying evaluation tables and statistical summaries.
+- Multimodal prompt evaluation if needed (e.g., OpenPrompt, LangChain).
+- Integration of prompt evaluation into the CI/CD pipeline for automatic regression testing on prompt changes.
+- Regular bias and fairness audits using both automated and human review.
+
+Include a best practices checklist in documentation covering dataset curation, side-by-side prompt runs, automated and human evaluation, statistical testing, state logging, continuous monitoring, and multimodal support.
+</info added on 2025-09-08T13:00:27.355Z>
 
 # Test Strategy:
 Test the evaluation harness with sample repositories. Verify documentation is accurate and comprehensive. Test CI pipeline with various code changes to ensure it catches issues.
+
+# Subtasks:
+## 1. Design and Implement testcraft Evaluation Harness Core [done]
+### Dependencies: None
+### Description: Develop evaluation/harness.py for testcraft, supporting offline golden repo testing, automated acceptance checks (syntactic validity, importability, pytest success, coverage delta), and integration with JSON state adapters and existing LLM adapters. Ensure clean architecture and artifact storage patterns.
+### Details:
+Implement the core harness logic in evaluation/harness.py, using the testcraft naming convention and TOML-based configuration (.testcraft.toml). Integrate with the coverage adapters and LLM adapters, and ensure all evaluation artifacts (inputs, outputs, scores, rationales, prompt versions) are stored as structured JSON for traceability. Follow clean architecture principles to separate evaluation logic, adapters, and artifact management.
+<info added on 2025-09-08T13:13:40.132Z>
+✅ Subtask 20.1 Implementation Complete!
+
+What was accomplished:
+
+1. Created EvaluationPort Interface (testcraft/ports/evaluation_port.py):
+   - Comprehensive protocol defining all evaluation operations
+   - Rich type definitions: EvaluationConfig, AcceptanceResult, LLMJudgeResult, EvaluationResult
+   - Support for single, pairwise, and batch evaluation modes
+   - Golden repository evaluation and trend analysis methods
+   - Follows testcraft's established port-based architecture patterns
+
+2. Implemented TestcraftEvaluationAdapter (testcraft/adapters/evaluation/main_adapter.py):
+   - Automated Acceptance Checks: Syntax validation, import checking, pytest execution, coverage improvement measurement
+   - LLM-as-Judge Integration: Rubric-driven evaluation with structured prompts, rationale generation, versioned prompts from registry
+   - A/B Testing Pipeline: Pairwise comparison with statistical confidence, side-by-side evaluation
+   - Batch Processing: Efficient evaluation of multiple test variants
+   - Golden Repository Testing: Comprehensive regression detection against known-good repositories
+   - Trend Analysis: Historical evaluation analysis with recommendations
+   - Clean Architecture: Proper dependency injection via ports, no direct adapter dependencies
+   - 2025 Best Practices: Bias mitigation, statistical testing, artifact storage with traceability
+
+3. Created Evaluation Harness (evaluation/harness.py):
+   - High-level Interface: Convenient methods for all evaluation scenarios
+   - Dependency Management: Automatic initialization of required adapters
+   - Configuration Support: Integration with testcraft config system
+   - Convenience Functions: Quick evaluation and comparison utilities
+   - Proper Integration: Uses JSON state adapters, artifact storage, LLM routing
+
+Key Features Implemented:
+- testcraft naming throughout (not testgen)
+- Clean architecture with port-based dependency injection
+- JSON state management integration for evaluation artifacts
+- Safety policies enforcement for file operations
+- Comprehensive error handling and logging
+- Artifact storage for all evaluation results with cleanup policies
+- LLM-as-judge with rubric-driven scoring and rationale generation
+- Statistical A/B testing with confidence estimation
+- Golden repo evaluation for regression testing
+- Trend analysis for continuous improvement
+
+Integration Status:
+- Coverage adapter integration for acceptance checks
+- LLM adapter integration via router for flexibility  
+- State adapter integration for persistent evaluation tracking
+- Artifact store integration for result storage and cleanup
+- Prompt registry integration for versioned evaluation prompts
+- Safety policies integration for secure file operations
+
+The core evaluation harness is now fully operational and ready for integration testing. All components follow established testcraft patterns and support the latest 2025 evaluation methodologies.
+</info added on 2025-09-08T13:13:40.132Z>
+
+## 2. Integrate Rubric-Driven LLM-as-Judge and A/B Testing Pipeline [done]
+### Dependencies: None
+### Description: Implement rubric-driven LLM-as-judge workflows with rationale generation, versioned prompt registry, and support for both single-output and pairwise (A/B) scoring. Integrate bias mitigation, statistical significance testing, and human-in-the-loop review. Leverage modern frameworks (PromptFoo, PromptLayer patterns) and enable batch prompt variant execution.
+### Details:
+Add LLM-as-judge evaluation with explicit, versioned rubrics for correctness, coverage, clarity, and safety. Engineer prompts to elicit numeric scores and concise rationales per dimension. Store all scores, rationales, and prompt versions as structured artifacts. Implement side-by-side (SxS) A/B testing with standardized prompts and statistical significance testing (e.g., t-tests, bootstrap). Support aggregation of multiple LLM judges and human review. Integrate with PromptFoo/PromptLayer-style pipelines and ensure CLI commands for running and visualizing A/B tests.
+
+## 3. Develop TOML-Based Configuration System and Sample .testcraft.toml Files [done]
+### Dependencies: None
+### Description: Implement a TOML configuration system for testcraft, replacing YAML. Provide minimal and comprehensive .testcraft.toml samples with detailed comments and schema validation.
+### Details:
+Design a robust TOML schema for all evaluation harness options, including LLM-as-judge settings, prompt registry, acceptance checks, and artifact paths. Generate sample .testcraft.toml files: one minimal for quickstart, one comprehensive with inline comments explaining each option. Ensure schema validation and error reporting for misconfigurations.
+
+## 4. Implement CI Pipeline for Evaluation and Documentation Quality [done]
+### Dependencies: None
+### Description: Set up a CI pipeline to lint (ruff), type-check (mypy), run tests (pytest), verify documentation builds, and automate regression testing for prompt and evaluation changes.
+### Details:
+Configure CI to run ruff for linting, mypy for type checks, and pytest for all evaluation harness and adapter tests. Add steps to build and check documentation. Integrate prompt evaluation into CI/CD: automatically run regression tests on prompt changes, log evaluation results, and fail builds on significant regressions. Ensure all artifacts and logs are stored for traceability.
+
+## 5. Author Comprehensive Documentation and Best Practices Checklist [done]
+### Dependencies: None
+### Description: Write and maintain README.md, advanced usage docs, configuration reference, architecture overview, contributing guidelines, and a best practices checklist for prompt evaluation and harness usage.
+### Details:
+Document all evaluation harness features, configuration options, and architecture. Include a quickstart guide, advanced usage (LLM-as-judge, A/B testing, statistical analysis), and a configuration reference for .testcraft.toml. Provide an architecture overview and contributing guidelines. Add a best practices checklist covering dataset curation, prompt evaluation, statistical testing, artifact logging, continuous monitoring, and multimodal support.
+<info added on 2025-09-08T14:29:08.497Z>
+✅ Subtask 20.5 Implementation Complete!
+
+Successfully authored comprehensive documentation and best practices checklist for TestCraft evaluation harness:
+
+Documentation Deliverables Created:
+
+1. Updated README.md 
+- Complete quickstart guide with evaluation harness features
+- Beautiful architecture overview with emojis and clear structure
+- Advanced evaluation and A/B testing command examples
+- Updated installation, configuration, and development sections
+- Links to all new documentation resources
+
+2. Advanced Usage Guide (docs/advanced-usage.md)
+- Comprehensive evaluation harness usage patterns
+- A/B testing and prompt optimization workflows  
+- Statistical analysis methodology and interpretation
+- Bias detection and mitigation strategies
+- Golden repository testing procedures
+- Comprehensive evaluation campaign management
+- Configuration management best practices
+- Integration patterns for CI/CD and custom adapters
+- Real-world code examples throughout
+
+3. Configuration Reference (docs/configuration.md)
+- Complete TOML configuration documentation
+- All evaluation harness configuration options
+- Environment variable override patterns
+- Security and performance configuration
+- LLM provider setup and model selection
+- Validation and troubleshooting guidance
+- Best practices for environment-specific configs
+
+4. Architecture Overview (docs/architecture.md)
+- Clean Architecture principles and implementation
+- Detailed component breakdown and interactions
+- Evaluation harness architecture deep-dive
+- Dependency injection patterns
+- Error handling strategies
+- Testing architecture and patterns
+- Extension points for customization
+- Code examples demonstrating patterns
+
+5. Contributing Guidelines (CONTRIBUTING.md)
+- Complete contributor onboarding guide
+- Code style and architecture standards
+- Testing requirements and patterns
+- Pull request process and templates
+- Issue reporting guidelines
+- Evaluation system contribution guidelines
+- Release process documentation
+- Community guidelines and recognition
+
+6. Best Practices Checklist (docs/best-practices-checklist.md)
+- Comprehensive checklist covering all evaluation aspects:
+  - Dataset Curation: Data collection, validation, versioning
+  - Prompt Evaluation: Multi-dimensional assessment, LLM-as-judge
+  - Statistical Testing: Methodology, quality control, interpretation
+  - Artifact Logging: Storage, retention, reproducibility
+  - Continuous Monitoring: Quality trends, anomaly detection, KPIs
+  - Bias Detection: Identification, metrics, mitigation strategies
+  - A/B Testing: Campaign planning, execution, management
+  - Configuration Management: Environment separation, validation
+  - Performance Optimization: System performance, cost optimization
+  - Security and Privacy: Data protection, code safety
+  - Multimodal Support: Content type handling, cross-modal evaluation
+  - Quality Assurance: Testing validation, documentation standards
+
+Key Features Documented:
+
+Evaluation Harness Core Functions:
+- Single test evaluation with acceptance checks
+- LLM-as-judge with rubric-driven scoring
+- Batch evaluation and A/B testing pipelines
+- Statistical significance analysis
+- Bias detection and mitigation
+- Golden repository regression testing
+
+Advanced Workflows:
+- Comprehensive evaluation campaigns
+- Cross-scenario analysis and recommendations
+- Trend analysis and continuous monitoring
+- Integration patterns for CI/CD
+- Custom adapter development
+
+Configuration System:
+- TOML-based hierarchical configuration
+- Environment-specific setups
+- Security and performance optimization
+- Complete option reference
+
+Best Practices Coverage:
+- Dataset curation and quality assurance
+- Statistical methodology and interpretation
+- Artifact management and reproducibility
+- Continuous monitoring and alerting
+- Bias detection and fairness assessment
+- Performance and cost optimization
+
+Documentation Quality Standards Met:
+
+- Comprehensive Coverage: All evaluation features documented
+- Practical Examples: Real code examples throughout
+- Multiple Skill Levels: Beginner quickstart + advanced patterns
+- Cross-Referenced: Extensive linking between documents
+- Actionable Guidance: Step-by-step procedures and checklists
+- Best Practices: Industry-standard evaluation methodologies
+- Maintainable: Clear structure for ongoing updates
+
+The documentation suite provides complete coverage of TestCraft's evaluation capabilities following 2025 best practices for LLM evaluation, A/B testing, and statistical analysis. Users can now effectively implement comprehensive test quality assessment workflows with proper bias detection, statistical validation, and continuous improvement processes.
+</info added on 2025-09-08T14:29:08.497Z>
+
