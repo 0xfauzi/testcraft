@@ -72,4 +72,3 @@ Ensure all output (tables, spinners, summaries) is routed through UIPort, suppor
 ### Description: Write comprehensive documentation and end-to-end tests for the reporting and artifact storage adapters, including UI helpers and integration points.
 ### Details:
 Document usage, configuration, and extension points. Develop integration tests covering typical and edge-case workflows.
-

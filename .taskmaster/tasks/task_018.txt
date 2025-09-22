@@ -23,31 +23,29 @@ Unit tests with mocked ports to verify correct status reporting and utility func
 # Subtasks:
 ## 1. Analyze existing use case patterns and identify abstractions [done]
 ### Dependencies: None
-### Description: 
+### Description:
 ### Details:
 
 
 ## 2. Implement StatusUseCase in application/status_usecase.py [done]
 ### Dependencies: None
-### Description: 
+### Description:
 ### Details:
 
 
 ## 3. Implement UtilityUseCases in application/utility_usecases.py for debug-state, sync-state, reset-state, env, and cost utilities following established patterns [done]
 ### Dependencies: None
-### Description: 
+### Description:
 ### Details:
 
 
 ## 4. Write unit tests for StatusUseCase covering status, filtering, sorting, statistics, and error handling [done]
 ### Dependencies: None
-### Description: 
+### Description:
 ### Details:
 
 
 ## 5. Write unit tests for UtilityUseCases covering all utility functions and error scenarios [done]
 ### Dependencies: None
-### Description: 
+### Description:
 ### Details:
-
-

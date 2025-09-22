@@ -282,7 +282,9 @@ class TestPytestRefinerIntegration:
 
             # Verify successful refinement
             assert result["success"] is True
-            assert result["iterations"] == 2  # One failed run + one successful run = 2 iterations
+            assert (
+                result["iterations"] == 2
+            )  # One failed run + one successful run = 2 iterations
             assert result["final_status"] == "passed"
 
             # Verify refine port was called with correct parameters
@@ -421,9 +423,11 @@ class TestPytestRefinerIntegration:
 
             elapsed_time = time.time() - start_time
 
-            # Verify successful completion  
+            # Verify successful completion
             assert result["success"] is True
-            assert result["iterations"] == 3  # Three pytest runs (2 failures + 1 success = 3 iterations)
+            assert (
+                result["iterations"] == 3
+            )  # Three pytest runs (2 failures + 1 success = 3 iterations)
             assert result["final_status"] == "passed"
 
             # Verify backoff occurred (should be at least base backoff time)

@@ -13,8 +13,8 @@ from ...ports.cost_port import CostPort
 from ...ports.llm_port import LLMPort
 from ...prompts.registry import PromptRegistry
 from .common import parse_json_response, with_retries
-from .token_calculator import TokenCalculator
 from .pricing import calculate_cost as pricing_calculate_cost
+from .token_calculator import TokenCalculator
 
 logger = logging.getLogger(__name__)
 
@@ -729,7 +729,8 @@ class BedrockAdapter(LLMPort):
                 if self.cost_port and usage_info:
                     cost = pricing_calculate_cost(usage_info, "bedrock", self.model_id)
                     tokens_total = usage_info.get("total_tokens") or (
-                        usage_info.get("input_tokens", 0) + usage_info.get("output_tokens", 0)
+                        usage_info.get("input_tokens", 0)
+                        + usage_info.get("output_tokens", 0)
                     )
                     self.cost_port.track_usage(
                         service="bedrock",

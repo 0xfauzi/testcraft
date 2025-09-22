@@ -57,4 +57,3 @@ Update router implementation to strictly enforce LLMPort method signatures and p
 ### Description: Create a parameterized test suite covering provider parity, token budgeting, provider-specific branches, router signature alignment, metadata normalization, stub-mode (no credentials), and backwards compatibility.
 ### Details:
 Design tests to run all core operations across all providers, verifying consistent schemas, correct budgeting, feature branches (e.g., o-series, Claude thinking), router signature, and metadata normalization. Include stub-mode tests for environments without credentials. Document backwards compatibility and deprecation plan.
-

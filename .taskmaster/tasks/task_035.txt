@@ -56,4 +56,3 @@ Implement fallback mechanisms for coverage measurement and ensure all relevant m
 ### Description: Update .github/workflows/ci.yml to re-enable all evaluation harness integration tests, ensuring all 11 tests execute and pass. Ensure compatibility with LLM router, coverage adapters, artifact storage, and state management systems, following clean architecture and dependency injection patterns.
 ### Details:
 Ensure CI runs all evaluation harness tests without skips, retains artifacts, and reports results using best practices for maintainability and extensibility.
-

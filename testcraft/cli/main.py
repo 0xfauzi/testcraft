@@ -22,10 +22,10 @@ from ..adapters.io.ui_rich import UIStyle
 from ..application.environment.preflight import EnvironmentValidator
 from ..config.loader import ConfigLoader, ConfigurationError
 from ..config.models import TestCraftConfig
+from .commands.models import add_model_commands
 from .dependency_injection import DependencyError, create_dependency_container
 from .evaluation_commands import add_evaluation_commands
 from .utility_commands import add_utility_commands
-from .commands.models import add_model_commands
 
 
 def detect_ui_style(ui_flag: str | None) -> UIStyle:

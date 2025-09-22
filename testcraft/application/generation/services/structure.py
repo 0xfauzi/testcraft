@@ -271,15 +271,15 @@ class ModulePathDeriver:
             # For __init__.py files, the module path is the parent directory
             parent_path = rel_path.parent
             parent_parts = parent_path.parts
-            
+
             if parent_parts:
                 # Direct parent path: src/mypackage/__init__.py -> src.mypackage
                 candidates.append(".".join(parent_parts))
-                
+
                 # Handle src/ layout: src/mypackage/__init__.py -> mypackage
                 if parent_parts[0] == "src" and len(parent_parts) > 1:
                     candidates.append(".".join(parent_parts[1:]))
-            
+
             return candidates
 
         # Remove .py extension for regular files

@@ -50,5 +50,3 @@ Test implementations for each protocol verify interface compliance. mypy is used
 ### Dependencies: None
 ### Description: Write minimal test classes for each protocol to verify interface compliance and demonstrate usage.
 ### Details:
-
-

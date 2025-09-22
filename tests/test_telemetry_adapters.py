@@ -136,10 +136,12 @@ class TestOpenTelemetryAdapter:
         from testcraft.adapters.telemetry.opentelemetry_adapter import (
             OtelSpanContextManager,
         )
-        from testcraft.ports.telemetry_port import SpanContext
 
         mock_span = Mock()
-        from testcraft.adapters.telemetry.opentelemetry_adapter import ConcreteSpanContext
+        from testcraft.adapters.telemetry.opentelemetry_adapter import (
+            ConcreteSpanContext,
+        )
+
         span_context = ConcreteSpanContext("trace123", "span123")
 
         manager = OtelSpanContextManager(mock_span, span_context, anonymize_paths=True)

@@ -47,12 +47,12 @@ def mock_telemetry_port():
     mock_port = Mock(spec=TelemetryPort)
     mock_span = Mock()
     mock_span.set_attribute = Mock()
-    
+
     # Create a proper context manager mock
     mock_context_manager = Mock()
     mock_context_manager.__enter__ = Mock(return_value=mock_span)
     mock_context_manager.__exit__ = Mock(return_value=None)
-    
+
     mock_port.create_child_span.return_value = mock_context_manager
     return mock_port
 
@@ -144,29 +144,37 @@ class TestUnrefinableFailureAnnotation:
                     }
 
                     with patch.object(
-                        refiner_with_annotation_enabled, "_extract_failing_tests_from_output"
+                        refiner_with_annotation_enabled,
+                        "_extract_failing_tests_from_output",
                     ) as mock_extract_tests:
                         mock_extract_tests.return_value = []
 
                         with patch.object(
-                            refiner_with_annotation_enabled, "_generate_enhanced_fix_instructions"
+                            refiner_with_annotation_enabled,
+                            "_generate_enhanced_fix_instructions",
                         ) as mock_generate_instructions:
-                            mock_generate_instructions.return_value = "Enhanced fix instructions for import error"
+                            mock_generate_instructions.return_value = (
+                                "Enhanced fix instructions for import error"
+                            )
 
                             # Make the writer port fail so fallback is used
-                            refiner_with_annotation_enabled._writer.write_file.side_effect = Exception("Mock writer failure")
+                            refiner_with_annotation_enabled._writer.write_file.side_effect = Exception(
+                                "Mock writer failure"
+                            )
 
-                            result = await refiner_with_annotation_enabled.refine_until_pass(
-                                test_path=str(temp_test_file),
-                                max_iterations=1,
-                                build_source_context_fn=AsyncMock(return_value={}),
+                            result = (
+                                await refiner_with_annotation_enabled.refine_until_pass(
+                                    test_path=str(temp_test_file),
+                                    max_iterations=1,
+                                    build_source_context_fn=AsyncMock(return_value={}),
+                                )
                             )
 
         # Verify failure result
         assert result["success"] is False
         # The final_status might be "failed" instead of containing "import_error"
         # Let's check if annotation was created instead
-        
+
         # Verify annotation was created
         content = temp_test_file.read_text()
         assert "TEST REFINEMENT FAILED — MANUAL FIX REQUIRED" in content
@@ -215,7 +223,9 @@ class TestNoChangeFailureAnnotation:
                 build_source_context_fn = AsyncMock(return_value={})
 
                 # Make the writer port fail so fallback is used
-                refiner_with_annotation_enabled._writer.write_file.side_effect = Exception("Mock writer failure")
+                refiner_with_annotation_enabled._writer.write_file.side_effect = (
+                    Exception("Mock writer failure")
+                )
 
                 result = await refiner_with_annotation_enabled.refine_until_pass(
                     test_path=str(temp_test_file),
@@ -278,7 +288,9 @@ class TestSyntaxErrorAnnotation:
                 build_source_context_fn = AsyncMock(return_value={})
 
                 # Make the writer port fail so fallback is used
-                refiner_with_annotation_enabled._writer.write_file.side_effect = Exception("Mock writer failure")
+                refiner_with_annotation_enabled._writer.write_file.side_effect = (
+                    Exception("Mock writer failure")
+                )
 
                 result = await refiner_with_annotation_enabled.refine_until_pass(
                     test_path=str(temp_test_file),
@@ -324,7 +336,10 @@ class TestMaxIterationsAnnotation:
                 }
 
                 # Mock refine_from_failures to return different content each iteration
-                iteration_counter = [0]  # Use list to allow modification in nested function
+                iteration_counter = [
+                    0
+                ]  # Use list to allow modification in nested function
+
                 def mock_refine_side_effect(*args, **kwargs):
                     iteration_counter[0] += 1
                     return {
@@ -335,14 +350,18 @@ class TestMaxIterationsAnnotation:
                         "preflight_suggestions": "",
                         "iteration": iteration_counter[0],
                     }
-                
-                mock_refine_port.refine_from_failures.side_effect = mock_refine_side_effect
+
+                mock_refine_port.refine_from_failures.side_effect = (
+                    mock_refine_side_effect
+                )
 
                 # Mock build source context
                 build_source_context_fn = AsyncMock(return_value={})
 
                 # Make the writer port fail so fallback is used
-                refiner_with_annotation_enabled._writer.write_file.side_effect = Exception("Mock writer failure")
+                refiner_with_annotation_enabled._writer.write_file.side_effect = (
+                    Exception("Mock writer failure")
+                )
 
                 result = await refiner_with_annotation_enabled.refine_until_pass(
                     test_path=str(temp_test_file),
@@ -449,7 +468,9 @@ class TestAnnotationConfiguration:
                 }
 
                 # Make the writer port fail so fallback is used
-                refiner._writer.write_file.side_effect = Exception("Mock writer failure")
+                refiner._writer.write_file.side_effect = Exception(
+                    "Mock writer failure"
+                )
 
                 await refiner.refine_until_pass(
                     test_path=str(temp_test_file),
@@ -508,7 +529,9 @@ class TestAnnotationConfiguration:
                 }
 
                 # Make the writer port fail so fallback is used
-                refiner._writer.write_file.side_effect = Exception("Mock writer failure")
+                refiner._writer.write_file.side_effect = Exception(
+                    "Mock writer failure"
+                )
 
                 await refiner.refine_until_pass(
                     test_path=str(temp_test_file),
@@ -558,7 +581,9 @@ class TestAnnotationIdempotency:
                     }
 
                     # Make the writer port fail so fallback is used
-                    refiner_with_annotation_enabled._writer.write_file.side_effect = Exception("Mock writer failure")
+                    refiner_with_annotation_enabled._writer.write_file.side_effect = (
+                        Exception("Mock writer failure")
+                    )
 
                     return await refiner_with_annotation_enabled.refine_until_pass(
                         test_path=str(temp_test_file),

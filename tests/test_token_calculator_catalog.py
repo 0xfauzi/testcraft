@@ -24,5 +24,3 @@ def test_thinking_only_when_supported() -> None:
     anthropic_calc = TokenCalculator(provider="anthropic", model="claude-sonnet-4")
     thinking = anthropic_calc.calculate_thinking_tokens("test_generation")
     assert thinking is None or thinking > 0
-
-

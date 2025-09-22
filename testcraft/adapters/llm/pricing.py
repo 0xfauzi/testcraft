@@ -6,15 +6,17 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict
+from typing import Any
 
 from ...config.model_catalog import (
     get_pricing as catalog_get_pricing,
+)
+from ...config.model_catalog import (
     normalize_model_id as catalog_normalize,
 )
 
 
-def get_pricing(provider: str, model: str) -> Dict[str, float]:
+def get_pricing(provider: str, model: str) -> dict[str, float]:
     canonical_provider, canonical_model = catalog_normalize(provider, model)
     per_m = catalog_get_pricing(canonical_provider, canonical_model)
     return {
@@ -31,14 +33,14 @@ def _extract_token_counts(usage: Any) -> tuple[int, int]:
     # Object-style
     try:
         if hasattr(usage, "prompt_tokens"):
-            prompt_tokens = getattr(usage, "prompt_tokens")
+            prompt_tokens = usage.prompt_tokens
         elif hasattr(usage, "input_tokens"):
-            prompt_tokens = getattr(usage, "input_tokens")
+            prompt_tokens = usage.input_tokens
 
         if hasattr(usage, "completion_tokens"):
-            completion_tokens = getattr(usage, "completion_tokens")
+            completion_tokens = usage.completion_tokens
         elif hasattr(usage, "output_tokens"):
-            completion_tokens = getattr(usage, "output_tokens")
+            completion_tokens = usage.output_tokens
     except Exception:
         prompt_tokens = None
         completion_tokens = None
@@ -62,5 +64,3 @@ def calculate_cost(usage: Any, provider: str, model: str) -> float:
     prompt_cost = (prompt_tokens * prices["input_per_million"]) / 1_000_000.0
     completion_cost = (completion_tokens * prices["output_per_million"]) / 1_000_000.0
     return float(prompt_cost + completion_cost)
-
-

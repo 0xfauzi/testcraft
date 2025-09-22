@@ -54,4 +54,3 @@ Define project name, version, authors, and dependencies in pyproject.toml. Add e
 ### Description: Create .gitignore, README.md, and LICENSE files. Initialize a Git repository and make the initial commit.
 ### Details:
 Draft a .gitignore tailored for Python projects, write a basic README.md with project overview and setup instructions, and select an appropriate open-source LICENSE. Initialize Git and commit all scaffolding files.
-

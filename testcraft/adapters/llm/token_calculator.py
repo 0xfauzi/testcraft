@@ -8,8 +8,14 @@ from typing import Any, Literal
 
 from ...config.model_catalog import (
     ModelLimits,
+)
+from ...config.model_catalog import (
     get_flags as catalog_get_flags,
+)
+from ...config.model_catalog import (
     get_limits as catalog_get_limits,
+)
+from ...config.model_catalog import (
     normalize_model_id as catalog_normalize,
 )
 
@@ -138,7 +144,9 @@ class TokenCalculator:
             Recommended thinking tokens, or None if model doesn't support thinking
         """
         # Only if catalog indicates support and a cap exists
-        if (self.limits.max_thinking is None) or (not getattr(self, "flags", None) or not self.flags.supports_thinking):
+        if (self.limits.max_thinking is None) or (
+            not getattr(self, "flags", None) or not self.flags.supports_thinking
+        ):
             return None  # Model doesn't support thinking mode
 
         # Base thinking tokens from model limits
@@ -177,7 +185,11 @@ class TokenCalculator:
 
     def supports_thinking_mode(self) -> bool:
         """Check if the model supports extended thinking mode (Claude-style configurable thinking)."""
-        return (self.limits.max_thinking is not None) and getattr(self, "flags", None) and self.flags.supports_thinking
+        return (
+            (self.limits.max_thinking is not None)
+            and getattr(self, "flags", None)
+            and self.flags.supports_thinking
+        )
 
     def is_reasoning_model(self) -> bool:
         """Check if the model has built-in reasoning capabilities (OpenAI o-series style)."""
@@ -188,7 +200,8 @@ class TokenCalculator:
             # Fallback heuristic
             openai_reasoning_models = ["o4-mini", "o3", "o4"]
             return self.provider in ["openai", "azure-openai"] and any(
-                reasoning_model in self.model for reasoning_model in openai_reasoning_models
+                reasoning_model in self.model
+                for reasoning_model in openai_reasoning_models
             )
 
     def has_reasoning_capabilities(self) -> bool:

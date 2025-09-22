@@ -14,8 +14,8 @@ from ...ports.cost_port import CostPort
 from ...ports.llm_port import LLMPort
 from ...prompts.registry import PromptRegistry
 from .common import parse_json_response, with_retries
-from .token_calculator import TokenCalculator
 from .pricing import calculate_cost as pricing_calculate_cost
+from .token_calculator import TokenCalculator
 
 logger = logging.getLogger(__name__)
 

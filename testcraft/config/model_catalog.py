@@ -6,14 +6,13 @@ normalized lookup helpers and a small verification utility.
 
 from __future__ import annotations
 
+import tomllib
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
-import tomllib
 from pydantic import BaseModel, Field, ValidationError, field_validator
-
 
 CATALOG_FILENAME = "model_catalog.toml"
 
@@ -67,7 +66,7 @@ class ModelMetadata(BaseModel):
 
 
 class ModelCatalogData(BaseModel):
-    models: List[ModelMetadata] = Field(default_factory=list)
+    models: list[ModelMetadata] = Field(default_factory=list)
 
 
 @dataclass
@@ -76,7 +75,7 @@ class _CatalogCache:
     data: ModelCatalogData
 
 
-_CACHE: Optional[_CatalogCache] = None
+_CACHE: _CatalogCache | None = None
 
 
 def _catalog_path() -> Path:
@@ -113,9 +112,7 @@ def load_catalog() -> ModelCatalogData:
     try:
         data = ModelCatalogData(**parsed)
     except ValidationError as exc:
-        raise ValueError(
-            f"Model catalog validation failed: {exc}"
-        ) from exc
+        raise ValueError(f"Model catalog validation failed: {exc}") from exc
 
     _CACHE = _CatalogCache(mtime_ns=mtime_ns, data=data)
     return data
@@ -125,14 +122,14 @@ def _canonical_key(provider: str, model_id: str) -> str:
     return f"{provider.strip().lower()}::{model_id.strip()}"
 
 
-def _normalization_map() -> Dict[str, Tuple[str, str]]:
+def _normalization_map() -> dict[str, tuple[str, str]]:
     """Known alias → (canonical_provider, canonical_model_id).
 
     - Azure deployments map to OpenAI canonical models
     - Bedrock model IDs map to Anthropic canonical models
     - Dated/variant Anthropic aliases → canonical
     """
-    mapping: Dict[str, Tuple[str, str]] = {
+    mapping: dict[str, tuple[str, str]] = {
         # Azure → OpenAI
         "azure-openai::gpt-5": ("openai", "gpt-5"),
         "azure-openai::gpt-4.1": ("openai", "gpt-4.1"),
@@ -141,14 +138,18 @@ def _normalization_map() -> Dict[str, Tuple[str, str]]:
         "azure-openai::gpt-4o-mini": ("openai", "o4-mini"),
         "azure-openai::gpt-4": ("openai", "gpt-4.1"),
         "azure-openai::gpt-3.5-turbo": ("openai", "gpt-4.1"),  # fallback caps
-
         # Bedrock → Anthropic
         "bedrock::anthropic.claude-3-7-sonnet-v1:0": ("anthropic", "claude-3-7-sonnet"),
         "bedrock::anthropic.claude-sonnet-4-v1:0": ("anthropic", "claude-sonnet-4"),
         "bedrock::anthropic.claude-opus-4-v1:0": ("anthropic", "claude-opus-4"),
-        "bedrock::anthropic.claude-3-sonnet-20240229-v1:0": ("anthropic", "claude-3-7-sonnet"),
-        "bedrock::anthropic.claude-3-haiku-20240307-v1:0": ("anthropic", "claude-3-7-sonnet"),
-
+        "bedrock::anthropic.claude-3-sonnet-20240229-v1:0": (
+            "anthropic",
+            "claude-3-7-sonnet",
+        ),
+        "bedrock::anthropic.claude-3-haiku-20240307-v1:0": (
+            "anthropic",
+            "claude-3-7-sonnet",
+        ),
         # Anthropic dated aliases → canonical
         "anthropic::claude-3-7-sonnet-latest": ("anthropic", "claude-3-7-sonnet"),
         "anthropic::claude-sonnet-4-20250514": ("anthropic", "claude-sonnet-4"),
@@ -157,7 +158,7 @@ def _normalization_map() -> Dict[str, Tuple[str, str]]:
     return mapping
 
 
-def normalize_model_id(provider: str, raw_id: str) -> Tuple[str, str]:
+def normalize_model_id(provider: str, raw_id: str) -> tuple[str, str]:
     key = _canonical_key(provider, raw_id.lower())
     alias = _normalization_map().get(key)
     if alias:
@@ -188,8 +189,8 @@ def normalize_model_id(provider: str, raw_id: str) -> Tuple[str, str]:
     return (provider.lower(), raw_id)
 
 
-def _index_by_key(data: ModelCatalogData) -> Dict[str, ModelMetadata]:
-    idx: Dict[str, ModelMetadata] = {}
+def _index_by_key(data: ModelCatalogData) -> dict[str, ModelMetadata]:
+    idx: dict[str, ModelMetadata] = {}
     for m in data.models:
         idx[_canonical_key(m.provider, m.model_id)] = m
     return idx
@@ -219,9 +220,9 @@ def get_flags(provider: str, model: str) -> ModelFlags:
     return get_metadata(provider, model).flags
 
 
-def verify_catalog() -> Dict[str, Any]:
+def verify_catalog() -> dict[str, Any]:
     """Lightweight verification: duplicates, missing fields counts."""
-    results: Dict[str, Any] = {
+    results: dict[str, Any] = {
         "total_models": 0,
         "duplicates": [],
         "providers": {},
@@ -230,7 +231,7 @@ def verify_catalog() -> Dict[str, Any]:
     data = load_catalog()
     results["total_models"] = len(data.models)
     seen: set[str] = set()
-    provider_counts: Dict[str, int] = {}
+    provider_counts: dict[str, int] = {}
 
     for m in data.models:
         key = _canonical_key(m.provider, m.model_id)
@@ -248,5 +249,3 @@ def verify_catalog() -> Dict[str, Any]:
 
     results["providers"] = provider_counts
     return results
-
-

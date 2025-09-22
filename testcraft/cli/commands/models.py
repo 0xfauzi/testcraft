@@ -1,7 +1,7 @@
 from __future__ import annotations
 
+import tomllib
 from pathlib import Path
-from typing import Any, Dict, List, Tuple
 
 import click
 
@@ -9,13 +9,11 @@ from ...config.model_catalog import (
     ModelCatalogData,
     ModelMetadata,
     load_catalog,
-    normalize_model_id,
     verify_catalog,
 )
-import tomllib
 
 
-def _iter_models(provider: str | None = None) -> List[ModelMetadata]:
+def _iter_models(provider: str | None = None) -> list[ModelMetadata]:
     data = load_catalog()
     items = [m for m in data.models if (provider is None or m.provider == provider)]
     # Stable ordering for UX
@@ -23,7 +21,7 @@ def _iter_models(provider: str | None = None) -> List[ModelMetadata]:
 
 
 def _format_money_per_million(v: float) -> str:
-    return f"${v/1000:.3f}k/M" if v >= 1000 else f"${v:.2f}/M"
+    return f"${v / 1000:.3f}k/M" if v >= 1000 else f"${v:.2f}/M"
 
 
 @click.group("models")
@@ -76,7 +74,9 @@ def models_show(provider: str | None, fmt: str) -> None:
             f"{m.provider}/{m.model_id}",
             str(m.limits.max_context),
             str(m.limits.default_max_output),
-            "yes" if (m.flags.supports_thinking and (m.limits.max_thinking or 0) > 0) else "no",
+            "yes"
+            if (m.flags.supports_thinking and (m.limits.max_thinking or 0) > 0)
+            else "no",
             _format_money_per_million(m.pricing.per_million.input),
             _format_money_per_million(m.pricing.per_million.output),
             m.source.last_verified,
@@ -104,12 +104,14 @@ def _load_external_catalog(path: Path) -> ModelCatalogData:
     return ModelCatalogData(**data)
 
 
-def _catalog_index(data: ModelCatalogData) -> Dict[Tuple[str, str], ModelMetadata]:
+def _catalog_index(data: ModelCatalogData) -> dict[tuple[str, str], ModelMetadata]:
     return {(m.provider, m.model_id): m for m in data.models}
 
 
 @models_group.command("diff")
-@click.option("--file", "file_path", type=click.Path(exists=True, path_type=Path), required=True)
+@click.option(
+    "--file", "file_path", type=click.Path(exists=True, path_type=Path), required=True
+)
 def models_diff(file_path: Path) -> None:
     """Diff current catalog against a previous TOML catalog file."""
     current = load_catalog()
@@ -120,12 +122,12 @@ def models_diff(file_path: Path) -> None:
 
     added = sorted(set(cur.keys()) - set(oth.keys()))
     removed = sorted(set(oth.keys()) - set(cur.keys()))
-    changed: List[Tuple[str, str, List[str]]] = []
+    changed: list[tuple[str, str, list[str]]] = []
 
     for key in sorted(set(cur.keys()) & set(oth.keys())):
         a = cur[key]
         b = oth[key]
-        diffs: List[str] = []
+        diffs: list[str] = []
         if a.limits.model_dump() != b.limits.model_dump():
             diffs.append("limits")
         if a.flags.model_dump() != b.flags.model_dump():
@@ -135,7 +137,7 @@ def models_diff(file_path: Path) -> None:
         if diffs:
             changed.append((key[0], key[1], diffs))
 
-    def _fmt_key(k: Tuple[str, str]) -> str:
+    def _fmt_key(k: tuple[str, str]) -> str:
         return f"{k[0]}/{k[1]}"
 
     click.echo("Added:")
@@ -152,5 +154,3 @@ def models_diff(file_path: Path) -> None:
 def add_model_commands(app: click.Group) -> None:
     """Register the models command group with the main app."""
     app.add_command(models_group)
-
-

@@ -65,7 +65,7 @@ class GenerateScreen(Screen):
         except (OSError, FileNotFoundError):
             # Fallback for testing environments where cwd might not exist
             project_path = "/tmp"
-        
+
         self.config = {
             "project_path": project_path,
             "batch_size": 5,

@@ -108,7 +108,9 @@ class TestRefineAdapter:
         mock_test_file.name = "test_example.py"  # For validation
         mock_test_file.parts = ("tests", "test_example.py")  # For validation
         mock_resolved_path = Mock()
-        mock_resolved_path.__str__ = Mock(return_value="/fake/path/tests/test_example.py")
+        mock_resolved_path.__str__ = Mock(
+            return_value="/fake/path/tests/test_example.py"
+        )
         mock_resolved_path.parts = ("fake", "path", "tests", "test_example.py")
         mock_test_file.resolve.return_value = mock_resolved_path
         mock_backup = Mock()
@@ -140,27 +142,34 @@ class TestRefineAdapter:
         # Mock file operations
         mock_test_file = Mock()
         mock_test_file.exists.return_value = True
+
         # Make read_text return different content for each iteration to avoid no-change detection
         # The sequence is: initial_read, then what_llm_wrote_iteration_1, then what_llm_wrote_iteration_2
         def mock_read_text(*args, **kwargs):
             # Handle encoding parameter and return content based on call count
-            call_count = getattr(mock_read_text, 'call_count', 0)
+            call_count = getattr(mock_read_text, "call_count", 0)
             mock_read_text.call_count = call_count + 1
-            
+
             if call_count == 0:
                 return "def test_broken():\n    assert False"  # Initial read
             elif call_count == 1:
-                return "def test_refined1():\n    assert False"  # After first refinement
+                return (
+                    "def test_refined1():\n    assert False"  # After first refinement
+                )
             else:
-                return "def test_refined2():\n    assert False"  # After second refinement
-        
+                return (
+                    "def test_refined2():\n    assert False"  # After second refinement
+                )
+
         mock_test_file.read_text.side_effect = mock_read_text
         mock_test_file.write_text = Mock()
         mock_test_file.suffix = ".py"
         mock_test_file.name = "test_example.py"  # For validation
         mock_test_file.parts = ("tests", "test_example.py")  # For validation
         mock_resolved_path = Mock()
-        mock_resolved_path.__str__ = Mock(return_value="/fake/path/tests/test_example.py")
+        mock_resolved_path.__str__ = Mock(
+            return_value="/fake/path/tests/test_example.py"
+        )
         mock_resolved_path.parts = ("fake", "path", "tests", "test_example.py")
         mock_test_file.resolve.return_value = mock_resolved_path
         mock_backup = Mock()
@@ -232,7 +241,9 @@ class TestRefineAdapter:
         mock_test_file.name = "test_example.py"  # For validation
         mock_test_file.parts = ("tests", "test_example.py")  # For validation
         mock_resolved_path = Mock()
-        mock_resolved_path.__str__ = Mock(return_value="/fake/path/tests/test_example.py")
+        mock_resolved_path.__str__ = Mock(
+            return_value="/fake/path/tests/test_example.py"
+        )
         mock_resolved_path.parts = ("fake", "path", "tests", "test_example.py")
         mock_test_file.resolve.return_value = mock_resolved_path
         mock_test_file.with_suffix.return_value = Mock()
@@ -444,7 +455,9 @@ The issue was with the assertion."""
 class TestRefineAdapterIntegration:
     """Integration tests for RefineAdapter."""
 
-    @pytest.mark.skip(reason="Complex integration test with many mocking dependencies - needs refactoring")
+    @pytest.mark.skip(
+        reason="Complex integration test with many mocking dependencies - needs refactoring"
+    )
     def test_full_refinement_flow_mock(self):
         """Test the complete refinement flow with mocking."""
         with (
@@ -602,13 +615,13 @@ class TestRefineAdapterHardening:
         # Create actual test files in temporary directory to ensure they resolve properly
         tests_dir = tmp_path / "tests"
         tests_dir.mkdir()
-        
+
         test_file_1 = tests_dir / "test_example.py"
         test_file_1.write_text("def test_example():\n    pass")
-        
+
         test_file_2 = tmp_path / "test_module.py"
         test_file_2.write_text("def test_module():\n    pass")
-        
+
         # Test absolute path structure
         nested_tests = tmp_path / "some" / "project" / "tests"
         nested_tests.mkdir(parents=True)
@@ -633,16 +646,16 @@ class TestRefineAdapterHardening:
         # Create actual invalid files to test path resolution
         src_dir = tmp_path / "src"
         src_dir.mkdir()
-        
+
         tests_dir = tmp_path / "tests"
         tests_dir.mkdir()
-        
+
         invalid_file_1 = src_dir / "module.py"
         invalid_file_1.write_text("# Not a test file")
-        
+
         invalid_file_2 = tests_dir / "example.txt"
         invalid_file_2.write_text("Not Python")
-        
+
         invalid_file_3 = tmp_path / "example.py"
         invalid_file_3.write_text("# No test indicator")
 

@@ -140,14 +140,20 @@ class TestImmediateRefinement:
             }
 
             usecase._plan_builder = Mock()
-            usecase._plan_builder.decide_files_to_process.return_value = ["src/example.py"]
+            usecase._plan_builder.decide_files_to_process.return_value = [
+                "src/example.py"
+            ]
             usecase._plan_builder.build_plans.return_value = [
                 {"source_file": "src/example.py"}
             ]
-            usecase._plan_builder.get_source_path_for_plan.return_value = Path("src/example.py")
+            usecase._plan_builder.get_source_path_for_plan.return_value = Path(
+                "src/example.py"
+            )
 
             usecase._content_builder = Mock()
-            usecase._content_builder.build_code_content.return_value = "def example(): pass"
+            usecase._content_builder.build_code_content.return_value = (
+                "def example(): pass"
+            )
             usecase._context_assembler = Mock()
             usecase._context_assembler.context_for_generation.return_value = {}
             usecase._context_assembler.get_last_enriched_context.return_value = None
@@ -157,9 +163,11 @@ class TestImmediateRefinement:
                 test_file_path = Path(temp_dir) / "tests" / "test_example.py"
                 test_file_path.parent.mkdir(parents=True, exist_ok=True)
                 test_file_path.write_text("def test_example(): pass")
-                
+
                 # Mock determine_test_path to return the absolute path
-                usecase._content_builder.determine_test_path.return_value = str(test_file_path)
+                usecase._content_builder.determine_test_path.return_value = str(
+                    test_file_path
+                )
 
                 # Run the test
                 results = await usecase.generate_tests(project_path=temp_dir)
@@ -230,7 +238,9 @@ class TestImmediateRefinement:
         usecase._plan_builder.build_plans.return_value = [
             {"source_file": "src/example.py"}
         ]
-        usecase._plan_builder.get_source_path_for_plan.return_value = Path("src/example.py")
+        usecase._plan_builder.get_source_path_for_plan.return_value = Path(
+            "src/example.py"
+        )
 
         usecase._content_builder = Mock()
         usecase._content_builder.build_code_content.return_value = "def example(): pass"
@@ -318,7 +328,9 @@ class TestImmediateRefinement:
         usecase._plan_builder.build_plans.return_value = [
             {"source_file": "src/example.py"}
         ]
-        usecase._plan_builder.get_source_path_for_plan.return_value = Path("src/example.py")
+        usecase._plan_builder.get_source_path_for_plan.return_value = Path(
+            "src/example.py"
+        )
 
         usecase._content_builder = Mock()
         usecase._content_builder.build_code_content.return_value = "def example(): pass"
@@ -350,13 +362,19 @@ class TestImmediateRefinement:
                 results = await usecase.generate_tests(project_path=temp_dir)
 
                 # Verify refinement was attempted but may have failed early
-                assert results["files_refined"] == 1  # One refinement attempt was counted
+                assert (
+                    results["files_refined"] == 1
+                )  # One refinement attempt was counted
 
                 # Verify that although refinement was attempted, it failed
                 refinement_results = results.get("refinement_results", [])
-                assert len(refinement_results) > 0, "Expected at least one refinement result"
+                assert len(refinement_results) > 0, (
+                    "Expected at least one refinement result"
+                )
                 # Check that the refinement failed (success: False in refinement result)
-                assert not refinement_results[0]["success"], f"Expected refinement to fail, got: {refinement_results[0]}"
+                assert not refinement_results[0]["success"], (
+                    f"Expected refinement to fail, got: {refinement_results[0]}"
+                )
 
     async def test_concurrency_semaphore_respected(self):
         """Test that semaphore limits concurrent pytest operations."""
@@ -488,7 +506,9 @@ class TestImmediateRefinement:
         usecase._plan_builder.build_plans.return_value = [
             {"source_file": "src/example.py"}
         ]
-        usecase._plan_builder.get_source_path_for_plan.return_value = Path("src/example.py")
+        usecase._plan_builder.get_source_path_for_plan.return_value = Path(
+            "src/example.py"
+        )
 
         usecase._content_builder = Mock()
         usecase._content_builder.build_code_content.return_value = "def example(): pass"

@@ -1,11 +1,9 @@
 from __future__ import annotations
 
-from pathlib import Path
-
 from testcraft.config.model_catalog import (
+    get_flags,
     get_limits,
     get_pricing,
-    get_flags,
     load_catalog,
     normalize_model_id,
     verify_catalog,
@@ -20,11 +18,9 @@ def test_load_catalog_ok() -> None:
 def test_normalize_mappings() -> None:
     prov, model = normalize_model_id("azure-openai", "my-gpt-4o-deployment")
     assert prov == "openai"
-    assert model in {"gpt-4.1", "gpt-4.1"}
+    assert model in {"gpt-4.1"}
 
-    prov2, model2 = normalize_model_id(
-        "bedrock", "anthropic.claude-3-7-sonnet-v1:0"
-    )
+    prov2, model2 = normalize_model_id("bedrock", "anthropic.claude-3-7-sonnet-v1:0")
     assert prov2 == "anthropic"
     assert model2 == "claude-3-7-sonnet"
 
@@ -44,5 +40,3 @@ def test_accessors_work() -> None:
 
     flags = get_flags("openai", "o4-mini")
     assert hasattr(flags, "reasoning")
-
-

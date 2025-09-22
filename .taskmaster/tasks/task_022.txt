@@ -80,4 +80,3 @@ Refactor adapters to fetch and format prompts using the prompt registry. Impleme
 ### Description: Implement robust parsing, schema validation, and error handling for real LLM API responses. Ensure adapters handle malformed or partial outputs and validate all outputs against JSON schemas.
 ### Details:
 Use common helpers for response parsing and validation. Extend or update JSON schema validation logic as needed to handle real-world LLM outputs. Implement error handling with retries and logging for API failures or malformed responses. Remove or clearly separate any remaining mock/test-only code.
-

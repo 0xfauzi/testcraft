@@ -202,6 +202,7 @@ class TestConvenienceFunctions:
     def test_run_python_module(self, mock_simple):
         """Test the Python module runner."""
         import sys
+
         mock_simple.return_value = ("output", "", 0)
 
         result = run_python_module("pytest", ["--version"])

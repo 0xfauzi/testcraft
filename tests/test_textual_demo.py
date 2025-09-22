@@ -63,11 +63,12 @@ class TestTextualApp:
                 "files_done": 2,
                 "tests_generated": 10,
             }
-            
+
             # Directly test the stats update handler
             from testcraft.adapters.textual.events import StatsUpdated
+
             app.on_stats_updated(StatsUpdated(stats))
-            
+
             assert app.operation_stats["files_total"] == 5
 
 

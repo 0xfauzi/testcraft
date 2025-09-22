@@ -15,5 +15,3 @@ def test_per_million_math_object() -> None:
     usage = SimpleNamespace(input_tokens=500, output_tokens=500)
     cost = calculate_cost(usage, "anthropic", "claude-sonnet-4")
     assert cost >= 0.0
-
-

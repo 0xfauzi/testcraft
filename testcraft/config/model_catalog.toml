@@ -140,5 +140,3 @@ output = 25000
 [models.source]
 url = "https://docs.anthropic.com/claude/docs/models-overview"
 last_verified = "2025-07-01T00:00:00Z"
-
-
