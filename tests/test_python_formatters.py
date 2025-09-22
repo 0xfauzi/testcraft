@@ -188,10 +188,13 @@ class TestFormatterDetector:
         FormatterDetector._ruff_available = None
         FormatterDetector._black_available = None
         FormatterDetector._isort_available = None
+        FormatterDetector._ruff_disabled = False
+        FormatterDetector._ruff_failure_count = 0
 
     @patch("subprocess.run")
     def test_ruff_available_success(self, mock_run):
         """Test Ruff detection when available."""
+        # When check=True, successful commands just complete without raising
         mock_run.return_value = Mock(returncode=0)
 
         result = FormatterDetector.is_ruff_available()
@@ -217,6 +220,7 @@ class TestFormatterDetector:
     @patch("subprocess.run")
     def test_ruff_detection_cached(self, mock_run):
         """Test that Ruff detection is cached."""
+        # When check=True, successful commands just complete without raising
         mock_run.return_value = Mock(returncode=0)
 
         # First call
@@ -268,8 +272,10 @@ class TestFormatterDetector:
         # Mock Ruff available, Black available, isort not available
         def mock_subprocess_calls(cmd, **kwargs):
             if cmd[0] == "ruff":
+                # When check=True, successful commands just complete without raising
                 return Mock(returncode=0)
             elif "black" in cmd:
+                # When check=True, successful commands just complete without raising
                 return Mock(returncode=0)
             elif "isort" in cmd:
                 raise FileNotFoundError()
@@ -352,6 +358,8 @@ class TestSmartFormatterSelection:
         FormatterDetector._ruff_available = None
         FormatterDetector._black_available = None
         FormatterDetector._isort_available = None
+        FormatterDetector._ruff_disabled = False
+        FormatterDetector._ruff_failure_count = 0
 
     @patch("testcraft.adapters.io.python_formatters.format_with_ruff")
     @patch(

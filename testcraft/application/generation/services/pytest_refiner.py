@@ -692,9 +692,11 @@ pytestmark = pytest.mark.xfail(
                         context["error_types"].append(full_error)
 
                     if error_type in ["ImportError", "ModuleNotFoundError"]:
-                        context["import_errors"].append(error_msg)
+                        if error_msg not in context["import_errors"]:
+                            context["import_errors"].append(error_msg)
                     elif error_type == "SyntaxError":
-                        context["syntax_errors"].append(error_msg)
+                        if error_msg not in context["syntax_errors"]:
+                            context["syntax_errors"].append(error_msg)
 
         # Extract assertion failures with context
         for i, line in enumerate(lines):
