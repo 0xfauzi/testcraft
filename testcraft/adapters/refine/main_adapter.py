@@ -477,6 +477,69 @@ class RefineAdapter:
 
         return payload
 
+    def _payload_to_instructions(self, payload: dict[str, Any]) -> str:
+        """
+        Convert refinement payload to instructions for LLM.
+        
+        Args:
+            payload: Refinement request payload
+            
+        Returns:
+            Formatted instructions string for LLM
+        """
+        instructions = []
+        
+        # Add basic task information
+        test_file_path = payload.get("test_file_path", "unknown")
+        iteration = payload.get("iteration", 1)
+        
+        instructions.append(f"Test File: {test_file_path}")
+        instructions.append(f"Iteration: {iteration}")
+        instructions.append("")
+        
+        # Add current test content
+        current_content = payload.get("current_test_content", "")
+        if current_content:
+            instructions.append("Current Test Content:")
+            instructions.append("```python")
+            instructions.append(current_content)
+            instructions.append("```")
+            instructions.append("")
+        
+        # Add failure output
+        failure_output = payload.get("pytest_failure_output", "")
+        if failure_output:
+            instructions.append("Pytest Failure Output:")
+            instructions.append("```")
+            instructions.append(failure_output)
+            instructions.append("```")
+            instructions.append("")
+        
+        # Add source context if available
+        source_context = payload.get("source_context")
+        if source_context:
+            instructions.append("Source Code Context:")
+            for key, value in source_context.items():
+                instructions.append(f"- {key}: {value}")
+            instructions.append("")
+        
+        # Add strict preservation rules if enabled
+        if hasattr(self.config, 'strict_assertion_preservation') and self.config.strict_assertion_preservation:
+            instructions.append("STRICT SEMANTIC PRESERVATION MODE ACTIVE")
+            instructions.append("- DO NOT weaken assertions")
+            instructions.append("- DO NOT change expected values to match buggy")
+            instructions.append("- If test failure indicates production bug, report as suspected_prod_bug")
+            instructions.append("")
+        
+        # Add task instructions
+        task_instructions = payload.get("instructions", [])
+        if task_instructions:
+            instructions.append("Task Instructions:")
+            for instruction in task_instructions:
+                instructions.append(f"- {instruction}")
+        
+        return "\n".join(instructions)
+
     def _get_preflight_suggestions(self, current_content: str) -> str:
         """
         Get preflight canonicalization suggestions without auto-editing.

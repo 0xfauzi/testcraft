@@ -201,12 +201,13 @@ class TestConvenienceFunctions:
     @patch("testcraft.adapters.io.python_runner.run_subprocess_simple")
     def test_run_python_module(self, mock_simple):
         """Test the Python module runner."""
+        import sys
         mock_simple.return_value = ("output", "", 0)
 
         result = run_python_module("pytest", ["--version"])
 
         mock_simple.assert_called_once_with(
-            ["python", "-m", "pytest", "--version"], timeout=30
+            [sys.executable, "-m", "pytest", "--version"], timeout=30
         )
         assert result == ("output", "", 0)
 

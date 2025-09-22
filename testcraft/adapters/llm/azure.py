@@ -41,7 +41,7 @@ class AzureOpenAIAdapter(LLMPort):
 
     def __init__(
         self,
-        deployment: str = "claude-sonnet-4",
+        deployment: str = "gpt-4.1",
         api_version: str = "2024-02-15-preview",
         timeout: float = 180.0,
         max_tokens: int | None = None,  # Will be calculated automatically

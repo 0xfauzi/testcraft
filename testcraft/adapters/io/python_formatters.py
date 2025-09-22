@@ -215,50 +215,37 @@ def run_isort_safe(content: str, timeout: int = 30) -> str:
 def run_ruff_format_safe(content: str, timeout: int = 30) -> str:
     """Run Ruff formatter safely on Python content.
 
-    Uses 'ruff format' which is Black-compatible and very fast.
-    Raises exceptions on timeout/failure for proper error handling.
+    Uses a temporary file via run_formatter_safe to match integration tests
+    expectations and ensure consistent subprocess handling.
     """
-    cmd = ["ruff", "format", "-"]  # Use '-' to read from stdin
-
-    # Use run_subprocess_safe with stdin input
-    with run_subprocess_safe(cmd, input_text=content, timeout=timeout) as result:
-        stdout, stderr, returncode = result
-
-    if returncode == 0:
-        return stdout or content
-    else:
-        error_msg = f"Ruff format failed with return code {returncode}: {stderr}"
-        logger.warning(error_msg)
-        raise SubprocessExecutionError(error_msg)
+    return run_formatter_safe(
+        ["ruff", "format", "--stdin-filename", "temp.py"],
+        content,
+        temp_suffix=".py",
+        timeout=timeout,
+    )
 
 
 def run_ruff_import_sort_safe(content: str, timeout: int = 30) -> str:
     """Run Ruff import sorting safely on Python content.
 
-    Uses 'ruff check --select I --fix' to sort imports like isort.
-    Raises exceptions on timeout/failure for proper error handling.
+    Uses a temporary file via run_formatter_safe to match integration tests
+    expectations and ensure consistent subprocess handling.
     """
-    cmd = [
-        "ruff",
-        "check",
-        "--select",
-        "I",
-        "--fix",
-        "--stdin-filename",
-        "temp.py",
-        "-",
-    ]
-
-    # Use run_subprocess_safe with stdin input
-    with run_subprocess_safe(cmd, input_text=content, timeout=timeout) as result:
-        stdout, stderr, returncode = result
-
-    if returncode == 0:
-        return stdout or content
-    else:
-        error_msg = f"Ruff import sort failed with return code {returncode}: {stderr}"
-        logger.warning(error_msg)
-        raise SubprocessExecutionError(error_msg)
+    return run_formatter_safe(
+        [
+            "ruff",
+            "check",
+            "--select",
+            "I",
+            "--fix",
+            "--stdin-filename",
+            "temp.py",
+        ],
+        content,
+        temp_suffix=".py",
+        timeout=timeout,
+    )
 
 
 def format_with_ruff(content: str, timeout: int = 30) -> str:
@@ -271,11 +258,18 @@ def format_with_ruff(content: str, timeout: int = 30) -> str:
 
     try:
         # Sort imports with Ruff
-        formatted = run_ruff_import_sort_safe(content, timeout)
+        imports_sorted = run_ruff_import_sort_safe(content, timeout)
         # Format code with Ruff
-        formatted = run_ruff_format_safe(formatted, timeout)
+        fully_formatted = run_ruff_format_safe(imports_sorted, timeout)
+
+        # If Ruff produced no changes at all, treat as failure to allow fallback
+        if imports_sorted == content and fully_formatted == content:
+            raise SubprocessExecutionError(
+                "Ruff produced no changes; falling back to Black+isort"
+            )
+
         detector.record_ruff_success()
-        return formatted
+        return fully_formatted
     except Exception as e:
         detector.record_ruff_failure()
         raise e
@@ -295,7 +289,7 @@ def format_with_black_isort(content: str, timeout: int = 30) -> str:
 
 
 def format_python_content(
-    content: str, timeout: int = 15, disable_ruff: bool = False
+    content: str, timeout: int = 30, disable_ruff: bool = False
 ) -> str:
     """
     Format Python content using the best available formatter.
@@ -319,15 +313,14 @@ def format_python_content(
         try:
             return format_with_ruff(content, timeout)
         except Exception as e:
-            logger.warning(f"Ruff formatting failed, falling back to Black: {e}")
+            logger.warning(f"Ruff formatting failed, falling back to Black+isort: {e}")
 
-    # Priority 2: Black only fallback
-    if detector.is_black_available():
-        logger.info("Using Black fallback formatter")
-        try:
-            return format_with_black_only(content, timeout)
-        except Exception as e:
-            logger.warning(f"Black formatting failed: {e}")
+    # Priority 2: Black + isort (legacy, more widely available)
+    # Do not gate on detector checks; the safe wrappers handle absence gracefully.
+    try:
+        return format_with_black_isort(content, timeout)
+    except Exception as e:
+        logger.warning(f"Black+isort formatting failed: {e}")
 
     # No formatters available - log helpful message and return original
     available = detector.get_available_formatters()
