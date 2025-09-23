@@ -30,7 +30,7 @@ def models_group() -> None:
 
 
 @models_group.command("show")
-@click.option("--provider", type=click.Choice(["openai", "anthropic"]))
+@click.option("--provider", type=str)
 @click.option("--format", "fmt", type=click.Choice(["table", "json"]), default="table")
 def models_show(provider: str | None, fmt: str) -> None:
     """Show models in the catalog."""
