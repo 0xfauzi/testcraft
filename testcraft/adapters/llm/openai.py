@@ -901,11 +901,12 @@ class OpenAIAdapter(LLMPort):
         tokens_to_use = max_tokens if max_tokens is not None else self.max_tokens
         # Clamp to catalog cap for safety
         try:
-            cap = self.token_calculator.limits.max_output
-            tokens_to_use = min(int(tokens_to_use or cap), int(cap))
+            cap = getattr(self.token_calculator.limits, "default_max_output", None)
+            if cap:
+                tokens_to_use = min(int(tokens_to_use or cap), int(cap))
         except Exception:
+            # leave tokens_to_use as-is; calculator already enforces caps
             pass
-
         # Branch: Use Responses API for o-series reasoning models
         if self._is_o_series_reasoning_model():
             try:
