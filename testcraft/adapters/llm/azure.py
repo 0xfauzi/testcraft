@@ -195,9 +195,9 @@ class AzureOpenAIAdapter(LLMPort):
             self._client = _StubClient()  # type: ignore[assignment]
 
     def _calculate_api_cost(self, usage_info: dict[str, Any], deployment: str) -> float:
-        # Delegate to centralized pricing; provider='azure-openai' will normalize to OpenAI
-        return pricing_calculate_cost(usage_info, "azure-openai", deployment)
-
+        # Delegate to centralized pricing with normalized model for azure-openai
+        model = self._map_deployment_to_model(deployment)
+        return pricing_calculate_cost(usage_info, "azure-openai", model)
     def _map_deployment_to_model(self, deployment: str) -> str:
         """Map Azure deployment name to normalized model identifier.
 
