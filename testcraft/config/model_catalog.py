@@ -96,7 +96,12 @@ def load_catalog() -> ModelCatalogData:
     """Load and validate the model catalog with simple mtime-based caching."""
     global _CACHE
     path = _catalog_path()
-    mtime_ns = path.stat().st_mtime_ns
+    try:
+        mtime_ns = path.stat().st_mtime_ns
+    except FileNotFoundError as exc:
+        raise FileNotFoundError(
+            f"Model catalog not found at {path}. Create {CATALOG_FILENAME} with [[models]] entries."
+        ) from exc
 
     if _CACHE and _CACHE.mtime_ns == mtime_ns:
         return _CACHE.data
@@ -108,7 +113,6 @@ def load_catalog() -> ModelCatalogData:
         raise ValueError(
             f"Failed to parse TOML at {path}: {exc}. Please check syntax near the indicated line."
         ) from exc
-
     try:
         data = ModelCatalogData(**parsed)
     except ValidationError as exc:
