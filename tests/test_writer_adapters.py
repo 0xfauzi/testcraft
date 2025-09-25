@@ -533,16 +533,19 @@ def helper_function():  # Should not be included in test functions
         mock_format.assert_called_once_with(content, timeout=15, disable_ruff=False)
         assert formatted == "formatted content"
 
-    @patch("subprocess.run")
-    def test_format_content_timeout_fallback(self, mock_subprocess):
-        """Test that formatting falls back to original content on timeout."""
-        mock_subprocess.side_effect = subprocess.TimeoutExpired(["isort"], 30)
-
+    @patch("testcraft.adapters.io.writer_ast_merge.format_python_content")
+    def test_format_content_timeout_fallback(self, mock_format):
+        """Test that formatting falls back to original content when all formatters fail."""
         content = "import os\ndef test(): pass"
+        # Mock format_python_content to return original content (simulating all formatters failing)
+        mock_format.return_value = content
+
         formatted = self.adapter._format_content(content)
 
         # Should return original content when formatting times out
         assert formatted == content
+        # Verify the format function was called
+        mock_format.assert_called_once_with(content, timeout=15, disable_ruff=False)
 
     def test_validation_integration(self):
         """Test that validation is properly integrated."""

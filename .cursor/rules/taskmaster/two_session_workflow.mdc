@@ -31,10 +31,7 @@ git checkout -b feature/task-{task_id}-{brief-description}
 git push -u origin feature/task-{task_id}-{brief-description}
 ```
 
-- **Baseline tests**
-```bash
-pytest tests/ -v
-```
+- **Environment setup and baseline tests**
 
 - **If tests fail in baseline**
   - Document failing tests (names, brief error summaries)
@@ -91,7 +88,14 @@ Acceptance Criteria
 
 Session 2 Runbook (Commands)
 ```bash
+# ✅ MANDATORY: Set up environment first
+source .venv/bin/activate
+uv sync --all-extras --all-groups
+
+# Run tests throughout implementation
 pytest tests/ -v
+
+# Pre-commit and finalize
 pre-commit run -a
 git add .
 git commit -m "feat(task-{id}): {concise change}
@@ -106,10 +110,16 @@ git push origin feature/task-{id}-{brief-description}
 
 ### Session 2 — Execution Requirements
 
+- **MANDATORY Environment Setup**: ALWAYS start Session 2 with:
+```bash
+source .venv/bin/activate
+uv sync --all-extras --all-groups
+```
 - **Follow the handoff plan strictly**: If deviations arise, update the plan and call them out
-- **Run tests and fix**: Keep iterating until all tests pass
+- **Run tests and fix**: Keep iterating until all tests pass, ALWAYS with environment activated
 - **Pre-commit and style**: Use repository hooks and ruff/formatting; ensure everything passes
 ```bash
+# Environment must be active for all commands
 pytest tests/ -v
 pre-commit run -a
 ```
@@ -121,3 +131,17 @@ pre-commit run -a
 - **Detailed process & tooling**: [dev_workflow.mdc](mdc:.cursor/rules/taskmaster/dev_workflow.mdc)
 
 Keep rules DRY by referencing the above for full command and tool references. This document focuses only on the two-session split and the required handoff structure.
+
+## ENFORCEMENT
+
+**VIOLATION OF TWO-SESSION WORKFLOW IS UNACCEPTABLE**
+
+If you find yourself:
+- Writing code in Session 1
+- Skipping the handoff document
+- Starting implementation without a complete plan
+- Running tests without environment setup
+
+**STOP IMMEDIATELY** and restart with proper Session 1 planning.
+
+**NO EXCEPTIONS. NO SHORTCUTS.**

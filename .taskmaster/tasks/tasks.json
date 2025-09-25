@@ -1473,7 +1473,7 @@
             "title": "Build ContextPack per spec",
             "description": "Create a ContextPack builder that outputs the exact schema in docs/context_assembly_specification.md.",
             "details": "- New service: application/generation/services/context_pack.py\n- Compose: import_map (from ImportResolver), focal (source/signature/docstring via ParserPort), resolved_defs (on-demand minimal bodies), property_context (ranked methods + G/W/T via existing analyzers), conventions, budget\n- Reuse EnrichedContextBuilder for contracts, deps, fixtures, side-effects\n- Unit tests for schema shape and required fields",
-            "status": "pending",
+            "status": "done",
             "dependencies": [],
             "parentTaskId": 34
           },
@@ -1653,7 +1653,7 @@
     ],
     "metadata": {
       "created": "2025-01-27T20:16:58.061Z",
-      "updated": "2025-09-25T15:45:49.671Z",
+      "updated": "2025-09-25T21:20:21.877Z",
       "description": "Tasks for master context"
     }
   }
