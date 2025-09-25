@@ -180,8 +180,12 @@ class PackagingDetector:
             for source_root in packaging_info.source_roots:
                 try:
                     rel_path = package_dir.relative_to(source_root)
-                    package_name = ".".join(rel_path.parts)
-                    packages.add(package_name)
+                    if rel_path.parts:
+                        package_name = ".".join(rel_path.parts)
+                    else:
+                        package_name = ""
+                    if package_name and package_name != ".":
+                        packages.add(package_name)
                     break  # Found the source root, no need to check others
                 except ValueError:
                     continue  # package_dir is not under this source root
