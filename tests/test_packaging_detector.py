@@ -580,10 +580,10 @@ class TestEdgeCases:
 
             # Should work regardless of symlink support
             assert isinstance(layout_info, RepoLayoutInfo)
+            assert "actual.package" in layout_info.packages
             if has_symlinks:
                 # Symlinks should be handled gracefully
                 assert len(layout_info.src_roots) >= 1
-
 
 if __name__ == "__main__":
     pytest.main([__file__])
