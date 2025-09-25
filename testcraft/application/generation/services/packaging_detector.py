@@ -19,6 +19,33 @@ from typing import Any
 logger = logging.getLogger(__name__)
 
 
+class RepoLayoutInfo:
+    """Normalized repository layout information with clean API."""
+
+    def __init__(
+        self,
+        src_roots: list[Path],
+        packages: set[str],
+        mapping: dict[str, str],
+    ):
+        """
+        Initialize repository layout information.
+
+        Args:
+            src_roots: List of source root directories (paths where imports start from)
+            packages: Set of package names that exist in the repository
+            mapping: Mapping from absolute file paths to their canonical import paths
+        """
+        self.src_roots = src_roots
+        self.packages = packages
+        self.mapping = mapping
+
+    def get_canonical_import(self, file_path: Path) -> str | None:
+        """Get canonical import path for a file."""
+        abs_path = str(file_path.resolve())
+        return self.mapping.get(abs_path)
+
+
 class PackagingInfo:
     """Information about project packaging structure."""
 
@@ -95,7 +122,7 @@ class PackagingDetector:
 
             # Step 6: Determine disallowed import prefixes
             disallowed_prefixes = PackagingDetector._get_disallowed_prefixes(
-                src_is_package, source_roots
+                src_is_package, source_roots, project_root
             )
 
             packaging_info = PackagingInfo(
@@ -127,6 +154,47 @@ class PackagingDetector:
                 module_import_map={},
                 disallowed_import_prefixes=[],
             )
+
+    @staticmethod
+    def detect_repo_layout(project_root: Path) -> RepoLayoutInfo:
+        """
+        Detect repository layout structure for a project.
+
+        Args:
+            project_root: Root directory of the project
+
+        Returns:
+            RepoLayoutInfo with normalized layout information
+        """
+        # Use existing detection logic
+        packaging_info = PackagingDetector.detect_packaging(project_root)
+        return PackagingDetector._convert_to_repo_layout_info(packaging_info)
+
+    @staticmethod
+    def _convert_to_repo_layout_info(packaging_info: PackagingInfo) -> RepoLayoutInfo:
+        """Convert PackagingInfo to normalized RepoLayoutInfo."""
+        # Extract package names from package directories
+        packages = set()
+        for package_dir in packaging_info.package_directories:
+            # Get relative path from source roots to determine package name
+            for source_root in packaging_info.source_roots:
+                try:
+                    rel_path = package_dir.relative_to(source_root)
+                    if rel_path.parts:
+                        package_name = ".".join(rel_path.parts)
+                    else:
+                        package_name = ""
+                    if package_name and package_name != ".":
+                        packages.add(package_name)
+                    break  # Found the source root, no need to check others
+                except ValueError:
+                    continue  # package_dir is not under this source root
+
+        return RepoLayoutInfo(
+            src_roots=packaging_info.source_roots.copy(),
+            packages=packages,
+            mapping=packaging_info.module_import_map.copy(),
+        )
 
     @staticmethod
     def _parse_pyproject_toml(project_root: Path) -> dict[str, Any]:
@@ -333,22 +401,170 @@ class PackagingDetector:
 
     @staticmethod
     def _get_disallowed_prefixes(
-        src_is_package: bool, source_roots: list[Path]
+        src_is_package: bool, source_roots: list[Path], project_root: Path | None = None
     ) -> list[str]:
-        """Get list of disallowed import prefixes."""
+        """
+        Get list of disallowed import prefixes.
+
+        Args:
+            src_is_package: Whether src directory is a package
+            source_roots: List of detected source roots
+            project_root: Project root for scanning (optional)
+        """
         disallowed = []
 
         # If src is not a package, disallow "src." imports
         if not src_is_package:
             disallowed.append("src.")
 
-        # Add other common non-package directories
-        non_package_dirs = {"tests", "test", "docs", "examples", "scripts", "tools"}
+        # Common non-package directory patterns
+        non_package_patterns = {
+            # Test directories
+            "tests",
+            "test",
+            "testing",
+            "__tests__",
+            "spec",
+            "specs",
+            # Documentation
+            "docs",
+            "doc",
+            "documentation",
+            "_docs",
+            ".docs",
+            # Build and distribution
+            "build",
+            "dist",
+            "_build",
+            ".build",
+            "target",
+            # Tools and scripts
+            "scripts",
+            "script",
+            "tools",
+            "tool",
+            "bin",
+            "utils",
+            # Examples and demos
+            "examples",
+            "example",
+            "demos",
+            "demo",
+            "samples",
+            "sample",
+            # Development and configuration
+            "dev",
+            "devel",
+            "development",
+            "config",
+            "conf",
+            "cfg",
+            "settings",
+            # Version control and artifacts
+            ".git",
+            ".svn",
+            ".hg",
+            ".tox",
+            ".pytest_cache",
+            "__pycache__",
+            "node_modules",
+            ".venv",
+            "venv",
+            "env",
+            ".env",
+            # IDE and editor files
+            ".vscode",
+            ".idea",
+            ".eclipse",
+            ".pydevproject",
+            # CI/CD and deployment
+            ".github",
+            ".gitlab",
+            ".circleci",
+            "deploy",
+            "deployment",
+            # Coverage and reporting
+            "htmlcov",
+            "coverage",
+            ".coverage",
+            "reports",
+            "report",
+            # Temporary and cache
+            "tmp",
+            "temp",
+            ".tmp",
+            "cache",
+            ".cache",
+        }
+
+        # Check source roots against non-package patterns
         for source_root in source_roots:
-            if source_root.name in non_package_dirs:
+            if source_root.name.lower() in non_package_patterns:
                 disallowed.append(f"{source_root.name}.")
 
-        return disallowed
+        # If project_root is provided, scan for actual directories
+        if project_root and project_root.exists():
+            try:
+                for item in project_root.iterdir():
+                    if item.is_dir() and not item.name.startswith("."):
+                        # Check against patterns
+                        if item.name.lower() in non_package_patterns:
+                            prefix = f"{item.name}."
+                            if prefix not in disallowed:
+                                disallowed.append(prefix)
+
+                        # Check if directory lacks __init__.py (not a package)
+                        elif not (item / "__init__.py").exists():
+                            # Additional heuristics for non-package directories
+                            is_likely_non_package = (
+                                # Contains common non-Python files
+                                any(
+                                    next(item.glob(pattern), None) is not None
+                                    for pattern in [
+                                        "*.md",
+                                        "*.rst",
+                                        "*.txt",
+                                        "Makefile",
+                                        "*.yml",
+                                        "*.yaml",
+                                        "*.json",
+                                        "*.toml",
+                                    ]
+                                )
+                                or
+                                # Directory name suggests non-package purpose
+                                any(
+                                    keyword in item.name.lower()
+                                    for keyword in [
+                                        "test",
+                                        "doc",
+                                        "script",
+                                        "tool",
+                                        "example",
+                                        "demo",
+                                        "build",
+                                        "dist",
+                                    ]
+                                )
+
+                            if is_likely_non_package:
+                                prefix = f"{item.name}."
+                                if prefix not in disallowed:
+                                    disallowed.append(prefix)
+            except Exception as e:
+                logger.debug(
+                    "Error scanning project root for disallowed prefixes: %s", e
+                )
+
+        # Remove duplicates while preserving order
+        seen = set()
+        unique_disallowed = []
+        for prefix in disallowed:
+            if prefix not in seen:
+                seen.add(prefix)
+                unique_disallowed.append(prefix)
+
+        return unique_disallowed
 
 
 class EntityInterfaceDetector:
