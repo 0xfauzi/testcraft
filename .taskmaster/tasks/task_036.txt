@@ -1,0 +1,26 @@
+# Task ID: 36
+# Title: Complete Implementation of the Coverage Adapter
+# Status: pending
+# Dependencies: 17, 19, 35
+# Priority: medium
+# Description: Finalize the CoverageAdapter to provide robust, configurable code coverage measurement, reporting, and integration with the broader TestCraft workflow.
+# Details:
+1. Implement all required methods in the CoverageAdapter, ensuring support for both line and branch coverage using coverage.py as the backend. The adapter should expose a clean interface for starting, stopping, and collecting coverage data programmatically, as well as for generating reports in multiple formats (text, HTML, XML).
+
+2. Integrate with the test execution pipeline so that coverage measurement can be triggered automatically during test runs (e.g., via pytest integration: `coverage run -m pytest`). Ensure the adapter can accept configuration for source paths, omit/include patterns, and report output locations.
+
+3. Add support for incremental and aggregate coverage runs, allowing the adapter to merge data from multiple test sessions and produce cumulative reports. Implement error handling for common issues (e.g., missing source files, misconfigured paths).
+
+4. Provide hooks or callbacks so that other system components (such as the evaluation harness and UI) can query coverage results, trigger report generation, and receive notifications on coverage changes.
+
+5. Document the adapter's API and configuration options, and provide usage examples for integration with both CLI and programmatic workflows.
+
+6. Ensure the adapter is extensible for future support of additional coverage tools (e.g., pytest-cov, swagger-coverage for API projects[4]), and can be easily mocked for testing purposes.
+
+# Test Strategy:
+- Write unit tests for all CoverageAdapter methods, including edge cases (e.g., empty source, partial runs, invalid config).
+- Develop integration tests that run real test suites under coverage measurement, verifying correct data collection and report generation (text, HTML, XML).
+- Test adapter behavior with multiple test sessions, ensuring correct merging and cumulative reporting.
+- Simulate error conditions (e.g., missing files, misconfigured paths) and verify robust error handling.
+- Mock the adapter in higher-level system tests to ensure correct interaction with the evaluation harness and UI components.
+- Manually verify that generated reports match expected coverage for sample projects.
