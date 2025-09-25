@@ -546,6 +546,7 @@ class PackagingDetector:
                                         "dist",
                                     ]
                                 )
+                            )
 
                             if is_likely_non_package:
                                 prefix = f"{item.name}."

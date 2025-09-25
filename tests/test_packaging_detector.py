@@ -101,9 +101,10 @@ class TestPackagingDetectorBasic:
 
             assert isinstance(result, RepoLayoutInfo)
             assert len(result.src_roots) > 0
-           assert isinstance(result.packages, set)
-           assert all(isinstance(p, str) for p in result.packages)
+            assert isinstance(result.packages, set)
+            assert all(isinstance(p, str) for p in result.packages)
             assert isinstance(result.mapping, dict)
+
 
 class TestPyprojectDrivenLayouts:
     """Test pyproject.toml-driven layout detection."""
@@ -584,6 +585,7 @@ class TestEdgeCases:
             if has_symlinks:
                 # Symlinks should be handled gracefully
                 assert len(layout_info.src_roots) >= 1
+
 
 if __name__ == "__main__":
     pytest.main([__file__])
