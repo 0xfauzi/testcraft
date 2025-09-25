@@ -200,15 +200,28 @@ def utility_function(): pass
                 "import_suggestion": "from mypackage.core import {ClassName}",
             }
 
-            # Test context_for_generation
-            context = self.context_assembler.context_for_generation(plan, source_file)
+        # Test context_for_generation
+        context_result = self.context_assembler.context_for_generation(
+            plan, source_file
+        )
 
-            # Verify module path info is included in context
-            assert context is not None
-            # Context should contain module path information
-            assert (
-                "Module Path: mypackage.core" in context or "mypackage.core" in context
-            )
+        # Verify result structure and content
+        assert context_result is not None
+        assert isinstance(context_result, dict)
+
+        # Extract context string and import_map
+        context_string = context_result.get("context", "")
+        import_map = context_result.get("import_map")
+
+        # Context should contain module path information (either in context string or import_map)
+        has_module_path = (
+            "Module Path: mypackage.core" in context_string
+            or "mypackage.core" in context_string
+            or (import_map and "mypackage.core" in import_map.get("target_import", ""))
+        )
+        assert has_module_path, (
+            f"Expected module path info in context string: {context_string} or import_map: {import_map}"
+        )
 
     def test_enhanced_usage_examples_integration(self):
         """Test enhanced usage examples with module-qualified imports."""
@@ -264,14 +277,30 @@ class Calculator:
             }
 
             # Test context generation with enhanced usage examples
-            context = self.context_assembler.context_for_generation(plan, source_file)
+            context_result = self.context_assembler.context_for_generation(
+                plan, source_file
+            )
+
+            # Extract context string and import_map from result
+            context_string = None
+            import_map = None
+            if context_result:
+                if isinstance(context_result, dict):
+                    context_string = context_result.get("context")
+                    import_map = context_result.get("import_map")
+                else:
+                    # Backward compatibility: if it's still a string
+                    context_string = context_result
 
             # Verify usage examples prioritize module-qualified imports
-            assert context is not None
+            assert context_result is not None
             assert (
-                "from mylib.calculator import" in context
-                or "mylib.calculator" in context
-            )
+                context_string
+                and (
+                    "from mylib.calculator import" in context_string
+                    or "mylib.calculator" in context_string
+                )
+            ) or (import_map and ("mylib.calculator" in str(import_map)))
 
     def test_comprehensive_context_assembly_pipeline(self):
         """Test the complete context assembly pipeline with all enhancements."""
@@ -405,27 +434,38 @@ def sample_user_data():
                 "import_suggestion": "from webapp.api.endpoints import {ClassName}",
             }
 
-            generation_context = self.context_assembler.context_for_generation(
+            context_result = self.context_assembler.context_for_generation(
                 plan, source_file
             )
 
+            # Extract context string and import_map from result
+            context_string = None
+            import_map = None
+            if context_result:
+                if isinstance(context_result, dict):
+                    context_string = context_result.get("context")
+                    import_map = context_result.get("import_map")
+                else:
+                    # Backward compatibility: if it's still a string
+                    context_string = context_result
+
             # Verify comprehensive context
-            assert generation_context is not None
-            assert len(generation_context) > 100  # Should be substantial context
+            assert context_result is not None
+            assert context_string is not None
+            assert len(context_string) > 100  # Should be substantial context
 
             # Should include module path information
-            assert "webapp.api.endpoints" in generation_context
+            assert "webapp.api.endpoints" in context_string or (
+                import_map and "webapp.api.endpoints" in str(import_map)
+            )
 
             # Should include environment variable detection
-            assert (
-                "DATABASE_URL" in generation_context
-                or "env" in generation_context.lower()
-            )
+            assert "DATABASE_URL" in context_string or "env" in context_string.lower()
 
             # Should include fixture information
             assert (
-                "fixture" in generation_context.lower()
-                or "pytest" in generation_context.lower()
+                "fixture" in context_string.lower()
+                or "pytest" in context_string.lower()
             )
 
     def test_context_budgets_enforcement(self):
