@@ -1440,7 +1440,125 @@
           19
         ],
         "priority": "high",
-        "subtasks": []
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "Finalize ImportResolver using PackagingDetector",
+            "description": "Implement canonical ImportResolver returning ImportMap for a given file: target_import, sys_path_roots, needs_bootstrap, bootstrap_conftest. Reuse packaging detection to forbid src.* when src is not a package.",
+            "details": "- Create application/generation/services/import_resolver.py or extend packaging_detector with a cohesive resolver API\n- resolve(file: Path) -> {target_import, sys_path_roots, needs_bootstrap, bootstrap_conftest}\n- sys_path_roots from PackagingInfo.source_roots; needs_bootstrap true when roots aren’t provided by pytest\n- Generate minimal conftest bootstrap string per spec; unit tests for src layout, flat layout, edge cases\n<info added on 2025-09-25T15:23:37.971Z>\nUpdate PackagingDetector integration to address failing test cases:\n- Refine import path resolution to prevent inclusion of parent directories (e.g., 'libs') in monorepo scenarios.\n- Improve heuristic detection to preserve package names in resolved import paths.\n- Ensure standalone files trigger the expected exception when package context is missing.\n- Add targeted unit tests for these cases and verify fixes against previously failing scenarios.\n</info added on 2025-09-25T15:23:37.971Z>\n<info added on 2025-09-25T15:29:12.722Z>\nDebug and resolve the remaining heuristic detection issue:\n- Investigate why sys_path_roots from PackagingDetector are being overridden during heuristic import path resolution.\n- Trace the flow of sys_path_roots assignment and usage within ImportResolver, especially in the context of the failing heuristic detection test.\n- Ensure that the resolved import path preserves the full package hierarchy (e.g., \"mypackage.utils\" instead of \"utils\") by correctly utilizing PackagingDetector output.\n- Add or update unit tests to confirm that heuristic detection now returns the expected fully qualified import path in all relevant scenarios.\n</info added on 2025-09-25T15:29:12.722Z>\n<info added on 2025-09-25T15:33:26.526Z>\nImportResolver implementation is now fully complete and production-ready:\n\nAll 10 unit tests are passing, confirming 100% success across all scenarios. The core issue—incorrect detection of package directories as project roots—was resolved by enhancing the `_find_project_root` method with smart boundary detection and introducing `_is_beyond_project_boundary` to prevent traversing beyond the actual project boundary. All edge cases are now handled, including flat layout, src layout, monorepo structures, heuristic detection, standalone files, and bootstrap generation. The codebase is lint-free, with robust error handling and validation. ImportResolver code coverage increased from 49% to 77%.\n</info added on 2025-09-25T15:33:26.526Z>",
+            "status": "done",
+            "dependencies": [],
+            "parentTaskId": 34
+          },
+          {
+            "id": 2,
+            "title": "Integrate ImportResolver into ContextAssembler (ImportMap)",
+            "description": "Wire ImportResolver into ContextAssembler so all generation/refinement contexts include ImportMap and canonical import usage hints.",
+            "details": "- Update ContextAssembler to call ImportResolver and include import_map and canonical import lines in enriched context\n- Expose import_map on API; ensure generator/refiner consumers can access it\n- Add tests asserting import_map presence and correctness in assembled context",
+            "status": "pending",
+            "dependencies": [],
+            "parentTaskId": 34
+          },
+          {
+            "id": 3,
+            "title": "Enhance RepoLayoutDetector and package mapping",
+            "description": "Harden packaging detection and module mapping for canonical imports across flat and src/ layouts.",
+            "details": "- Extend PackagingDetector to emit a normalized RepoLayoutInfo (src_roots, packages, mapping)\n- Improve disallowed prefix rules (tests, docs, scripts)\n- Add unit tests for pyproject-driven and heuristic-driven layouts",
+            "status": "pending",
+            "dependencies": [],
+            "parentTaskId": 34
+          },
+          {
+            "id": 4,
+            "title": "Build ContextPack per spec",
+            "description": "Create a ContextPack builder that outputs the exact schema in docs/context_assembly_specification.md.",
+            "details": "- New service: application/generation/services/context_pack.py\n- Compose: import_map (from ImportResolver), focal (source/signature/docstring via ParserPort), resolved_defs (on-demand minimal bodies), property_context (ranked methods + G/W/T via existing analyzers), conventions, budget\n- Reuse EnrichedContextBuilder for contracts, deps, fixtures, side-effects\n- Unit tests for schema shape and required fields",
+            "status": "pending",
+            "dependencies": [],
+            "parentTaskId": 34
+          },
+          {
+            "id": 5,
+            "title": "Implement missing_symbols resolution loop",
+            "description": "Add a resolver loop used in PLAN and REFINE to fetch precise definitions on demand.",
+            "details": "- Implement a small resolver that, given missing_symbols, uses ParserPort (and simple source scans) to extract signatures/docstrings/minimal bodies\n- Integrate into orchestrator PLAN/REFINE paths; re-pack context and retry step\n- Tests simulating missing symbol discovery and successful re-plans",
+            "status": "pending",
+            "dependencies": [],
+            "parentTaskId": 34
+          },
+          {
+            "id": 6,
+            "title": "LLM Orchestrator (PLAN/GENERATE/REFINE/MANUAL FIX)",
+            "description": "Implement the 4-stage orchestration using PromptRegistry; enforce canonical import and structured outputs.",
+            "details": "- Use prompts/registry.py to provide system/user prompts per stage\n- PLAN: produce plan JSON; if missing_symbols -> resolve then re-plan\n- GENERATE: include canonical import at top; reject outputs lacking it\n- REFINE: use PytestRefiner feedback; honor import path rule and gate unrefinable failures\n- MANUAL FIX: produce failing test file + BUG NOTE when real bug suspected\n- Integration tests with mocked LLMPort",
+            "status": "pending",
+            "dependencies": [],
+            "parentTaskId": 34
+          },
+          {
+            "id": 7,
+            "title": "Bootstrap runner (env or conftest)",
+            "description": "Ensure sys.path bootstrap for pytest via PYTHONPATH or generated tests/conftest.py when needs_bootstrap is true.",
+            "details": "- Helper: ensure_bootstrap(import_map, tests_dir) -> writes minimal conftest when needed\n- Optionally set PYTHONPATH in runner env when not writing files\n- Integrate with PytestRefiner run path\n- Tests covering both strategies",
+            "status": "pending",
+            "dependencies": [],
+            "parentTaskId": 34
+          },
+          {
+            "id": 8,
+            "title": "Quality gates & guardrails",
+            "description": "Enforce import presence, determinism, coverage delta, and integrate guardrails for safety patterns.",
+            "details": "- Import gate: generated test must contain canonical import as first import\n- Determinism gate: run focused pytest twice (same seed) and compare\n- Coverage gate: measure delta via CoveragePort; feed gaps to next REFINE\n- Hook GeneratorGuardrails to enforce disallowed prefixes and suggest fixes\n- Optional mutation sampling flag in config; stub if disabled",
+            "status": "pending",
+            "dependencies": [],
+            "parentTaskId": 34
+          },
+          {
+            "id": 9,
+            "title": "Wire ContextPack into Generate Use Case",
+            "description": "Update Generate flow to request ContextPack and pass canonical import to prompts and validators.",
+            "details": "- In generate use case/services, pull ContextPack for each plan/file\n- Pass import_map.target_import into prompts and validation\n- Ensure writer uses guardrails and gates before writing\n- Integration tests for end-to-end generate with canonical import enforcement",
+            "status": "pending",
+            "dependencies": [],
+            "parentTaskId": 34
+          },
+          {
+            "id": 10,
+            "title": "CLI surfaces for plan and manual-fix",
+            "description": "Expose CLI commands for planning and manual fix flows with non-interactive options.",
+            "details": "- Add commands: testcraft plan <file> and testcraft manual-fix --from-failure <test>\n- Print plan JSON and next actions; for manual-fix, emit failing test + BUG NOTE artifacts\n- Respect config and safety flags; add help docs",
+            "status": "pending",
+            "dependencies": [],
+            "parentTaskId": 34
+          },
+          {
+            "id": 11,
+            "title": "Configuration extensions",
+            "description": "Extend TOML-backed config for import policy, budgets, and feature flags used by the pipeline.",
+            "details": "- Add fields: import_policy (forbid_src_prefix: bool), prompt_budgets (section caps, per_item_chars, total_chars), context_enrichment flags, mutation_sampling\n- Validation via pydantic models; sensible defaults\n- Thread into services via dependency injection",
+            "status": "pending",
+            "dependencies": [],
+            "parentTaskId": 34
+          },
+          {
+            "id": 12,
+            "title": "Unit & integration tests for context assembly",
+            "description": "Comprehensive tests for resolver, pack builder, bootstrap, orchestrator, and gates.",
+            "details": "- Unit: ImportResolver, PackagingDetector, ContextPackBuilder schema, ensure_bootstrap\n- Integration: plan→generate→refine smoke test with canonical import enforcement\n- CLI tests for new commands (plan, manual-fix)",
+            "status": "pending",
+            "dependencies": [],
+            "parentTaskId": 34
+          },
+          {
+            "id": 13,
+            "title": "Documentation updates and examples",
+            "description": "Update docs to reflect the repository-aware pipeline with canonical import policy and usage guides.",
+            "details": "- Update docs/context_assembly_specification.md references and add quickstart\n- Add examples showing src/ vs flat layouts and resulting ImportMap\n- Note quality gates and troubleshooting for import/bootstrap issues",
+            "status": "pending",
+            "dependencies": [],
+            "parentTaskId": 34
+          }
+        ]
       },
       {
         "id": 35,
@@ -1535,7 +1653,7 @@
     ],
     "metadata": {
       "created": "2025-01-27T20:16:58.061Z",
-      "updated": "2025-09-25T14:25:53.443Z",
+      "updated": "2025-09-25T15:29:29.739Z",
       "description": "Tasks for master context"
     }
   }

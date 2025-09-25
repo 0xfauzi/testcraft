@@ -24,3 +24,116 @@ All components must enforce canonical absolute imports for target modules throug
 4. Test CLI and UI flows for planning and manual-fix, including non-interactive operation.
 5. Validate that generated tests use canonical imports and that ContextPack matches the documented schema.
 6. Update and verify documentation with concrete examples and references to the specification.
+
+# Subtasks:
+## 1. Finalize ImportResolver using PackagingDetector [pending]
+### Dependencies: None
+### Description: Implement canonical ImportResolver returning ImportMap for a given file: target_import, sys_path_roots, needs_bootstrap, bootstrap_conftest. Reuse packaging detection to forbid src.* when src is not a package.
+### Details:
+- Create application/generation/services/import_resolver.py or extend packaging_detector with a cohesive resolver API
+- resolve(file: Path) -> {target_import, sys_path_roots, needs_bootstrap, bootstrap_conftest}
+- sys_path_roots from PackagingInfo.source_roots; needs_bootstrap true when roots aren’t provided by pytest
+- Generate minimal conftest bootstrap string per spec; unit tests for src layout, flat layout, edge cases
+
+## 2. Integrate ImportResolver into ContextAssembler (ImportMap) [pending]
+### Dependencies: None
+### Description: Wire ImportResolver into ContextAssembler so all generation/refinement contexts include ImportMap and canonical import usage hints.
+### Details:
+- Update ContextAssembler to call ImportResolver and include import_map and canonical import lines in enriched context
+- Expose import_map on API; ensure generator/refiner consumers can access it
+- Add tests asserting import_map presence and correctness in assembled context
+
+## 3. Enhance RepoLayoutDetector and package mapping [pending]
+### Dependencies: None
+### Description: Harden packaging detection and module mapping for canonical imports across flat and src/ layouts.
+### Details:
+- Extend PackagingDetector to emit a normalized RepoLayoutInfo (src_roots, packages, mapping)
+- Improve disallowed prefix rules (tests, docs, scripts)
+- Add unit tests for pyproject-driven and heuristic-driven layouts
+
+## 4. Build ContextPack per spec [pending]
+### Dependencies: None
+### Description: Create a ContextPack builder that outputs the exact schema in docs/context_assembly_specification.md.
+### Details:
+- New service: application/generation/services/context_pack.py
+- Compose: import_map (from ImportResolver), focal (source/signature/docstring via ParserPort), resolved_defs (on-demand minimal bodies), property_context (ranked methods + G/W/T via existing analyzers), conventions, budget
+- Reuse EnrichedContextBuilder for contracts, deps, fixtures, side-effects
+- Unit tests for schema shape and required fields
+
+## 5. Implement missing_symbols resolution loop [pending]
+### Dependencies: None
+### Description: Add a resolver loop used in PLAN and REFINE to fetch precise definitions on demand.
+### Details:
+- Implement a small resolver that, given missing_symbols, uses ParserPort (and simple source scans) to extract signatures/docstrings/minimal bodies
+- Integrate into orchestrator PLAN/REFINE paths; re-pack context and retry step
+- Tests simulating missing symbol discovery and successful re-plans
+
+## 6. LLM Orchestrator (PLAN/GENERATE/REFINE/MANUAL FIX) [pending]
+### Dependencies: None
+### Description: Implement the 4-stage orchestration using PromptRegistry; enforce canonical import and structured outputs.
+### Details:
+- Use prompts/registry.py to provide system/user prompts per stage
+- PLAN: produce plan JSON; if missing_symbols -> resolve then re-plan
+- GENERATE: include canonical import at top; reject outputs lacking it
+- REFINE: use PytestRefiner feedback; honor import path rule and gate unrefinable failures
+- MANUAL FIX: produce failing test file + BUG NOTE when real bug suspected
+- Integration tests with mocked LLMPort
+
+## 7. Bootstrap runner (env or conftest) [pending]
+### Dependencies: None
+### Description: Ensure sys.path bootstrap for pytest via PYTHONPATH or generated tests/conftest.py when needs_bootstrap is true.
+### Details:
+- Helper: ensure_bootstrap(import_map, tests_dir) -> writes minimal conftest when needed
+- Optionally set PYTHONPATH in runner env when not writing files
+- Integrate with PytestRefiner run path
+- Tests covering both strategies
+
+## 8. Quality gates & guardrails [pending]
+### Dependencies: None
+### Description: Enforce import presence, determinism, coverage delta, and integrate guardrails for safety patterns.
+### Details:
+- Import gate: generated test must contain canonical import as first import
+- Determinism gate: run focused pytest twice (same seed) and compare
+- Coverage gate: measure delta via CoveragePort; feed gaps to next REFINE
+- Hook GeneratorGuardrails to enforce disallowed prefixes and suggest fixes
+
+## 9. Wire ContextPack into Generate Use Case [pending]
+### Dependencies: None
+### Description: Update Generate flow to request ContextPack and pass canonical import to prompts and validators.
+### Details:
+- In generate use case/services, pull ContextPack for each plan/file
+- Pass import_map.target_import into prompts and validation
+- Ensure writer uses guardrails and gates before writing
+- Integration tests for end-to-end generate with canonical import enforcement
+
+## 10. CLI surfaces for plan and manual-fix [pending]
+### Dependencies: None
+### Description: Expose CLI commands for planning and manual fix flows with non-interactive options.
+### Details:
+- Add commands: testcraft plan <file> and testcraft manual-fix --from-failure <test>
+- Print plan JSON and next actions; for manual-fix, emit failing test + BUG NOTE artifacts
+- Respect config and safety flags; add help docs
+
+## 11. Configuration extensions [pending]
+### Dependencies: None
+### Description: Extend TOML-backed config for import policy, budgets, and feature flags used by the pipeline.
+### Details:
+- Add fields: import_policy (forbid_src_prefix: bool), prompt_budgets (section caps, per_item_chars, total_chars), context_enrichment flags, mutation_sampling
+- Validation via pydantic models; sensible defaults
+- Thread into services via dependency injection
+
+## 12. Unit & integration tests for context assembly [pending]
+### Dependencies: None
+### Description: Comprehensive tests for resolver, pack builder, bootstrap, orchestrator, and gates.
+### Details:
+- Unit: ImportResolver, PackagingDetector, ContextPackBuilder schema, ensure_bootstrap
+- Integration: plan→generate→refine smoke test with canonical import enforcement
+- CLI tests for new commands (plan, manual-fix)
+
+## 13. Documentation updates and examples [pending]
+### Dependencies: None
+### Description: Update docs to reflect the repository-aware pipeline with canonical import policy and usage guides.
+### Details:
+- Update docs/context_assembly_specification.md references and add quickstart
+- Add examples showing src/ vs flat layouts and resulting ImportMap
+- Note quality gates and troubleshooting for import/bootstrap issues
