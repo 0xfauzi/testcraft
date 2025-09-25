@@ -7,7 +7,7 @@ test generation and analysis system.
 """
 
 from enum import Enum
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field, validator
 
@@ -231,3 +231,239 @@ class AnalysisReport(BaseModel):
         """Pydantic configuration for AnalysisReport."""
 
         frozen = True  # Make immutable
+
+
+# Context Assembly Models (Repository-Aware Test Generation)
+
+
+class Target(BaseModel):
+    """Target information for test generation."""
+
+    module_file: str = Field(..., description="Path to the target module file")
+    object: str = Field(..., description="Target object (Class.method, function, etc.)")
+
+    class Config:
+        """Pydantic configuration for Target."""
+
+        frozen = True
+
+
+class ImportMap(BaseModel):
+    """Import mapping information for a target file."""
+
+    target_import: str = Field(..., description="Canonical import statement to use")
+    sys_path_roots: list[str] = Field(
+        ..., description="List of sys.path root directories"
+    )
+    needs_bootstrap: bool = Field(
+        ..., description="Whether bootstrap conftest.py is needed"
+    )
+    bootstrap_conftest: str = Field(
+        ..., description="Bootstrap conftest.py content (empty if not needed)"
+    )
+
+    class Config:
+        """Pydantic configuration for ImportMap."""
+
+        frozen = True
+
+
+class Focal(BaseModel):
+    """Focal code information for the target."""
+
+    source: str = Field(..., description="Source code of the focal element")
+    signature: str = Field(..., description="Function/method signature")
+    docstring: str | None = Field(None, description="Docstring if available")
+
+    class Config:
+        """Pydantic configuration for Focal."""
+
+        frozen = True
+
+
+class ResolvedDef(BaseModel):
+    """Resolved definition for a symbol the LLM may need to call."""
+
+    name: str = Field(..., description="Symbol name")
+    kind: Literal["class", "func", "const", "enum", "fixture"] = Field(
+        ..., description="Kind of symbol"
+    )
+    signature: str = Field(..., description="Signature or declaration")
+    doc: str | None = Field(None, description="Documentation if available")
+    body: str = Field(..., description="Implementation body or 'omitted' placeholder")
+
+    class Config:
+        """Pydantic configuration for ResolvedDef."""
+
+        frozen = True
+
+
+class RankedMethod(BaseModel):
+    """Ranked method information for property context."""
+
+    qualname: str = Field(..., description="Qualified name of the method")
+    level: Literal["intra", "repo"] = Field(
+        ..., description="Analysis level (intra-class or repo-wide)"
+    )
+    relation: Literal["complete", "G", "W", "T"] = Field(
+        ..., description="GIVEN/WHEN/THEN relation type"
+    )
+
+    class Config:
+        """Pydantic configuration for RankedMethod."""
+
+        frozen = True
+
+
+class GwtSnippets(BaseModel):
+    """GIVEN/WHEN/THEN code snippets for property-based context."""
+
+    given: list[str] = Field(default_factory=list, description="GIVEN snippets")
+    when: list[str] = Field(default_factory=list, description="WHEN snippets")
+    then: list[str] = Field(default_factory=list, description="THEN snippets")
+
+    class Config:
+        """Pydantic configuration for GwtSnippets."""
+
+        frozen = True
+
+
+class TestBundle(BaseModel):
+    """Test bundle with associated fixtures, mocks, and assertions."""
+
+    test_name: str = Field(..., description="Name of the test")
+    imports: list[str] = Field(default_factory=list, description="Required imports")
+    fixtures: list[str] = Field(default_factory=list, description="Fixtures used")
+    mocks: list[str] = Field(default_factory=list, description="Mocks used")
+    assertions: list[str] = Field(
+        default_factory=list, description="Assertion patterns"
+    )
+
+    class Config:
+        """Pydantic configuration for TestBundle."""
+
+        frozen = True
+
+
+class PropertyContext(BaseModel):
+    """Property-based context for APT-style test generation."""
+
+    ranked_methods: list[RankedMethod] = Field(
+        default_factory=list, description="Ranked methods with property relations"
+    )
+    gwt_snippets: GwtSnippets = Field(
+        default_factory=GwtSnippets, description="GIVEN/WHEN/THEN code snippets"
+    )
+    test_bundles: list[TestBundle] = Field(
+        default_factory=list, description="Related test bundles"
+    )
+
+    class Config:
+        """Pydantic configuration for PropertyContext."""
+
+        frozen = True
+
+
+class DeterminismConfig(BaseModel):
+    """Determinism configuration for tests."""
+
+    seed: int = Field(default=1337, description="Random seed for determinism")
+    tz: str = Field(default="UTC", description="Timezone for time operations")
+    freeze_time: bool = Field(
+        default=True, description="Whether to freeze time in tests"
+    )
+
+    class Config:
+        """Pydantic configuration for DeterminismConfig."""
+
+        frozen = True
+
+
+class IOPolicy(BaseModel):
+    """I/O policy configuration for test safety."""
+
+    network: Literal["forbidden", "mocked"] = Field(
+        default="forbidden", description="Network access policy"
+    )
+    fs: Literal["forbidden", "tmp_path_only", "mocked"] = Field(
+        default="tmp_path_only", description="Filesystem access policy"
+    )
+
+    class Config:
+        """Pydantic configuration for IOPolicy."""
+
+        frozen = True
+
+
+class Conventions(BaseModel):
+    """Test conventions and constraints."""
+
+    test_style: str = Field(default="pytest", description="Test framework style")
+    allowed_libs: list[str] = Field(
+        default_factory=lambda: ["pytest", "hypothesis"],
+        description="Allowed testing libraries",
+    )
+    determinism: DeterminismConfig = Field(
+        default_factory=DeterminismConfig, description="Determinism configuration"
+    )
+    io_policy: IOPolicy = Field(
+        default_factory=IOPolicy, description="I/O policy for test safety"
+    )
+
+    class Config:
+        """Pydantic configuration for Conventions."""
+
+        frozen = True
+
+
+class Budget(BaseModel):
+    """Token budget configuration for LLM operations."""
+
+    max_input_tokens: int = Field(
+        default=60000, description="Maximum input tokens for LLM context"
+    )
+
+    @validator("max_input_tokens")
+    def validate_positive_tokens(cls, v: Any) -> Any:
+        """Validate that token count is positive."""
+        if v <= 0:
+            raise ValueError("Token count must be positive")
+        return v
+
+    class Config:
+        """Pydantic configuration for Budget."""
+
+        frozen = True
+
+
+class ContextPack(BaseModel):
+    """
+    Complete context package for repository-aware test generation.
+
+    This model represents the exact schema specified in the context assembly
+    specification, containing all information needed for the LLM to generate
+    repository-aware, compilable tests.
+    """
+
+    target: Target = Field(..., description="Target information")
+    import_map: ImportMap = Field(..., description="Import mapping and bootstrap")
+    focal: Focal = Field(..., description="Focal code information")
+    resolved_defs: list[ResolvedDef] = Field(
+        default_factory=list,
+        description="On-demand resolved symbol definitions",
+    )
+    property_context: PropertyContext = Field(
+        default_factory=PropertyContext,
+        description="Property-based context (APT-style)",
+    )
+    conventions: Conventions = Field(
+        default_factory=Conventions, description="Test conventions and policies"
+    )
+    budget: Budget = Field(
+        default_factory=Budget, description="Token budget configuration"
+    )
+
+    class Config:
+        """Pydantic configuration for ContextPack."""
+
+        frozen = True
