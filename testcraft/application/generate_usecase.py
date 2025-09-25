@@ -364,9 +364,21 @@ class GenerateUseCase:
             code_content = self._content_builder.build_code_content(plan, source_path)
 
             # Get relevant context for this file
-            relevant_context = self._context_assembler.context_for_generation(
+            context_result = self._context_assembler.context_for_generation(
                 plan, source_path
             )
+
+            # Extract context string and import_map from result
+            relevant_context = None
+            # import_map = None
+            if context_result:
+                if isinstance(context_result, dict):
+                    relevant_context = context_result.get("context")
+                    # TODO: USE REAL import_map
+                    # import_map = context_result.get("import_map")
+                else:
+                    # Backward compatibility: if it's still a string
+                    relevant_context = context_result
 
             # Derive authoritative module path and import suggestions
             module_path_info = {}
@@ -412,6 +424,14 @@ class GenerateUseCase:
 
             # Enhance context with module path information
             enhanced_context = relevant_context
+
+            # Note: import_map is now available from ContextAssembler and includes:
+            # - target_import: canonical import statement
+            # - sys_path_roots: list of sys.path root directories
+            # - needs_bootstrap: whether conftest.py setup is needed
+            # - bootstrap_conftest: conftest.py content if needed
+            # This information is already included in the enriched context string
+
             if module_path_info and (
                 module_path_info.get("module_path")
                 or module_path_info.get("import_suggestion")

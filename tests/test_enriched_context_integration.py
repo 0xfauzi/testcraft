@@ -291,9 +291,18 @@ testpaths = ["tests"]
         )
 
         # Test context generation with all enrichment features
-        enriched_context = context_assembler.context_for_generation(plan, main_file)
+        context_result = context_assembler.context_for_generation(plan, main_file)
 
-        # Verify enriched context contains expected sections
+        # Verify result structure
+        assert context_result is not None
+        assert isinstance(context_result, dict)
+
+        # Extract context string and import_map
+        enriched_context = context_result.get("context", "")
+        # TODO: USE REAL import_map
+        # import_map = context_result.get("import_map")
+
+        # Should have context string
         assert enriched_context is not None
         assert isinstance(enriched_context, str)
 
@@ -447,8 +456,16 @@ testpaths = ["tests"]
             generate_usecase_default._config,
         )
 
-        context = context_assembler.context_for_generation(plan, main_file)
+        context_result = context_assembler.context_for_generation(plan, main_file)
 
+        # Extract context string from result (supports dict and legacy string)
+        context = (
+            context_result.get("context")
+            if isinstance(context_result, dict)
+            else context_result
+            if isinstance(context_result, str)
+            else None
+        )
         # Should generate some context (exact content depends on defaults)
         # Main thing is it shouldn't crash or break existing behavior
         assert context is None or isinstance(context, str)
@@ -505,7 +522,10 @@ testpaths = ["tests"]
             mock_ports["context_port"], mock_ports["parser_port"], config_enriched
         )
 
-        enriched_context = context_assembler.context_for_generation(plan, main_file)
+        context_result = context_assembler.context_for_generation(plan, main_file)
+
+        # Extract context string from result
+        enriched_context = context_result.get("context") if context_result else None
 
         # Verify enriched context structure
         if enriched_context:
@@ -637,7 +657,10 @@ class UserService:
             plan = TestGenerationPlan(elements_to_test=[test_element])
 
             # Generate enriched context
-            context = context_assembler.context_for_generation(plan, main_module)
+            context_result = context_assembler.context_for_generation(plan, main_module)
+
+            # Extract context string from result
+            context = context_result.get("context") if context_result else None
 
             # Verify complex context handling
             if context:

@@ -19,6 +19,7 @@ from ....ports.context_port import ContextPort
 from ....ports.parser_port import ParserPort
 from .enhanced_context_builder import EnrichedContextBuilder
 from .enrichment_detectors import EnrichmentDetectors
+from .import_resolver import ImportResolver
 from .structure import DirectoryTreeBuilder, ModulePathDeriver
 
 logger = logging.getLogger(__name__)
@@ -37,6 +38,7 @@ class ContextAssembler:
         context_port: ContextPort,
         parser_port: ParserPort,
         config: dict[str, Any],
+        import_resolver: ImportResolver | None = None,
     ):
         """
         Initialize the context assembler.
@@ -45,6 +47,7 @@ class ContextAssembler:
             context_port: Port for context operations
             parser_port: Port for code parsing
             config: Configuration with context settings and budgets
+            import_resolver: Service for resolving canonical imports and bootstrap requirements
         """
         self._context = context_port
         self._parser = parser_port
@@ -54,6 +57,7 @@ class ContextAssembler:
         self._enrichment = EnrichmentDetectors()
         self._structure_builder = DirectoryTreeBuilder()
         self._enhanced_context_builder = EnrichedContextBuilder()
+        self._import_resolver = import_resolver or ImportResolver()
 
     def gather_project_context(
         self, project_path: Path, files_to_process: list[Path]
@@ -113,25 +117,36 @@ class ContextAssembler:
 
     def context_for_generation(
         self, plan: TestGenerationPlan, source_path: Path | None = None
-    ) -> str | None:
+    ) -> dict[str, Any] | None:
         """
         Get relevant context for test generation.
 
         Implements snippet-based retrieval and merges import-graph neighbors
         discovered via ContextPort.get_related_context. Uses small, bounded
-        snippets and returns None if no useful context is available.
+        snippets and includes import_map for canonical imports.
 
         Args:
             plan: The test generation plan
             source_path: Optional source file path for the plan
 
         Returns:
-            Assembled context string or None if no useful context
+            Dictionary with context string and import_map or None if no useful context
         """
         if not self._config.get("enable_context", True):
             return None
 
         try:
+            # Resolve imports for the source file if available
+            import_map = None
+            if source_path is not None:
+                try:
+                    import_map = self._import_resolver.resolve(source_path)
+                    logger.debug("Resolved imports for %s: %s", source_path, import_map)
+                except Exception as e:
+                    logger.warning(
+                        "Failed to resolve imports for %s: %s", source_path, e
+                    )
+                    import_map = None
             # Build lightweight context query from top plan elements
             query_parts = [element.name for element in plan.elements_to_test[:3]]
             query = " ".join(query_parts)
@@ -196,9 +211,19 @@ class ContextAssembler:
             )
 
             # 9) Enhance with packaging and safety information
-            return self._build_enriched_context_for_generation(
-                source_path, base_context
+            enriched_context_string = self._build_enriched_context_for_generation(
+                source_path, base_context, import_map
             )
+
+            # 10) Build result dictionary with context and import_map
+            result = {}
+            if enriched_context_string is not None:
+                result["context"] = enriched_context_string
+            if import_map is not None:
+                result["import_map"] = import_map
+
+            # Return dictionary with context and import information, or None if no useful context
+            return result if result else None
 
         except Exception as e:
             logger.warning("Failed to retrieve context: %s", e)
@@ -226,7 +251,20 @@ class ContextAssembler:
                 "dependency_analysis": {},
                 "retrieved_context": [],
                 "project_structure": {},
+                "import_map": None,
             }
+
+            # Resolve imports for the test file to understand its structure and dependencies
+            try:
+                import_map = self._import_resolver.resolve(test_file)
+                context["import_map"] = import_map
+                logger.debug(
+                    "Resolved imports for test file %s: %s", test_file, import_map
+                )
+            except Exception as e:
+                logger.warning(
+                    "Failed to resolve imports for test file %s: %s", test_file, e
+                )
 
             # Skip context gathering if not enabled
             if not self._config.get("enable_context", True):
@@ -1627,7 +1665,10 @@ class ContextAssembler:
         return path_constraints
 
     def _build_enriched_context_for_generation(
-        self, source_path: Path | None, base_context: str | None
+        self,
+        source_path: Path | None,
+        base_context: str | None,
+        import_map: dict[str, Any] | None = None,
     ) -> str | None:
         """
         Build enriched context with packaging and safety information.
@@ -1635,6 +1676,7 @@ class ContextAssembler:
         Args:
             source_path: Path to the source file being tested
             base_context: Base context from traditional context assembly
+            import_map: Import mapping information from ImportResolver
 
         Returns:
             Enhanced context string with packaging and safety information
@@ -1648,6 +1690,41 @@ class ContextAssembler:
                 source_file=source_path,
                 existing_context=base_context,
             )
+
+            # Add import map information to enriched context if available
+            if import_map is not None:
+                import_context_lines = []
+
+                # Add canonical import line
+                if "target_import" in import_map:
+                    import_context_lines.append(
+                        f"# Canonical import: {import_map['target_import']}"
+                    )
+
+                # Add sys.path roots information
+                if import_map.get("sys_path_roots"):
+                    import_context_lines.append(
+                        f"# Sys.path roots: {import_map['sys_path_roots']}"
+                    )
+
+                # Add bootstrap requirements
+                if import_map.get("needs_bootstrap"):
+                    import_context_lines.append(
+                        "# Bootstrap: conftest.py setup required"
+                    )
+                    if import_map.get("bootstrap_conftest"):
+                        import_context_lines.append("# Bootstrap content available")
+
+                # Prepend import context to enriched context if we have it
+                if import_context_lines:
+                    import_context_str = "\n".join(import_context_lines)
+                    if enriched_context and "context" in enriched_context:
+                        enriched_context["context"] = (
+                            f"{import_context_str}\n\n{enriched_context['context']}"
+                        )
+                    elif base_context:
+                        # Fallback: prepend to base context
+                        base_context = f"{import_context_str}\n\n{base_context}"
 
             # Format for LLM consumption
             formatted_context = self._enhanced_context_builder.format_for_llm(

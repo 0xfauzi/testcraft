@@ -1455,7 +1455,7 @@
             "title": "Integrate ImportResolver into ContextAssembler (ImportMap)",
             "description": "Wire ImportResolver into ContextAssembler so all generation/refinement contexts include ImportMap and canonical import usage hints.",
             "details": "- Update ContextAssembler to call ImportResolver and include import_map and canonical import lines in enriched context\n- Expose import_map on API; ensure generator/refiner consumers can access it\n- Add tests asserting import_map presence and correctness in assembled context",
-            "status": "pending",
+            "status": "in-progress",
             "dependencies": [],
             "parentTaskId": 34
           },
@@ -1653,7 +1653,7 @@
     ],
     "metadata": {
       "created": "2025-01-27T20:16:58.061Z",
-      "updated": "2025-09-25T15:29:29.739Z",
+      "updated": "2025-09-25T15:45:49.671Z",
       "description": "Tasks for master context"
     }
   }
