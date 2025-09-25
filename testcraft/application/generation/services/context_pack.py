@@ -100,13 +100,7 @@ class ContextPackBuilder:
 
             # Build import_map component using ImportResolver
             try:
-                import_map_data = self._import_resolver.resolve(target_file)
-                import_map = ImportMap(
-                    target_import=import_map_data["target_import"],
-                    sys_path_roots=import_map_data["sys_path_roots"],
-                    needs_bootstrap=import_map_data["needs_bootstrap"],
-                    bootstrap_conftest=import_map_data["bootstrap_conftest"],
-                )
+                import_map = self._import_resolver.resolve(target_file)
             except ValueError as e:
                 # Fallback for files without proper package structure (e.g., test files)
                 logger.warning(
