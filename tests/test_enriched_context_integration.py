@@ -458,9 +458,14 @@ testpaths = ["tests"]
 
         context_result = context_assembler.context_for_generation(plan, main_file)
 
-        # Extract context string from result
-        context = context_result.get("context") if context_result else None
-
+        # Extract context string from result (supports dict and legacy string)
+        context = (
+            context_result.get("context")
+            if isinstance(context_result, dict)
+            else context_result
+            if isinstance(context_result, str)
+            else None
+        )
         # Should generate some context (exact content depends on defaults)
         # Main thing is it shouldn't crash or break existing behavior
         assert context is None or isinstance(context, str)
