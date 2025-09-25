@@ -519,7 +519,7 @@ class PackagingDetector:
                             is_likely_non_package = (
                                 # Contains common non-Python files
                                 any(
-                                    (item / pattern).exists()
+                                    next(item.glob(pattern), None) is not None
                                     for pattern in [
                                         "*.md",
                                         "*.rst",
@@ -546,7 +546,6 @@ class PackagingDetector:
                                         "dist",
                                     ]
                                 )
-                            )
 
                             if is_likely_non_package:
                                 prefix = f"{item.name}."
