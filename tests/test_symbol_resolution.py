@@ -99,7 +99,10 @@ class MockLLMPort:
     def __init__(self, responses=None):
         self.responses = responses or []
 
-    def generate_test(self, prompt):
+    def generate_tests(
+        self, code_content, context=None, test_framework="pytest", **kwargs
+    ):
+        """Mock implementation of generate_tests method matching LLMPort interface."""
         if self.responses:
             response = self.responses.pop(0)
             if isinstance(response, dict):
@@ -107,11 +110,50 @@ class MockLLMPort:
                 return Mock(choices=[Mock(message=Mock(content=json.dumps(response)))])
             else:
                 return Mock(choices=[Mock(message=Mock(content=response))])
+        # Default response for missing symbols scenario
         return Mock(
             choices=[
                 Mock(
                     message=Mock(
                         content='{"plan": ["test_basic_case"], "missing_symbols": [], "import_line": "from test_module import TestClass"}'
+                    )
+                )
+            ]
+        )
+
+    def analyze_code(self, code_content, analysis_type="comprehensive", **kwargs):
+        """Mock analyze_code method."""
+        return Mock(
+            choices=[
+                Mock(
+                    message=Mock(
+                        content='{"testability_score": 0.8, "complexity_metrics": {}, "recommendations": [], "potential_issues": []}'
+                    )
+                )
+            ]
+        )
+
+    def refine_content(
+        self, original_content, refinement_instructions, *, system_prompt=None, **kwargs
+    ):
+        """Mock refine_content method."""
+        return Mock(
+            choices=[
+                Mock(
+                    message=Mock(
+                        content='{"refined_content": "refined code", "changes_made": "minor fixes", "confidence": 0.9}'
+                    )
+                )
+            ]
+        )
+
+    def generate_test_plan(self, code_content, context=None, **kwargs):
+        """Mock generate_test_plan method."""
+        return Mock(
+            choices=[
+                Mock(
+                    message=Mock(
+                        content='{"test_plan": {"unit_tests": []}, "test_coverage_areas": [], "test_priorities": [], "estimated_complexity": "low", "confidence": 0.8, "metadata": {}}'
                     )
                 )
             ]
