@@ -186,8 +186,12 @@ class LLMOrchestrator:
 
                 if not resolved_defs:
                     logger.warning("Could not resolve any missing symbols")
-                    # Still return the plan even if we couldn't resolve symbols
-                    return plan
+                    # Continue retrying in case the next LLM call doesn't have missing symbols
+                    retry_count += 1
+                    if retry_count > self._max_plan_retries:
+                        logger.warning("PLAN stage exceeded maximum retries")
+                        return None
+                    continue
 
                 # Add resolved definitions to context pack
                 updated_resolved_defs = (

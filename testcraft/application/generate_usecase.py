@@ -29,8 +29,10 @@ from .generation.config import GenerationConfig
 from .generation.services.batch_executor import BatchExecutor
 from .generation.services.content_builder import ContentBuilder
 from .generation.services.context_assembler import ContextAssembler
+from .generation.services.context_pack import ContextPackBuilder
 from .generation.services.coverage_evaluator import CoverageEvaluator
 from .generation.services.generator_guardrails import TestContentValidator
+from .generation.services.llm_orchestrator import LLMOrchestrator
 from .generation.services.plan_builder import PlanBuilder
 from .generation.services.pytest_refiner import PytestRefiner
 from .generation.services.state_discovery import (
@@ -38,6 +40,7 @@ from .generation.services.state_discovery import (
     StateSyncDiscovery,
 )
 from .generation.services.structure import ModulePathDeriver
+from .generation.services.symbol_resolver import SymbolResolver
 
 logger = logging.getLogger(__name__)
 
@@ -144,6 +147,23 @@ class GenerateUseCase:
             max_concurrent_refines=self._config["max_refine_workers"],
             backoff_sec=self._config["refinement_backoff_sec"],
             writer_port=self._writer,
+        )
+
+        # Initialize symbol resolution services
+        self._symbol_resolver = SymbolResolver(
+            parser_port=parser_port,
+        )
+
+        self._context_pack_builder = ContextPackBuilder()
+
+        self._llm_orchestrator = LLMOrchestrator(
+            llm_port=llm_port,
+            parser_port=parser_port,
+            context_assembler=self._context_assembler,
+            context_pack_builder=self._context_pack_builder,
+            symbol_resolver=self._symbol_resolver,
+            max_plan_retries=self._config.get("max_plan_retries", 2),
+            max_refine_retries=self._config.get("max_refine_retries", 3),
         )
 
         # Status tracker will be injected per generation operation
@@ -461,21 +481,104 @@ class GenerateUseCase:
                         f"# Module Import Information\n{module_info_text}"
                     )
 
-            # Call LLM to generate tests with enhanced context
-            llm_result = await self._llm.generate_tests(
-                code_content=code_content,
-                context=enhanced_context,
-                test_framework=self._config["test_framework"],
-            )
+            # Use LLMOrchestrator for PLAN/GENERATE/REFINE with symbol resolution
+            # Check if symbol resolution is enabled in config
+            if not self._config.get("enable_symbol_resolution", True):
+                # Fall back to legacy LLM call
+                llm_result = await self._llm.generate_tests(
+                    code_content=code_content,
+                    context=enhanced_context,
+                    test_framework=self._config["test_framework"],
+                )
+                test_content = llm_result.get("tests", "")
+            else:
+                # First, build a ContextPack for this target
+                from ..domain.models import ImportMap
 
-            # Extract and validate the generated content
-            test_content = llm_result.get("tests", "")
+                # Create target information
+                # target = Target(
+                #     module_file=str(source_path),
+                #     object=plan.elements_to_test[0].name
+                #     if plan.elements_to_test
+                #     else "unknown",
+                # )
+
+                # Import map will be created in the context pack builder
+
+                # Create focal information
+                # focal = Focal(
+                #     source=code_content,
+                #     signature="def "
+                #     + (
+                #         plan.elements_to_test[0].name.split(".")[-1]
+                #         if plan.elements_to_test
+                #         else "unknown"
+                #     )
+                #     + "(...):",
+                #     docstring=plan.elements_to_test[0].docstring
+                #     if plan.elements_to_test
+                #     else None,
+                # )
+
+                # Build context pack using the existing import resolver
+                try:
+                    import_map = self._context_assembler._import_resolver.resolve(
+                        source_path
+                    )
+                except Exception as e:
+                    logger.warning(
+                        "Import resolution failed: %s. Using simplified import.", e
+                    )
+                    # Fallback import map - use the one we already created above
+                    import_map = ImportMap(
+                        target_import="from "
+                        + (module_path_info.get("module_path", "unknown") or "unknown")
+                        + " import "
+                        + (
+                            plan.elements_to_test[0].name.split(".")[-1]
+                            if plan.elements_to_test
+                            else "unknown"
+                        ),
+                        sys_path_roots=[str(project_root)] if project_root else [],
+                        needs_bootstrap=False,
+                        bootstrap_conftest="",
+                    )
+
+                context_pack = self._context_pack_builder.build_context_pack(
+                    target_file=Path(source_path),
+                    target_object=plan.elements_to_test[0].name
+                    if plan.elements_to_test
+                    else "unknown",
+                    project_root=Path(project_root) if project_root else None,
+                )
+
+                # Override the import_map with our resolved one
+                from ..domain.models import ContextPack
+
+                context_pack = ContextPack(
+                    target=context_pack.target,
+                    import_map=import_map,
+                    focal=context_pack.focal,
+                    resolved_defs=context_pack.resolved_defs,
+                    property_context=context_pack.property_context,
+                    conventions=context_pack.conventions,
+                    budget=context_pack.budget,
+                )
+
+                # Use LLMOrchestrator for PLAN/GENERATE workflow
+                orchestrator_result = self._llm_orchestrator.plan_and_generate(
+                    context_pack=context_pack,
+                    project_root=project_root,
+                )
+
+                # Extract test content from orchestrator result
+                test_content = orchestrator_result.get("generated_code", "")
             if not test_content or not test_content.strip():
                 return GenerationResult(
                     file_path="unknown",  # Would use actual path
                     content=None,
                     success=False,
-                    error_message="LLM returned empty test content",
+                    error_message="LLM orchestrator returned empty test content",
                 )
 
             # Validate and potentially fix the generated test content

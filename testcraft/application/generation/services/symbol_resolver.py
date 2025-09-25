@@ -257,13 +257,13 @@ class SymbolResolver:
         if class_name:
             # Looking for a method: element_name should be "Class.method"
             expected_name = f"{class_name}.{symbol_name}"
-            return (
-                element_name == expected_name and element_type == TestElementType.METHOD
+            return element_name == expected_name and (
+                element_type == TestElementType.METHOD or element_type == "method"
             )
         else:
             # Looking for a function: element_name should be "function"
-            return (
-                element_name == symbol_name and element_type == TestElementType.FUNCTION
+            return element_name == symbol_name and (
+                element_type == TestElementType.FUNCTION or element_type == "function"
             )
 
     def _extract_symbol_info(
@@ -285,22 +285,19 @@ class SymbolResolver:
 
         # Determine the kind of symbol
         kind = "func"  # Default
-        if element_type == TestElementType.CLASS:
+        if element_type == TestElementType.CLASS or element_type == "class":
             kind = "class"
-        elif element_type == TestElementType.METHOD:
+        elif element_type == TestElementType.METHOD or element_type == "method":
             kind = "func"  # Methods are functions in the domain model
-        elif element_type == TestElementType.FUNCTION:
+        elif element_type == TestElementType.FUNCTION or element_type == "function":
             kind = "func"
 
         # Get signature and docstring
         signature = self._generate_signature(element)
         docstring = getattr(element, "docstring", None)
 
-        # Get source content for this element
-        source_content = parse_result.get("source_content", {})
-        body = source_content.get(
-            element_name, "omitted"
-        )  # Use "omitted" as placeholder
+        # Use "omitted" as placeholder for body content to keep context size manageable
+        body = "omitted"
 
         return {
             "name": element_name,

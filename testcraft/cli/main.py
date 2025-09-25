@@ -256,6 +256,23 @@ def app(
     is_flag=True,
     help="Disable Ruff formatting (use Black+isort instead) to avoid timeouts",
 )
+@click.option(
+    "--enable-symbol-resolution/--disable-symbol-resolution",
+    default=True,
+    help="Enable/disable missing_symbols resolution loop (default: enabled)",
+)
+@click.option(
+    "--max-plan-retries",
+    type=int,
+    default=2,
+    help="Maximum retries for PLAN stage with symbol resolution (default: 2)",
+)
+@click.option(
+    "--max-refine-retries",
+    type=int,
+    default=3,
+    help="Maximum retries for REFINE stage with symbol resolution (default: 3)",
+)
 @click.pass_context
 def generate(
     ctx: click.Context,
@@ -268,6 +285,9 @@ def generate(
     max_refine_workers: int,
     keep_failed_writes: bool,
     disable_ruff: bool,
+    enable_symbol_resolution: bool,
+    max_plan_retries: int,
+    max_refine_retries: int,
 ) -> None:
     """Generate tests for Python source files."""
     operation_logger = get_operation_logger("generate")
@@ -324,6 +344,10 @@ def generate(
                 "max_refine_workers": max_refine_workers,
                 "keep_failed_writes": keep_failed_writes,
                 "disable_ruff_format": disable_ruff,
+                # Symbol resolution configuration (task 34.5)
+                "enable_symbol_resolution": enable_symbol_resolution,
+                "max_plan_retries": max_plan_retries,
+                "max_refine_retries": max_refine_retries,
             }
 
             operation_logger.info(

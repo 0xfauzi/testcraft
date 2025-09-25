@@ -10,6 +10,7 @@ import json
 from pathlib import Path
 from unittest.mock import Mock
 
+from testcraft.application.generate_usecase import GenerateUseCase
 from testcraft.application.generation.services.llm_orchestrator import LLMOrchestrator
 from testcraft.application.generation.services.symbol_resolver import SymbolResolver
 from testcraft.domain.models import (
@@ -60,11 +61,20 @@ class MockParserPort(ParserPort):
         ]
 
     def extract_methods(self, file_path, class_name=None, **kwargs):
-        return [
-            elem
-            for elem in self.mock_elements
-            if getattr(elem, "type", None) == TestElementType.METHOD
-        ]
+        # Filter by class_name if provided
+        if class_name:
+            return [
+                elem
+                for elem in self.mock_elements
+                if getattr(elem, "type", None) == TestElementType.METHOD
+                and getattr(elem, "name", "").startswith(f"{class_name}.")
+            ]
+        else:
+            return [
+                elem
+                for elem in self.mock_elements
+                if getattr(elem, "type", None) == TestElementType.METHOD
+            ]
 
     def map_tests(self, source_elements, existing_tests=None, **kwargs):
         return {
@@ -93,11 +103,18 @@ class MockLLMPort:
         if self.responses:
             response = self.responses.pop(0)
             if isinstance(response, dict):
-                return Mock(content=json.dumps(response))
+                # Return proper LLM response structure
+                return Mock(choices=[Mock(message=Mock(content=json.dumps(response)))])
             else:
-                return Mock(content=response)
+                return Mock(choices=[Mock(message=Mock(content=response))])
         return Mock(
-            content='{"plan": ["test_basic_case"], "missing_symbols": [], "import_line": "from test_module import TestClass"}'
+            choices=[
+                Mock(
+                    message=Mock(
+                        content='{"plan": ["test_basic_case"], "missing_symbols": [], "import_line": "from test_module import TestClass"}'
+                    )
+                )
+            ]
         )
 
 
@@ -120,7 +137,7 @@ class TestClass:
 ''')
 
         # Mock parser elements - use real TestElement objects
-        from testcraft.domain.models import TestElement, TestElementType
+        from testcraft.domain.models import TestElement
 
         mock_elements = [
             TestElement(
@@ -174,12 +191,20 @@ class TestClass:
         return str(x)
 ''')
 
-        # Mock parser elements
+        # Mock parser elements using real TestElement objects
+        from testcraft.domain.models import TestElement
+
         mock_elements = [
-            Mock(name="TestClass", type="class", docstring=None),
-            Mock(
+            TestElement(
+                name="TestClass",
+                type=TestElementType.CLASS,
+                line_range=(1, 5),
+                docstring=None,
+            ),
+            TestElement(
                 name="TestClass.test_method",
-                type="method",
+                type=TestElementType.METHOD,
+                line_range=(2, 5),
                 docstring="Test method docstring.",
             ),
         ]
@@ -223,10 +248,22 @@ def func2():
     pass
 """)
 
-        # Mock parser elements
+        # Mock parser elements using real TestElement objects
+        from testcraft.domain.models import TestElement
+
         mock_elements = [
-            Mock(name="func1", type="function", docstring=None),
-            Mock(name="func2", type="function", docstring=None),
+            TestElement(
+                name="func1",
+                type=TestElementType.FUNCTION,
+                line_range=(1, 3),
+                docstring=None,
+            ),
+            TestElement(
+                name="func2",
+                type=TestElementType.FUNCTION,
+                line_range=(4, 6),
+                docstring=None,
+            ),
         ]
 
         mock_source_content = {
@@ -280,10 +317,13 @@ class TestClass:
 ''')
 
         # Mock parser elements for helper function
+        from testcraft.domain.models import TestElement
+
         helper_elements = [
-            Mock(
+            TestElement(
                 name="helper_function",
-                type="function",
+                type=TestElementType.FUNCTION,
+                line_range=(2, 5),
                 docstring="Helper function for testing.",
             ),
         ]
@@ -358,7 +398,8 @@ class TestClass:
         module_file = tmp_path / "test_module.py"
         module_file.write_text("def test_func():\n    pass")
 
-        parser_port = MockParserPort()
+        # Create a MockParserPort with no elements so missing symbols can't be resolved
+        parser_port = MockParserPort(mock_elements=[], mock_source_content={})
 
         # Mock LLM responses: always return missing symbols to trigger retries
         llm_responses = [
@@ -636,3 +677,52 @@ def test_function():
         assert result["plan"]["plan"] == ["test_basic_case", "test_edge_cases"]
         assert "def test_basic_case():" in result["generated_code"]
         assert "def test_edge_cases():" in result["generated_code"]
+
+    def test_generate_usecase_integration_with_symbol_resolution(self, tmp_path):
+        """Test that GenerateUseCase properly initializes symbol resolution components."""
+        from unittest.mock import Mock
+
+        # Mock all the dependencies
+        mock_llm = Mock()
+        mock_writer = Mock()
+        mock_coverage = Mock()
+        mock_refine = Mock()
+        mock_context = Mock()
+        mock_parser = Mock()
+        mock_state = Mock()
+        mock_telemetry = Mock()
+
+        # Create GenerateUseCase with symbol resolution enabled
+        config = {
+            "enable_symbol_resolution": True,
+            "max_plan_retries": 2,
+            "max_refine_retries": 3,
+            "batch_size": 5,
+            "test_framework": "pytest",
+        }
+
+        usecase = GenerateUseCase(
+            llm_port=mock_llm,
+            writer_port=mock_writer,
+            coverage_port=mock_coverage,
+            refine_port=mock_refine,
+            context_port=mock_context,
+            parser_port=mock_parser,
+            state_port=mock_state,
+            telemetry_port=mock_telemetry,
+            config=config,
+        )
+
+        # Verify the integration components are properly initialized
+        assert hasattr(usecase, "_symbol_resolver")
+        assert hasattr(usecase, "_context_pack_builder")
+        assert hasattr(usecase, "_llm_orchestrator")
+
+        # Verify configuration is passed correctly
+        assert usecase._config["enable_symbol_resolution"] is True
+        assert usecase._config["max_plan_retries"] == 2
+        assert usecase._config["max_refine_retries"] == 3
+
+        # Verify the orchestrator is configured with the right parameters
+        assert usecase._llm_orchestrator._max_plan_retries == 2
+        assert usecase._llm_orchestrator._max_refine_retries == 3
