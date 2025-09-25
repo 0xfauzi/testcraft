@@ -533,7 +533,7 @@ class TestEdgeCases:
             layout_info = PackagingDetector.detect_repo_layout(project_root)
 
             src_root_names = {root.name for root in layout_info.src_roots}
-            assert "src" in src_root_names or "lib" in src_root_names
+            assert {"src", "lib"}.issubset(src_root_names)
 
             # Should detect packages from both roots
             assert (
