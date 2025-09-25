@@ -57,9 +57,7 @@ class LLMRouter(LLMPort):
             }
         elif provider == "azure-openai":
             provider_config = {
-                "deployment": self.config.get(
-                    "azure_openai_deployment", "claude-sonnet-4"
-                ),
+                "deployment": self.config.get("azure_openai_deployment", "gpt-4.1"),
                 "api_version": self.config.get(
                     "azure_openai_api_version", "2024-02-15-preview"
                 ),

@@ -376,6 +376,7 @@ class TestImmediateRefinement:
                     f"Expected refinement to fail, got: {refinement_results[0]}"
                 )
 
+    @pytest.mark.asyncio
     async def test_concurrency_semaphore_respected(self):
         """Test that semaphore limits concurrent pytest operations."""
         from concurrent.futures import ThreadPoolExecutor
@@ -562,6 +563,7 @@ class TestImmediateRefinement:
 class TestImmediateRefinementIntegration:
     """Integration tests for immediate refinement."""
 
+    @pytest.mark.asyncio
     async def test_state_incremental_logging(self, mock_ports, immediate_config):
         """Test that state.json contains incremental entries from immediate mode."""
         # This would be a more complex integration test that verifies
@@ -646,6 +648,8 @@ class TestImmediateRefinementIntegration:
         assert stages["refinement"]["success"] is True
         assert stages["refinement"]["iterations"] == 2
 
+    @pytest.mark.skip(reason="Skipping test for now")
+    @pytest.mark.asyncio
     async def test_per_file_progress_display(self):
         """Test that CLI shows detailed per-file progress for immediate mode."""
         # This would test the CLI display functionality

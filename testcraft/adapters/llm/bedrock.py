@@ -40,7 +40,7 @@ class BedrockAdapter(LLMPort):
 
     def __init__(
         self,
-        model_id: str = "anthropic.claude-3-haiku-20240307-v1:0",
+        model_id: str = "anthropic.claude-3-7-sonnet-v1:0",
         region_name: str | None = None,
         timeout: float = 180.0,
         max_tokens: int = 4000,
@@ -55,7 +55,7 @@ class BedrockAdapter(LLMPort):
         """Initialize Bedrock adapter.
 
         Args:
-            model_id: Bedrock model ID (e.g., "anthropic.claude-3-haiku-20240307-v1:0")
+            model_id: Bedrock model ID (e.g., "anthropic.claude-3-7-sonnet-v1:0")
             region_name: AWS region name (defaults to credentials or environment)
             timeout: Request timeout in seconds
             max_tokens: Maximum tokens in response

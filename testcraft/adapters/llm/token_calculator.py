@@ -175,8 +175,12 @@ class TokenCalculator:
         max_safe_thinking = int(self.limits.max_thinking * safety_margin)
         final_thinking = min(safe_thinking, max_safe_thinking)
 
-        # Ensure minimum viable thinking
-        final_thinking = max(final_thinking, 1000) if final_thinking > 0 else None
+        # Ensure minimum viable thinking without exceeding the safe cap
+        if final_thinking is not None and final_thinking > 0:
+            min_viable = min(1000, max_safe_thinking)
+            final_thinking = max(final_thinking, min_viable)
+        else:
+            final_thinking = None
 
         logger.debug(
             f"Calculated thinking tokens: {final_thinking} for {use_case} ({complexity_level}) on {self.provider}/{self.model}"

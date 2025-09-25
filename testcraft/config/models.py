@@ -749,7 +749,7 @@ class LLMProviderConfig(BaseModel):
         description="Azure OpenAI endpoint URL (or set AZURE_OPENAI_ENDPOINT environment variable)",
     )
     azure_openai_deployment: str = Field(
-        default="claude-sonnet-4", description="Azure OpenAI deployment name"
+        default="gpt-4.1", description="Azure OpenAI deployment name"
     )
     azure_openai_api_version: str = Field(
         default="2024-02-15-preview", description="Azure OpenAI API version"
