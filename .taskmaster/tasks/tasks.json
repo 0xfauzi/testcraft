@@ -1516,11 +1516,26 @@
             "testStrategy": "Verify all CI tests run and pass. Check artifact retention and reporting. Write regression tests to ensure future changes do not break CI integration."
           }
         ]
+      },
+      {
+        "id": 36,
+        "title": "Complete Implementation of the Coverage Adapter",
+        "description": "Finalize the CoverageAdapter to provide robust, configurable code coverage measurement, reporting, and integration with the broader TestCraft workflow.",
+        "details": "1. Implement all required methods in the CoverageAdapter, ensuring support for both line and branch coverage using coverage.py as the backend. The adapter should expose a clean interface for starting, stopping, and collecting coverage data programmatically, as well as for generating reports in multiple formats (text, HTML, XML).\n\n2. Integrate with the test execution pipeline so that coverage measurement can be triggered automatically during test runs (e.g., via pytest integration: `coverage run -m pytest`). Ensure the adapter can accept configuration for source paths, omit/include patterns, and report output locations.\n\n3. Add support for incremental and aggregate coverage runs, allowing the adapter to merge data from multiple test sessions and produce cumulative reports. Implement error handling for common issues (e.g., missing source files, misconfigured paths).\n\n4. Provide hooks or callbacks so that other system components (such as the evaluation harness and UI) can query coverage results, trigger report generation, and receive notifications on coverage changes.\n\n5. Document the adapter's API and configuration options, and provide usage examples for integration with both CLI and programmatic workflows.\n\n6. Ensure the adapter is extensible for future support of additional coverage tools (e.g., pytest-cov, swagger-coverage for API projects[4]), and can be easily mocked for testing purposes.",
+        "testStrategy": "- Write unit tests for all CoverageAdapter methods, including edge cases (e.g., empty source, partial runs, invalid config).\n- Develop integration tests that run real test suites under coverage measurement, verifying correct data collection and report generation (text, HTML, XML).\n- Test adapter behavior with multiple test sessions, ensuring correct merging and cumulative reporting.\n- Simulate error conditions (e.g., missing files, misconfigured paths) and verify robust error handling.\n- Mock the adapter in higher-level system tests to ensure correct interaction with the evaluation harness and UI components.\n- Manually verify that generated reports match expected coverage for sample projects.",
+        "status": "pending",
+        "dependencies": [
+          17,
+          19,
+          35
+        ],
+        "priority": "medium",
+        "subtasks": []
       }
     ],
     "metadata": {
       "created": "2025-01-27T20:16:58.061Z",
-      "updated": "2025-09-21T23:20:02.817Z",
+      "updated": "2025-09-25T14:25:53.443Z",
       "description": "Tasks for master context"
     }
   }
