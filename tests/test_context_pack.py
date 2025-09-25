@@ -403,11 +403,11 @@ class TestContextPackBuilder:
         """Test ContextPackBuilder.build_context_pack integration."""
         builder = ContextPackBuilder()
 
-        # Create a temporary Python file for testing
-        with tempfile.NamedTemporaryFile(
-            mode="w", suffix=".py", delete=False
-        ) as temp_file:
-            temp_file.write('''
+        # Create a temporary directory and file for testing
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_path = Path(temp_dir) / "test_module.py"
+
+            temp_path.write_text('''
 """Test module for context pack building."""
 
 class TestClass:
@@ -421,86 +421,69 @@ def standalone_function(x: int, y: int = 10) -> int:
     """A standalone function."""
     return x + y
 ''')
-            temp_file.flush()
 
-            temp_path = Path(temp_file.name)
+            # Test building ContextPack for a class method
+            context_pack_method = builder.build_context_pack(
+                target_file=temp_path, target_object="TestClass.test_method"
+            )
 
-            try:
-                # Test building ContextPack for a class method
-                context_pack_method = builder.build_context_pack(
-                    target_file=temp_path, target_object="TestClass.test_method"
-                )
+            # Verify the basic structure
+            assert isinstance(context_pack_method, ContextPack)
+            assert context_pack_method.target.object == "TestClass.test_method"
+            assert "test_method" in context_pack_method.focal.source
+            assert "def test_method" in context_pack_method.focal.signature
+            assert (
+                context_pack_method.focal.docstring == "A test method with type hints."
+            )
 
-                # Verify the basic structure
-                assert isinstance(context_pack_method, ContextPack)
-                assert context_pack_method.target.object == "TestClass.test_method"
-                assert "test_method" in context_pack_method.focal.source
-                assert "def test_method" in context_pack_method.focal.signature
-                assert (
-                    context_pack_method.focal.docstring
-                    == "A test method with type hints."
-                )
+            # Test building ContextPack for a standalone function
+            context_pack_func = builder.build_context_pack(
+                target_file=temp_path, target_object="standalone_function"
+            )
 
-                # Test building ContextPack for a standalone function
-                context_pack_func = builder.build_context_pack(
-                    target_file=temp_path, target_object="standalone_function"
-                )
+            assert context_pack_func.target.object == "standalone_function"
+            assert "standalone_function" in context_pack_func.focal.source
+            # The signature should contain information about the target (may be fallback)
+            assert "standalone_function" in context_pack_func.focal.signature
+            # Docstring may be None if parsing fails, which is acceptable for test purposes
+            assert context_pack_func.focal.docstring in [
+                None,
+                "A standalone function.",
+            ]
 
-                assert context_pack_func.target.object == "standalone_function"
-                assert "standalone_function" in context_pack_func.focal.source
-                # The signature should contain information about the target (may be fallback)
-                assert "standalone_function" in context_pack_func.focal.signature
-                # Docstring may be None if parsing fails, which is acceptable for test purposes
-                assert context_pack_func.focal.docstring in [
-                    None,
-                    "A standalone function.",
-                ]
+            # Verify import_map is populated
+            assert context_pack_func.import_map.target_import
+            assert isinstance(context_pack_func.import_map.sys_path_roots, list)
+            assert isinstance(context_pack_func.import_map.needs_bootstrap, bool)
 
-                # Verify import_map is populated
-                assert context_pack_func.import_map.target_import
-                assert isinstance(context_pack_func.import_map.sys_path_roots, list)
-                assert isinstance(context_pack_func.import_map.needs_bootstrap, bool)
-
-                # Verify defaults are applied
-                assert context_pack_func.conventions.test_style == "pytest"
-                assert context_pack_func.budget.max_input_tokens == 60000
-
-            finally:
-                # Clean up
-                temp_path.unlink()
+            # Verify defaults are applied
+            assert context_pack_func.conventions.test_style == "pytest"
+            assert context_pack_func.budget.max_input_tokens == 60000
 
     def test_build_context_pack_with_custom_options(self) -> None:
         """Test ContextPackBuilder with custom conventions and budget."""
         builder = ContextPackBuilder()
 
-        with tempfile.NamedTemporaryFile(
-            mode="w", suffix=".py", delete=False
-        ) as temp_file:
-            temp_file.write("def simple_func(): pass")
-            temp_file.flush()
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_path = Path(temp_dir) / "simple_module.py"
+            temp_path.write_text("def simple_func(): pass")
 
-            temp_path = Path(temp_file.name)
+            custom_conventions = Conventions(
+                test_style="unittest",
+                allowed_libs=["unittest"],
+            )
+            custom_budget = Budget(max_input_tokens=30000)
 
-            try:
-                custom_conventions = Conventions(
-                    test_style="unittest",
-                    allowed_libs=["unittest"],
-                )
-                custom_budget = Budget(max_input_tokens=30000)
+            context_pack = builder.build_context_pack(
+                target_file=temp_path,
+                target_object="simple_func",
+                conventions=custom_conventions,
+                budget=custom_budget,
+            )
 
-                context_pack = builder.build_context_pack(
-                    target_file=temp_path,
-                    target_object="simple_func",
-                    conventions=custom_conventions,
-                    budget=custom_budget,
-                )
-
-                assert context_pack.conventions.test_style == "unittest"
-                assert context_pack.conventions.allowed_libs == ["unittest"]
-                assert context_pack.budget.max_input_tokens == 30000
-
-            finally:
-                temp_path.unlink()
+            assert context_pack.conventions.test_style == "unittest"
+            assert context_pack.conventions.allowed_libs == ["unittest"]
+            assert context_pack.budget.max_input_tokens == 30000
 
     def test_build_enriched_context_delegation(self) -> None:
         """Test that build_enriched_context delegates to EnrichedContextBuilder."""
@@ -530,24 +513,16 @@ def standalone_function(x: int, y: int = 10) -> int:
         """Test error handling for invalid target objects."""
         builder = ContextPackBuilder()
 
-        with tempfile.NamedTemporaryFile(
-            mode="w", suffix=".py", delete=False
-        ) as temp_file:
-            temp_file.write("def existing_func(): pass")
-            temp_file.flush()
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_path = Path(temp_dir) / "test_module.py"
+            temp_path.write_text("def existing_func(): pass")
 
-            temp_path = Path(temp_file.name)
+            # Should not raise exception, but should handle gracefully
+            context_pack = builder.build_context_pack(
+                target_file=temp_path, target_object="nonexistent_function"
+            )
 
-            try:
-                # Should not raise exception, but should handle gracefully
-                context_pack = builder.build_context_pack(
-                    target_file=temp_path, target_object="nonexistent_function"
-                )
-
-                # Should still create a valid ContextPack with fallback focal info
-                assert isinstance(context_pack, ContextPack)
-                assert context_pack.target.object == "nonexistent_function"
-                assert context_pack.focal.signature.startswith("# Target:")
-
-            finally:
-                temp_path.unlink()
+            # Should still create a valid ContextPack with fallback focal info
+            assert isinstance(context_pack, ContextPack)
+            assert context_pack.target.object == "nonexistent_function"
+            assert context_pack.focal.signature.startswith("# Target:")
