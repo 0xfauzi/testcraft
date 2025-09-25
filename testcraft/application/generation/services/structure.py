@@ -182,6 +182,17 @@ class ModulePathDeriver:
             Dictionary with module_path, validation info, and metadata
         """
         try:
+            # Check if file exists
+            if not file_path.exists():
+                logger.warning("File %s does not exist", file_path)
+                return {
+                    "module_path": "",
+                    "import_suggestion": "",
+                    "validation_status": "failed",
+                    "error": "File does not exist",
+                    "fallback_paths": [],
+                }
+
             # Auto-detect project root if not provided
             if project_root is None:
                 project_root = ModulePathDeriver._find_project_root(file_path)
@@ -255,7 +266,23 @@ class ModulePathDeriver:
         """Generate possible module path candidates."""
         candidates = []
 
-        # Remove .py extension
+        # Strategy 1: Handle __init__.py files first (special case)
+        if rel_path.name == "__init__.py":
+            # For __init__.py files, the module path is the parent directory
+            parent_path = rel_path.parent
+            parent_parts = parent_path.parts
+
+            if parent_parts:
+                # Direct parent path: src/mypackage/__init__.py -> src.mypackage
+                candidates.append(".".join(parent_parts))
+
+                # Handle src/ layout: src/mypackage/__init__.py -> mypackage
+                if parent_parts[0] == "src" and len(parent_parts) > 1:
+                    candidates.append(".".join(parent_parts[1:]))
+
+            return candidates
+
+        # Remove .py extension for regular files
         if rel_path.suffix == ".py":
             base_path = rel_path.with_suffix("")
         else:
@@ -263,12 +290,12 @@ class ModulePathDeriver:
 
         parts = base_path.parts
 
-        # Strategy 1: Direct path (e.g., testcraft/cli/main.py -> testcraft.cli.main)
+        # Strategy 2: Direct path (e.g., testcraft/cli/main.py -> testcraft.cli.main)
         if parts:
             direct_path = ".".join(parts)
             candidates.append(direct_path)
 
-        # Strategy 2: Handle src/ layouts
+        # Strategy 3: Handle src/ layouts
         if parts and parts[0] == "src":
             if len(parts) > 1:
                 # src/package/module.py -> package.module
@@ -279,30 +306,15 @@ class ModulePathDeriver:
                 src_prefix_path = ".".join(parts)
                 candidates.append(src_prefix_path)
 
-        # Strategy 3: Package-relative paths (skip common top-level dirs)
+        # Strategy 4: Package-relative paths (skip common top-level dirs)
         skip_dirs = {"tests", "test", "docs", "examples", "scripts", "tools"}
         if parts and parts[0] not in skip_dirs:
-            # Already handled in Strategy 1
+            # Already handled in Strategy 2
             pass
         elif len(parts) > 1:
             # tests/test_module.py -> test_module (for test files)
             no_top_dir = ".".join(parts[1:])
             candidates.append(no_top_dir)
-
-        # Strategy 4: Handle __init__.py files
-        if rel_path.name == "__init__.py":
-            if len(parts) > 1:
-                # Remove __init__.py and use parent directory
-                init_candidates = []
-                parent_parts = parts[:-1]  # Remove __init__.py
-
-                init_candidates.append(".".join(parent_parts))
-
-                # Handle src/ layout for __init__.py
-                if parent_parts and parent_parts[0] == "src" and len(parent_parts) > 1:
-                    init_candidates.append(".".join(parent_parts[1:]))
-
-                candidates.extend(init_candidates)
 
         # Remove duplicates while preserving order
         seen = set()

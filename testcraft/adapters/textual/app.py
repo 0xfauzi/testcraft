@@ -202,9 +202,14 @@ class TestCraftTextualApp(App[None]):
         self.operation_stats.update(event.stats)
 
         # Forward to current screen if it handles stats
-        current_screen = self.screen
-        if hasattr(current_screen, "on_stats_updated"):
-            current_screen.on_stats_updated(event)
+        try:
+            current_screen = self.screen
+            if hasattr(current_screen, "on_stats_updated"):
+                current_screen.on_stats_updated(event)
+        except Exception:
+            # No screens on stack yet, or other screen access error
+            # This can happen during app initialization
+            pass
 
     def on_error_occurred(self, event: ErrorOccurred) -> None:
         """Handle error notifications."""

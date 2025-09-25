@@ -22,6 +22,7 @@ from ..adapters.io.ui_rich import UIStyle
 from ..application.environment.preflight import EnvironmentValidator
 from ..config.loader import ConfigLoader, ConfigurationError
 from ..config.models import TestCraftConfig
+from .commands.models import add_model_commands
 from .dependency_injection import DependencyError, create_dependency_container
 from .evaluation_commands import add_evaluation_commands
 from .utility_commands import add_utility_commands
@@ -150,7 +151,7 @@ def app(
         logger.debug("🔍 [cyan]Debug mode enabled[/] - verbose logging active")
 
     # Allow running certain commands without a valid config
-    skip_config_commands = {"init-config"}
+    skip_config_commands = {"init-config", "models"}
     invoked = None
     try:
         # Best-effort detection of invoked subcommand from argv
@@ -930,6 +931,9 @@ add_evaluation_commands(app)
 
 # Add utility commands
 add_utility_commands(app)
+
+# Add model catalog commands
+add_model_commands(app)
 
 
 if __name__ == "__main__":

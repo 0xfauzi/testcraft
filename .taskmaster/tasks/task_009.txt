@@ -1,26 +1,72 @@
 # Task ID: 9
 # Title: Implement Telemetry and Cost Management
-# Status: pending
+# Status: done
 # Dependencies: 4
 # Priority: medium
-# Description: Create adapters for OpenTelemetry tracing, metrics collection, and cost management.
+# Description: Production-ready modular telemetry and cost management system with privacy-first features, multi-backend support, and comprehensive metrics/cost tracking.
 # Details:
-1. Create adapters/telemetry/otel.py:
-   - Implement OpenTelemetry spans for use cases
-   - Track LLM calls, retrieval, coverage runs, writer operations
-   - Record metrics for latency, errors, tokens
-   - Support opt-out and anonymization
-2. Create adapters/telemetry/metrics.py:
-   - Track coverage delta
-   - Count tests generated
-   - Measure pass rate
-   - Count refine iterations
-3. Create adapters/telemetry/cost_manager.py:
-   - Track token usage per request
-   - Accrue costs by model and operation
-   - Enforce budget warnings and stops
-   - Persist summary by day
-   - Implement cost optimization strategies
+Implementation now includes:
+
+1. Modular Telemetry Port Interface (testcraft/ports/telemetry_port.py):
+   - Defines a unified interface for telemetry operations (spans, metrics, privacy controls)
+   - Supports multiple backends (OpenTelemetry, Datadog, Jaeger, No-Op)
+   - Enables easy backend swapping and extension
+
+2. OpenTelemetry Adapter (testcraft/adapters/telemetry/opentelemetry_adapter.py):
+   - Full OpenTelemetry integration with automatic span/context management
+   - Graceful fallback to console or no-op if OpenTelemetry is unavailable
+   - Built-in anonymization and opt-out support
+   - Metrics collection: counters, histograms, gauges for LLM calls, coverage, file ops, test generation
+   - OTLP export and privacy protection
+
+3. No-Op Adapter (testcraft/adapters/telemetry/noop_adapter.py):
+   - Implements the telemetry interface but performs no operations
+   - Used for disabled telemetry/testing scenarios
+   - Zero overhead when telemetry is off
+
+4. Cost Management System (testcraft/adapters/telemetry/cost_manager.py):
+   - Implements CostPort interface for tracking token usage and costs
+   - Budget enforcement with configurable limits/warnings
+   - Persistent cost data storage (JSON export)
+   - Daily/weekly/monthly summaries and breakdowns
+   - Integrated with telemetry for cost-related metrics
+
+5. Telemetry Router/Factory (testcraft/adapters/telemetry/router.py):
+   - Factory pattern for adapter instantiation based on config
+   - Registry for custom adapter registration
+   - Context managers for telemetry operations
+   - Automatic fallback to no-op adapter
+
+6. Configuration Integration (testcraft/config/models.py):
+   - TelemetryConfig and TelemetryBackendConfig classes
+   - Supports backend selection, privacy/anonymization, sampling rates, cost thresholds
+   - Validates backend-specific options
+
+7. Comprehensive Test Suite (tests/test_telemetry_adapters.py):
+   - Unit tests for all adapters and interfaces
+   - Integration tests for cost management and telemetry
+   - Error handling and edge case coverage
+   - Mock-based testing for external dependencies
+
+Key Features:
+- Modular design for backend flexibility
+- Privacy-first: anonymization and opt-out
+- Cost control: budget enforcement, optimization, persistent storage
+- Graceful degradation: works without OpenTelemetry
+- Comprehensive metrics: LLM calls, coverage, file ops, test generation
+- Export capabilities: CSV/JSON for cost analysis
+
+Usage Example:
+
+from testcraft.adapters.telemetry import create_telemetry_adapter, CostManager
+
+telemetry = create_telemetry_adapter(config.telemetry)
+cost_manager = CostManager(config.cost_management, telemetry)
+
+with telemetry.create_span("llm_call") as span:
+    span.set_attribute("model", "gpt-4")
+    # ... perform LLM operation
+    cost_manager.track_usage("llm", "generate_tests", {"cost": 0.50, "tokens_used": 200})
 
 # Test Strategy:
-Unit tests for span creation and attribute recording. Test metrics collection and aggregation. Verify cost tracking across multiple requests and budget enforcement. Test opt-out functionality and anonymization.
+Comprehensive unit and integration tests for all telemetry adapters and cost management components. Tests cover span creation, attribute recording, metrics collection, aggregation, cost tracking, budget enforcement, opt-out, anonymization, error handling, and external dependency mocking. Persistent storage and export functionality are verified.

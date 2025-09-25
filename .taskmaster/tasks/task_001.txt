@@ -1,6 +1,6 @@
 # Task ID: 1
 # Title: Project Scaffolding and Environment Setup
-# Status: pending
+# Status: done
 # Dependencies: None
 # Priority: high
 # Description: Set up the initial project structure with Python 3.11+, development tools, and directory layout according to the PRD specifications.
@@ -20,3 +20,37 @@
 
 # Test Strategy:
 Verify project structure exists with correct directories. Ensure all development tools can be invoked. Validate pyproject.toml configuration with a simple import test.
+
+# Subtasks:
+## 1. Initialize Python Project and Virtual Environment [done]
+### Dependencies: None
+### Description: Create a new Python project directory, ensure Python 3.11+ is available, and set up a virtual environment for isolated development.
+### Details:
+Establish the root project folder, verify Python 3.11+ installation, and create a virtual environment using the preferred tool (e.g., venv, uv, or Poetry). Activate the environment for subsequent steps.
+
+## 2. Configure Development Tools and Linting [done]
+### Dependencies: 1.1
+### Description: Install and configure development tools: uv (or Poetry/PDM), ruff, black, mypy, and pytest for code formatting, linting, type checking, and testing.
+### Details:
+Use the package manager to install ruff, black, mypy, and pytest as development dependencies. Create or update configuration files for each tool (e.g., pyproject.toml sections or standalone config files) to enforce code quality standards.
+<info added on 2025-09-06T21:22:00.312Z>
+Project name has been updated to "testcraft" from "smart-test-generator". The pyproject.toml file has been modified to reflect this change, including updating the project name and adjusting the pytest coverage path to match the new structure. All development tools (ruff, black, mypy, pytest) have been successfully configured with appropriate settings and verified to be working correctly.
+</info added on 2025-09-06T21:22:00.312Z>
+
+## 3. Establish Project Directory Structure (Clean/Hex Architecture) [done]
+### Dependencies: 1.1
+### Description: Create the core directory layout: domain/, application/, adapters/, ports/, cli/, and ensure each contains an __init__.py file for package recognition.
+### Details:
+Manually or via script, generate the specified directories and add empty __init__.py files to each. Follow Clean/Hex architecture conventions for separation of concerns.
+
+## 4. Initialize pyproject.toml and Project Metadata [done]
+### Dependencies: 1.1, 1.2
+### Description: Create and configure pyproject.toml with project metadata, dependencies, tool configurations, and entry points as specified.
+### Details:
+Define project name, version, authors, and dependencies in pyproject.toml. Add entry point: 'sloptest = smart_test_generator.cli.main:app'. Include tool configuration sections for ruff, black, mypy, and pytest as needed.
+
+## 5. Add Essential Project Files and Version Control [done]
+### Dependencies: 1.1, 1.3, 1.4
+### Description: Create .gitignore, README.md, and LICENSE files. Initialize a Git repository and make the initial commit.
+### Details:
+Draft a .gitignore tailored for Python projects, write a basic README.md with project overview and setup instructions, and select an appropriate open-source LICENSE. Initialize Git and commit all scaffolding files.

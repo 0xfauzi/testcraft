@@ -13,6 +13,7 @@ from ...ports.cost_port import CostPort
 from ...ports.llm_port import LLMPort
 from ...prompts.registry import PromptRegistry
 from .common import parse_json_response, with_retries
+from .pricing import calculate_cost as pricing_calculate_cost
 from .token_calculator import TokenCalculator
 
 logger = logging.getLogger(__name__)
@@ -39,7 +40,7 @@ class BedrockAdapter(LLMPort):
 
     def __init__(
         self,
-        model_id: str = "anthropic.claude-3-haiku-20240307-v1:0",
+        model_id: str = "anthropic.claude-3-7-sonnet-v1:0",
         region_name: str | None = None,
         timeout: float = 180.0,
         max_tokens: int = 4000,
@@ -48,12 +49,13 @@ class BedrockAdapter(LLMPort):
         credential_manager: CredentialManager | None = None,
         prompt_registry: PromptRegistry | None = None,
         cost_port: CostPort | None = None,
+        beta: dict[str, Any] | None = None,
         **kwargs: Any,
     ):
         """Initialize Bedrock adapter.
 
         Args:
-            model_id: Bedrock model ID (e.g., "anthropic.claude-3-haiku-20240307-v1:0")
+            model_id: Bedrock model ID (e.g., "anthropic.claude-3-7-sonnet-v1:0")
             region_name: AWS region name (defaults to credentials or environment)
             timeout: Request timeout in seconds
             max_tokens: Maximum tokens in response
@@ -79,6 +81,7 @@ class BedrockAdapter(LLMPort):
 
         # Initialize cost tracking
         self.cost_port = cost_port
+        self.beta = beta or {}
 
         # Initialize token calculator - map model_id to normalized model name
         model_name = self._map_model_id_to_model(model_id)
@@ -671,6 +674,12 @@ class BedrockAdapter(LLMPort):
 
         # Use provided max_tokens or fallback to instance default
         tokens_to_use = max_tokens if max_tokens is not None else self.max_tokens
+        # Clamp to catalog cap
+        try:
+            cap = self.token_calculator.limits.max_output
+            tokens_to_use = min(int(tokens_to_use or cap), int(cap))
+        except Exception:
+            pass
 
         # Create LangChain messages
         messages = [
@@ -714,6 +723,27 @@ class BedrockAdapter(LLMPort):
                         "output_tokens": usage_data.get("completion_tokens", 0),
                         "total_tokens": usage_data.get("total_tokens", 0),
                     }
+
+            # Track costs if possible
+            try:
+                if self.cost_port and usage_info:
+                    cost = pricing_calculate_cost(usage_info, "bedrock", self.model_id)
+                    tokens_total = usage_info.get("total_tokens") or (
+                        usage_info.get("input_tokens", 0)
+                        + usage_info.get("output_tokens", 0)
+                    )
+                    self.cost_port.track_usage(
+                        service="bedrock",
+                        operation="invoke",
+                        cost_data={
+                            "cost": cost,
+                            "tokens_used": tokens_total,
+                            "api_calls": 1,
+                            "model": self.model_id,
+                        },
+                    )
+            except Exception:
+                pass
 
             return {
                 "content": content,

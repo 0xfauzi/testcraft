@@ -1287,12 +1287,103 @@
         "id": 31,
         "title": "Align model limits and pricing with official docs",
         "description": "Centralize and align all model limits, pricing, and feature flags with OpenAI and Claude official documentation.",
-        "details": "Objectives:\n- Establish a single source of truth for model metadata (limits, pricing, flags, provenance)\n- Enforce vendor caps by default; gate beta features via explicit config\n- Replace hardcoded limits/pricing with catalog-driven logic and validation\n- Provide tooling (CLI) to view/verify/diff model metadata\n\nScope:\n- OpenAI Models: https://platform.openai.com/docs/models\n- Claude Models: https://docs.anthropic.com/en/docs/about-claude/models\n\nAcceptance criteria:\n- Token budgets never exceed documented defaults; extended features only when explicitly enabled\n- Pricing calculations sourced from catalog; consistent per-million token units\n- All adapters (OpenAI/Claude/Azure/Bedrock) read limits/pricing from the catalog\n- CLI commands present accurate data and verification passes\n- Docs updated with configuration examples and links to vendor docs",
+        "details": "Objectives:\n- Establish a single source of truth for model metadata (limits, pricing, flags, provenance)\n- Enforce vendor caps by default; gate beta features via explicit config\n- Replace hardcoded limits/pricing with catalog-driven logic and validation\n- Provide tooling (CLI) to view/verify/diff model metadata\n\nScope:\n- OpenAI Models: https://platform.openai.com/docs/models\n- Claude Models: https://docs.anthropic.com/en/docs/about-claude/models\n\nAcceptance criteria:\n- Token budgets never exceed documented defaults; extended features only when explicitly enabled\n- Pricing calculations sourced from catalog; consistent per-million token units\n- All adapters (OpenAI/Claude/Azure/Bedrock) read limits/pricing from the catalog\n- CLI commands present accurate data and verification passes\n- Docs updated with configuration examples and links to vendor docs\n<info added on 2025-09-21T22:52:20.237Z>\nExpanded scope and references:\n\n- OpenAI Models Pricing: https://platform.openai.com/docs/pricing\n- Claude Models pricing: https://claude.com/pricing#api\n- OpenAI Models We use for this project:\n    - gpt-5: https://platform.openai.com/docs/models/gpt-5\n    - gpt-4.1: https://platform.openai.com/docs/models/gpt-4.1\n    - o4-mini: https://platform.openai.com/docs/models/o4-mini\n- Claude Models We use for this project:\n    - 4 Sonnet\n    - 3.7 Sonnet\n    - Opus 4\n\nWhen inventorying and reconciling models, explicitly flag any models not present in official documentation (e.g., o4-mini, GPT-5 if not listed) and propose canonical alias mappings for Anthropic variants.\n\nThe model_catalog.toml schema must include: provider, model_id, limits (max_context, default_max_output, max_thinking if applicable), flags, beta headers, pricing (per_million.input, per_million.output), source.url, and last_verified. Use conservative defaults where documentation omits explicit output caps and document the rationale for these choices.\n\nAdapters and TokenCalculator must error on unknown models; adding a new model requires explicit catalog entry.\n\nPricing logic must be centralized in a single module (pricing.py), exposing get_pricing(model) for per-million input/output rates, and all adapters must use this module—removing embedded pricing tables.\n\nExtended context/output and beta features must be opt-in, controlled by explicit config flags (models.beta.enable_extended_output/context per provider), with Anthropic beta headers set only when the flag is true. Default limits must be enforced when flags are off, and structured logs should be added when extended features are enabled.\n\nProvider parameter compliance must ensure all request parameters match provider expectations and never exceed catalog caps. For OpenAI, use max_completion_tokens where required and block temperature on reasoning models; for Anthropic, use max_tokens and respect thinking tokens only when supported; for Azure/Bedrock, map deployments to canonical model entries and enforce the same caps.\n\nCLI commands must include 'models show' (displaying metadata, provenance, last_verified) and 'models verify' (ensuring all referenced models exist and caps are not exceeded), with tests for golden outputs and failure cases.\n\nDocumentation must be updated to include configuration examples, CLI usage, and direct links to official vendor documentation. Add a monthly review checklist and record last_verified in the catalog. Include a changelog entry and migration notes.\n\nDuring migration and rollout, remove any unknown models, add alias mapping for Anthropic dated variants, switch adapters to catalog-driven limits/pricing behind a feature flag, enable by default after soak, and deprecate/remove all hardcoded paths.\n</info added on 2025-09-21T22:52:20.237Z>\n<info added on 2025-09-21T22:55:13.179Z>\nImplementation Plan (revised to align with task_031.txt):\n\n1. Inventory and reconcile configured models  \n- Review files: testcraft/adapters/llm/router.py, token_calculator.py, openai.py, claude.py, azure.py, bedrock.py  \n- Produce a table listing provider/model_id, limits/pricing snippets, and alias candidates  \n- Explicitly flag models not present in official documentation and propose canonical alias mappings, especially for Anthropic variants\n\n2. Create model_catalog.toml as the single source of truth  \n- Define schema: provider, model_id, limits.{max_context, default_max_output, max_thinking?}, flags, beta headers, pricing.{per_million.input, per_million.output}, source.url, last_verified  \n- Populate with OpenAI (gpt-4.1, gpt-5, o4-mini) and Anthropic (claude-3-7-sonnet, claude-sonnet-4, opus 4) models  \n- Use conservative defaults where output caps are not explicit and document the rationale\n\n3. Refactor TokenCalculator to use the catalog  \n- Replace PROVIDER_LIMITS with a loader that reads and validates the TOML (with caching)  \n- Ensure calculate_max_tokens/thinking uses catalog limits and safety margins, enforcing context ceilings  \n- Raise errors for unknown models, requiring explicit catalog entries\n\n4. Centralize pricing logic  \n- Implement testcraft/adapters/llm/pricing.py with get_pricing(model) returning per-million input/output rates  \n- Update openai.py, claude.py, azure.py, and bedrock.py to use the pricing module and remove embedded pricing tables  \n- Standardize cost calculation: cost = (prompt_tokens * input_per_million + completion_tokens * output_per_million) / 1_000_000\n\n5. Gate beta/extended features via config  \n- Extend LLMProviderConfig with models.beta.enable_extended_output/context per provider  \n- Set Anthropic beta headers only when enabled; default to documented caps  \n- Add structured logs when extended features are enabled\n\n6. Provider parameter compliance and ceilings  \n- For OpenAI: use max_completion_tokens where required and block temperature on o-series reasoning models  \n- For Anthropic: use max_tokens and apply thinking budgets only when supported  \n- For Azure/Bedrock: normalize deployment/model IDs to canonical entries and enforce the same caps\n\n7. CLI support: models show/verify  \n- Implement models show to display a table or JSON of limits, pricing, provenance, and last_verified  \n- Implement models verify to ensure all referenced models exist and caps are not exceeded\n\n8. Validation and tests  \n- Unit tests for catalog loader schema validation, TokenCalculator respecting caps, and pricing math consistency (per-million to per-1k)  \n- Contract tests to ensure adapters never exceed caps and beta flags affect headers and budgets  \n- End-to-end smoke tests for flows capped by catalog limits\n\n9. Documentation and governance  \n- Update docs/configuration.md and add docs/models.md to cover the catalog, CLI, beta flags, and links to official docs  \n- Add a monthly review checklist and ensure last_verified is recorded\n\n10. Migration and rollout  \n- Remove unknown models, add alias mappings, and wire adapters to catalog-driven logic behind a feature flag  \n- Enable catalog-driven logic by default after soak period and remove deprecated/hardcoded paths\n\nRunbook (Session 2):  \n- uv sync --dev  \n- Implement steps 1 and 2, add tests  \n- Implement steps 3 and 4, update adapter cost logic, add tests  \n- Implement steps 5 to 7, add CLI tests  \n- Implement steps 8 to 10, update documentation  \n- uv run pytest -q tests/test_model_catalog.py tests/test_token_calculator_catalog.py tests/test_llm_adapters.py tests/test_cli_models.py  \n- ruff check . && ruff format .  \n- Commit and push branch\n</info added on 2025-09-21T22:55:13.179Z>",
         "testStrategy": "- Unit tests for catalog loader validation, TokenCalculator caps, pricing math\n- Adapter-level tests ensuring param compliance and beta header gating\n- CLI verification test: models verify passes; models show renders expected rows\n- End-to-end smoke: generate/analyze/refine flows capped within limits",
-        "status": "pending",
+        "status": "done",
         "dependencies": [],
         "priority": "high",
-        "subtasks": []
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "Inventory and reconcile configured models",
+            "description": "Enumerate all model IDs and defaults used in code and config; identify non-doc and aliased names.",
+            "details": "Scan: testcraft/adapters/llm/router.py, token_calculator.py, openai.py, claude.py, azure.py, bedrock.py\nCollect: provider, model_id, context/output/thinking defaults, pricing snippets\nFlag: models not present in official docs (e.g., o4-mini, GPT-5 if not listed)\nPropose canonical alias mapping (dated Anthropic variants -> canonical)",
+            "status": "done",
+            "dependencies": [],
+            "parentTaskId": 31
+          },
+          {
+            "id": 2,
+            "title": "Create model_catalog.toml (single source of truth)",
+            "description": "Define TOML schema and seed with OpenAI/Claude models from official docs, including provenance.",
+            "details": "File: testcraft/config/model_catalog.toml\nSchema: provider, model_id, limits.{max_context, default_max_output, max_thinking?}, flags, beta headers, pricing.{per_million.input, per_million.output}, source.url, last_verified\nPopulate: gpt-4.1, claude-3-7-sonnet, claude-sonnet-4, opus 4, o4-mini, gpt-5\nConservative defaults where docs omit explicit output caps; document rationale",
+            "status": "done",
+            "dependencies": [],
+            "parentTaskId": 31
+          },
+          {
+            "id": 3,
+            "title": "Refactor TokenCalculator to load limits from catalog",
+            "description": "Replace hardcoded PROVIDER_LIMITS with loader; enforce caps and context ceiling.",
+            "details": "Implement loader: read TOML once (cached), validate schema\nUpdate calculate_max_tokens/thinking to use catalog values and safety margins\nUnknown models -> error; adding a new model requires adding data to catalog\nAdd unit tests for limits math and guardrails",
+            "status": "done",
+            "dependencies": [],
+            "parentTaskId": 31
+          },
+          {
+            "id": 4,
+            "title": "Centralize pricing into pricing.py",
+            "description": "Move pricing tables to a single module backed by the catalog; compute costs per request.",
+            "details": "New module: testcraft/adapters/llm/pricing.py\nExpose get_pricing(model) returning per-million input/output; helper for per-1k\nUpdate openai.py/claude.py to use pricing module; remove embedded dicts\nUnit tests for pricing math across SDK usage variants",
+            "status": "done",
+            "dependencies": [],
+            "parentTaskId": 31
+          },
+          {
+            "id": 5,
+            "title": "Gate beta/extended features behind config",
+            "description": "Make extended context/output opt-in and header-driven with explicit flags.",
+            "details": "Add config keys: models.beta.enable_extended_output/context per provider\nAdapters: set Anthropic beta headers only when flag is true; never by default\nEnforce default limits when flags are off; add structured logs when enabled\nTests: verify headers present/absent and caps enforced",
+            "status": "done",
+            "dependencies": [],
+            "parentTaskId": 31
+          },
+          {
+            "id": 6,
+            "title": "Provider parameter compliance and ceilings",
+            "description": "Ensure request params match provider expectations and never exceed catalog caps.",
+            "details": "OpenAI: use max_completion_tokens where required; block temperature on reasoning models\nAnthropic: use max_tokens; respect thinking tokens only when supported\nAzure/Bedrock: map deployments to canonical model entries and enforce same caps\nTests per adapter path",
+            "status": "done",
+            "dependencies": [],
+            "parentTaskId": 31
+          },
+          {
+            "id": 7,
+            "title": "CLI: models show/verify",
+            "description": "Add commands to view/verify catalog data and code usage.",
+            "details": "models show: print table of limits/pricing with provenance and last_verified\nmodels verify: ensure all referenced models exist and caps not exceeded\nTests: golden outputs and failure cases",
+            "status": "done",
+            "dependencies": [],
+            "parentTaskId": 31
+          },
+          {
+            "id": 8,
+            "title": "Validation and tests",
+            "description": "Comprehensive unit/contract tests for limits, pricing, gating, and parameter compliance.",
+            "details": "Unit: catalog loader schema validation with bad/missing fields\nUnit: TokenCalculator respects catalog caps and contexts; thinking budgets only when supported\nUnit: pricing math consistent per-million → per-1k and request totals\nContract: adapters never exceed caps; beta flags affect headers and budgets\nE2E smoke: typical flows capped by catalog limits",
+            "status": "done",
+            "dependencies": [],
+            "parentTaskId": 31
+          },
+          {
+            "id": 9,
+            "title": "Docs and governance",
+            "description": "Document the catalog, CLI, beta flags, and update cadence with links to official docs.",
+            "details": "Update docs/configuration.md: where the catalog lives, examples, beta flags\nAdd docs/models.md: how to verify & diff; links to OpenAI/Claude official pages\nAdd monthly review checklist; record last_verified in catalog\nChangelog entry and migration notes",
+            "status": "done",
+            "dependencies": [],
+            "parentTaskId": 31
+          },
+          {
+            "id": 10,
+            "title": "Migration and rollout",
+            "description": "Remove non-doc models, add aliases, wire adapters to catalog, staged rollout.",
+            "details": "Remove any unknown models\nAdd alias mapping for Anthropic dated variants\nSwitch adapters to catalog-driven limits/pricing behind feature flag\nEnable by default after soak; deprecate hardcoded paths\nFinal removal and clean up of deprecated/hardcoded paths",
+            "status": "done",
+            "dependencies": [],
+            "parentTaskId": 31
+          }
+        ]
       },
       {
         "id": 32,
@@ -1425,11 +1516,26 @@
             "testStrategy": "Verify all CI tests run and pass. Check artifact retention and reporting. Write regression tests to ensure future changes do not break CI integration."
           }
         ]
+      },
+      {
+        "id": 36,
+        "title": "Complete Implementation of the Coverage Adapter",
+        "description": "Finalize the CoverageAdapter to provide robust, configurable code coverage measurement, reporting, and integration with the broader TestCraft workflow.",
+        "details": "1. Implement all required methods in the CoverageAdapter, ensuring support for both line and branch coverage using coverage.py as the backend. The adapter should expose a clean interface for starting, stopping, and collecting coverage data programmatically, as well as for generating reports in multiple formats (text, HTML, XML).\n\n2. Integrate with the test execution pipeline so that coverage measurement can be triggered automatically during test runs (e.g., via pytest integration: `coverage run -m pytest`). Ensure the adapter can accept configuration for source paths, omit/include patterns, and report output locations.\n\n3. Add support for incremental and aggregate coverage runs, allowing the adapter to merge data from multiple test sessions and produce cumulative reports. Implement error handling for common issues (e.g., missing source files, misconfigured paths).\n\n4. Provide hooks or callbacks so that other system components (such as the evaluation harness and UI) can query coverage results, trigger report generation, and receive notifications on coverage changes.\n\n5. Document the adapter's API and configuration options, and provide usage examples for integration with both CLI and programmatic workflows.\n\n6. Ensure the adapter is extensible for future support of additional coverage tools (e.g., pytest-cov, swagger-coverage for API projects[4]), and can be easily mocked for testing purposes.",
+        "testStrategy": "- Write unit tests for all CoverageAdapter methods, including edge cases (e.g., empty source, partial runs, invalid config).\n- Develop integration tests that run real test suites under coverage measurement, verifying correct data collection and report generation (text, HTML, XML).\n- Test adapter behavior with multiple test sessions, ensuring correct merging and cumulative reporting.\n- Simulate error conditions (e.g., missing files, misconfigured paths) and verify robust error handling.\n- Mock the adapter in higher-level system tests to ensure correct interaction with the evaluation harness and UI components.\n- Manually verify that generated reports match expected coverage for sample projects.",
+        "status": "pending",
+        "dependencies": [
+          17,
+          19,
+          35
+        ],
+        "priority": "medium",
+        "subtasks": []
       }
     ],
     "metadata": {
       "created": "2025-01-27T20:16:58.061Z",
-      "updated": "2025-09-20T17:25:57.325Z",
+      "updated": "2025-09-25T14:25:53.443Z",
       "description": "Tasks for master context"
     }
   }

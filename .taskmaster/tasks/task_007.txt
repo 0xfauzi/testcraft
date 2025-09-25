@@ -1,18 +1,19 @@
 # Task ID: 7
 # Title: Implement Writer Adapters
-# Status: pending
+# Status: done
 # Dependencies: 4, 5
 # Priority: high
-# Description: Create adapters for safely writing generated tests to the filesystem with different strategies.
+# Description: Create adapters for safely writing generated tests to the filesystem with different strategies. All writes must be formatted with Black and isort for consistent code formatting.
 # Details:
 1. Create adapters/io/writer_append.py:
    - Implement simple append to existing test files
    - Create new files when missing
    - Support dry-run mode
+   - Format all writes with Black and isort
 2. Create adapters/io/writer_ast_merge.py:
    - Parse existing and new test files
    - Merge structurally to avoid duplicates
-   - Format with Black (optional)
+   - Format all writes with Black and isort
    - Generate unified diff for dry-run
 3. Implement safety policies:
    - Only write to tests/ directory
@@ -20,6 +21,58 @@
    - Block dangerous patterns
    - Validate syntax before writing
 4. Add helper functions for path resolution and validation
+5. Integrate Black and isort formatting into all write operations, including dry-run output.
 
 # Test Strategy:
-Unit tests for append and AST merge strategies with various test files. Verify safety policies block writes outside tests/ directory and files with dangerous patterns. Test dry-run mode generates correct diffs without modifying files.
+Unit tests for append and AST merge strategies with various test files. Verify safety policies block writes outside tests/ directory and files with dangerous patterns. Test dry-run mode generates correct diffs without modifying files. Validate that all written and diffed files are formatted with Black and isort.
+
+# Subtasks:
+## 1. Integrate Black and isort formatting into writer_append.py [done]
+### Dependencies: None
+### Description: Update writer_append.py so that all writes (including dry-run output) are formatted using Black and isort before being written or diffed.
+### Details:
+<info added on 2025-09-07T15:03:58.368Z>
+✅ COMPLETED - Black and isort formatting integration in writer_append.py
+
+Implementation Details:
+- Added _format_content() method that uses subprocess to call both isort and Black
+- Format pipeline: content → isort (import sorting) → Black (code formatting) → formatted output
+- Graceful fallback: returns original content if formatting tools aren't available
+- All write operations automatically format content before writing or showing diffs
+- Dry-run mode also shows formatted content in previews
+
+Key Features:
+- Temporary file approach for safe formatting without affecting original content
+- Error handling prevents failures when Black/isort not installed
+- Consistent formatting applied to both new files and appended content
+- Integration verified through unit tests with subprocess mocking
+</info added on 2025-09-07T15:03:58.368Z>
+
+## 2. Integrate Black and isort formatting into writer_ast_merge.py [done]
+### Dependencies: None
+### Description: Update writer_ast_merge.py so that all merged output (including dry-run diff) is formatted using Black and isort before being written or diffed.
+### Details:
+<info added on 2025-09-07T15:04:17.585Z>
+✅ COMPLETED - Black and isort formatting integration in writer_ast_merge.py
+
+Implementation Details:
+- Added a _format_content() method, mirroring the approach used in writer_append.py, to ensure consistent formatting logic across writer adapters.
+- The formatting pipeline applies isort for import sorting followed by Black for code formatting to all merged content before output, guaranteeing standardized and readable code.
+- Both the final merged output and the dry-run diff generation now utilize this formatting pipeline, ensuring that diffs accurately reflect the formatted result.
+- The implementation includes graceful fallback handling: if Black or isort are unavailable, the merge proceeds without formatting rather than failing.
+
+AST Merge Features Enhanced:
+- The AST merging logic now preserves the existing code structure while intelligently adding new elements, minimizing unnecessary changes.
+- Enhanced deduplication ensures that imports, functions, and classes are merged without introducing duplicates.
+- The merge process is structurally aware: imports are placed first, followed by constants, classes, functions, and then other statements, resulting in a logical and maintainable code order.
+- If AST parsing fails, the system falls back to simple concatenation to avoid blocking the merge process.
+- Dry-run mode now generates a unified diff that precisely shows the changes that would be made after formatting, improving transparency and reviewability.
+</info added on 2025-09-07T15:04:17.585Z>
+
+## 3. Update unit tests to validate Black and isort formatting [done]
+### Dependencies: None
+### Description: Extend unit tests to check that all written and diffed files are correctly formatted with Black and isort.
+### Details:
+<info added on 2025-09-07T15:04:22.973Z>
+Comprehensive unit tests have been implemented to validate all core writer adapter behaviors, including strict enforcement of Black and isort formatting on written and diffed files. Tests cover SafetyPolicies (path validation, size limits, dangerous pattern detection, Python syntax validation, test file naming), WriterAppendAdapter (file creation, append, dry-run, backup, directory creation, formatting integration), and WriterASTMergeAdapter (AST merge logic, deduplication, diff generation, merge fallbacks). Key features include mocked subprocess calls for Black/isort, fallback behavior when formatting fails, exhaustive safety policy scenarios, dry-run mode validation, complex AST merge cases, and robust error/exception handling.
+</info added on 2025-09-07T15:04:22.973Z>

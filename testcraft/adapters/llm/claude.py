@@ -14,6 +14,7 @@ from ...ports.cost_port import CostPort
 from ...ports.llm_port import LLMPort
 from ...prompts.registry import PromptRegistry
 from .common import parse_json_response, with_retries
+from .pricing import calculate_cost as pricing_calculate_cost
 from .token_calculator import TokenCalculator
 
 logger = logging.getLogger(__name__)
@@ -48,6 +49,7 @@ class ClaudeAdapter(LLMPort):
         credential_manager: CredentialManager | None = None,
         prompt_registry: PromptRegistry | None = None,
         cost_port: CostPort | None = None,
+        beta: dict[str, Any] | None = None,
         **kwargs: Any,
     ):
         """Initialize Claude adapter.
@@ -76,6 +78,7 @@ class ClaudeAdapter(LLMPort):
 
         # Initialize cost tracking
         self.cost_port = cost_port
+        self.beta = beta or {}
 
         # Initialize token calculator
         self.token_calculator = TokenCalculator(provider="anthropic", model=model)
@@ -724,6 +727,12 @@ class ClaudeAdapter(LLMPort):
 
         # Use provided max_tokens or fallback to instance default
         tokens_to_use = max_tokens if max_tokens is not None else self.max_tokens
+        # Clamp to catalog cap
+        try:
+            cap = self.token_calculator.limits.max_output
+            tokens_to_use = min(int(tokens_to_use or cap), int(cap))
+        except Exception:
+            pass
 
         request_kwargs = {
             "model": self.model,
@@ -738,6 +747,7 @@ class ClaudeAdapter(LLMPort):
         if (
             thinking_tokens is not None
             and self.token_calculator.supports_thinking_mode()
+            and bool(self.beta.get("anthropic_enable_extended_thinking", False))
         ):
             # Note: As of late 2024, Claude thinking mode is still in beta
             # and may use different parameter names. This is best-effort.
@@ -773,7 +783,9 @@ class ClaudeAdapter(LLMPort):
             if self.cost_port and response.usage:
                 try:
                     # Calculate cost based on token usage and model
-                    cost = self._calculate_api_cost(response.usage, response.model)
+                    cost = pricing_calculate_cost(
+                        response.usage, "anthropic", response.model
+                    )
 
                     cost_data = {
                         "cost": cost,
@@ -810,36 +822,5 @@ class ClaudeAdapter(LLMPort):
             raise ClaudeError(f"Message creation failed: {e}") from e
 
     def _calculate_api_cost(self, usage: Any, model: str) -> float:
-        """Calculate the API cost based on token usage and model pricing.
-
-        Args:
-            usage: Anthropic usage object with token counts
-            model: Model name used for the request
-
-        Returns:
-            Calculated cost in USD
-        """
-        # Anthropic pricing (as of 2024) - costs per 1,000 tokens
-        # Prices may change, so this should ideally be configurable
-        model_pricing = {
-            "claude-3-opus": {"input": 0.015, "output": 0.075},
-            "claude-3-sonnet": {"input": 0.003, "output": 0.015},
-            "claude-3-haiku": {"input": 0.00025, "output": 0.00125},
-            "claude-3-5-sonnet": {"input": 0.003, "output": 0.015},
-            "claude-3-7-sonnet": {"input": 0.003, "output": 0.015},  # Alias for 3.5
-            # Add more models as needed
-        }
-
-        # Default pricing if model not found (use haiku rates as conservative default)
-        pricing = model_pricing.get(model, {"input": 0.00025, "output": 0.00125})
-
-        # Calculate cost based on token usage
-        input_cost = (usage.input_tokens / 1000) * pricing["input"]
-        output_cost = (usage.output_tokens / 1000) * pricing["output"]
-        total_cost = input_cost + output_cost
-
-        logger.debug(
-            f"Cost calculation for {model}: input={input_cost:.6f}, output={output_cost:.6f}, total={total_cost:.6f}"
-        )
-
-        return total_cost
+        # Backward-compat method: delegate to centralized pricing
+        return pricing_calculate_cost(usage, "anthropic", model)

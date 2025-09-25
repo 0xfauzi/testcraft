@@ -177,7 +177,7 @@ class TestPytestRefinerIntegration:
             assert result["success"] is False
             assert result["iterations"] == 1
             assert result["final_status"] == "no_change_detected"
-            assert "LLM refinement made no changes" in result["error"]
+            assert "LLM explicitly returned no changes" in result["error"]
 
             # Verify refine port was called once
             assert self.refine_port.call_count == 1
@@ -282,7 +282,9 @@ class TestPytestRefinerIntegration:
 
             # Verify successful refinement
             assert result["success"] is True
-            assert result["iterations"] == 1  # One refinement iteration
+            assert (
+                result["iterations"] == 2
+            )  # One failed run + one successful run = 2 iterations
             assert result["final_status"] == "passed"
 
             # Verify refine port was called with correct parameters
@@ -423,7 +425,9 @@ class TestPytestRefinerIntegration:
 
             # Verify successful completion
             assert result["success"] is True
-            assert result["iterations"] == 2  # Two refinement iterations
+            assert (
+                result["iterations"] == 3
+            )  # Three pytest runs (2 failures + 1 success = 3 iterations)
             assert result["final_status"] == "passed"
 
             # Verify backoff occurred (should be at least base backoff time)
@@ -519,7 +523,7 @@ class TestPytestRefinerIntegration:
 
         # Mock the underlying async runner
         with patch(
-            "testcraft.application.generation.services.pytest_refiner.run_python_module_async_with_executor"
+            "testcraft.adapters.io.async_runner.run_python_module_async_with_executor"
         ) as mock_runner:
             mock_runner.return_value = ("PASSED", "", 0)
 

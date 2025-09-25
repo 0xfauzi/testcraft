@@ -13,7 +13,6 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
 
-from testcraft.adapters.coverage.main_adapter import TestcraftCoverageAdapter
 from testcraft.adapters.evaluation import TestcraftEvaluationAdapter
 from testcraft.adapters.evaluation.main_adapter import EvaluationError
 from testcraft.adapters.io.artifact_store import ArtifactStoreAdapter, ArtifactType
@@ -71,8 +70,8 @@ class TestEvaluationHarness:
 
     def _initialize_adapters(self, **kwargs: Any) -> None:
         """Initialize all required adapters with dependency injection."""
-        # Coverage adapter
-        self.coverage_adapter = TestcraftCoverageAdapter()
+        # TODO: REPLACE WITH REAL Coverage adapter
+        self.coverage_adapter = None
 
         # State management adapter
         self.state_adapter = StateJsonAdapter(
@@ -256,7 +255,9 @@ class TestEvaluationHarness:
             "state_summary": self.state_adapter.get_all_state(),
             "harness_config": {
                 "project_root": str(self.project_root),
-                "coverage_available": self.coverage_adapter.is_pytest_available(),
+                "coverage_available": self.coverage_adapter.is_pytest_available()
+                if self.coverage_adapter
+                else False,
                 "llm_adapter_type": type(self.llm_adapter).__name__,
             },
         }

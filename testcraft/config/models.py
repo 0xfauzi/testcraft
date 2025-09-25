@@ -749,7 +749,7 @@ class LLMProviderConfig(BaseModel):
         description="Azure OpenAI endpoint URL (or set AZURE_OPENAI_ENDPOINT environment variable)",
     )
     azure_openai_deployment: str = Field(
-        default="claude-sonnet-4", description="Azure OpenAI deployment name"
+        default="gpt-4.1", description="Azure OpenAI deployment name"
     )
     azure_openai_api_version: str = Field(
         default="2024-02-15-preview", description="Azure OpenAI API version"
@@ -799,6 +799,17 @@ class LLMProviderConfig(BaseModel):
         ge=0.0,
         le=2.0,
         description="Temperature for LLM responses (lower = more deterministic)",
+    )
+
+    # Beta/extended feature gating
+    class BetaFeaturesConfig(BaseModel):
+        anthropic_enable_extended_thinking: bool = False
+        anthropic_enable_extended_output: bool = False
+        openai_enable_extended_output: bool = False
+
+    beta: BetaFeaturesConfig = Field(
+        default_factory=BetaFeaturesConfig,
+        description="Feature gates for beta/extended capabilities",
     )
 
     @field_validator(

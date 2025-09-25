@@ -68,20 +68,25 @@ class ContextAssembler:
         Returns:
             Dictionary containing context information
         """
+        # Build project context graph
+        context_graph = None
         try:
-            # Build project context graph
             context_graph = self._context.build_context_graph(project_path)
+        except Exception as e:
+            logger.warning("Failed to build context graph: %s", e)
 
-            # Index files for context retrieval
-            indexed_files = {}
-            for file_path in files_to_process:
-                try:
-                    index_result = self._context.index(file_path)
-                    indexed_files[str(file_path)] = index_result
-                except Exception as e:
-                    logger.warning("Failed to index %s: %s", file_path, e)
+        # Index files for context retrieval
+        indexed_files = {}
+        for file_path in files_to_process:
+            try:
+                index_result = self._context.index(file_path)
+                indexed_files[str(file_path)] = index_result
+            except Exception as e:
+                logger.warning("Failed to index %s: %s", file_path, e)
 
-            # Use recursive directory tree with configuration-based limits
+        # Use recursive directory tree with configuration-based limits
+        project_structure = None
+        try:
             directory_config = self._config.get("context_budgets", {}).get(
                 "directory_tree", {}
             )
@@ -89,17 +94,22 @@ class ContextAssembler:
             max_entries_per_dir = directory_config.get("max_entries_per_dir", 200)
             include_py_only = directory_config.get("include_py_only", True)
 
-            return {
-                "context_graph": context_graph,
-                "indexed_files": indexed_files,
-                "project_structure": self._structure_builder.build_tree_recursive(
-                    project_path, max_depth, max_entries_per_dir, include_py_only
-                ),
-            }
-
+            project_structure = self._structure_builder.build_tree_recursive(
+                project_path, max_depth, max_entries_per_dir, include_py_only
+            )
         except Exception as e:
             logger.warning("Failed to gather project context: %s", e)
-            return {}
+
+        # Return whatever context we were able to gather
+        result = {}
+        if context_graph is not None:
+            result["context_graph"] = context_graph
+        if indexed_files:
+            result["indexed_files"] = indexed_files
+        if project_structure is not None:
+            result["project_structure"] = project_structure
+
+        return result
 
     def context_for_generation(
         self, plan: TestGenerationPlan, source_path: Path | None = None
@@ -1446,7 +1456,6 @@ class ContextAssembler:
                                 seen_snippets.add(snippet)
                                 file_snippet_count[item_path] = file_count + 1
                                 found_good_example = True
-                                break  # One good example per query
 
                         # If we found a good example from a high-priority query, move on
                         if (

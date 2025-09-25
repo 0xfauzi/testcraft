@@ -60,8 +60,14 @@ class GenerateScreen(Screen):
         super().__init__(**kwargs)
 
         # Configuration state
+        try:
+            project_path = str(Path.cwd())
+        except (OSError, FileNotFoundError):
+            # Fallback for testing environments where cwd might not exist
+            project_path = "/tmp"
+
         self.config = {
-            "project_path": str(Path.cwd()),
+            "project_path": project_path,
             "batch_size": 5,
             "immediate": True,
             "include_patterns": "**/*.py",

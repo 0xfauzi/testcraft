@@ -12,6 +12,35 @@ from typing import Any
 
 from ...ports.telemetry_port import MetricValue, SpanContext, SpanKind
 
+
+class ConcreteSpanContext:
+    """Concrete implementation of SpanContext for no-op and testing scenarios."""
+
+    def __init__(
+        self,
+        trace_id: str,
+        span_id: str,
+        parent_span_id: str | None = None,
+        baggage: dict[str, Any] | None = None,
+    ):
+        self.trace_id = trace_id
+        self.span_id = span_id
+        self.parent_span_id = parent_span_id
+        self.baggage = baggage or {}
+
+    def set_attribute(self, key: str, value: Any) -> None:
+        """Set an attribute on the span (no-op implementation)."""
+        pass
+
+    def record_exception(self, exception: Exception) -> None:
+        """Record an exception on the span (no-op implementation)."""
+        pass
+
+    def get_trace_context(self) -> "SpanContext":
+        """Get the trace context for this span."""
+        return self
+
+
 # OpenTelemetry imports (optional - graceful degradation if not available)
 try:
     from opentelemetry import metrics, trace
@@ -402,7 +431,7 @@ class OpenTelemetryAdapter:
         if not self.tracer:
             # Return no-op context if tracing is disabled
             yield OtelSpanContextManager(
-                None, SpanContext("noop", "noop"), self.anonymize_paths
+                None, ConcreteSpanContext("noop", "noop"), self.anonymize_paths
             )
             return
 

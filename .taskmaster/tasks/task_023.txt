@@ -1,6 +1,6 @@
 # Task ID: 23
 # Title: Implement Individual and Smart-Batched Element Processing for LLM Test Generation
-# Status: deferred
+# Status: pending
 # Dependencies: 2, 11, 12, 13, 17, 19
 # Priority: high
 # Description: Refactor the test generation workflow to process each code element (function, class, method) individually, with support for both granular and smart-batched LLM requests, enabling improved focus, quality, and context control.

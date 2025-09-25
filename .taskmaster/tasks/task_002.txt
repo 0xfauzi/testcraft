@@ -1,6 +1,6 @@
 # Task ID: 2
 # Title: Implement Domain Models
-# Status: pending
+# Status: done
 # Dependencies: 1
 # Priority: high
 # Description: Create the core domain models using pydantic to represent the fundamental entities in the system.
@@ -16,6 +16,73 @@
 3. Implement proper type hints for all models
 4. Add docstrings explaining each model's purpose and fields
 5. Ensure models are immutable where appropriate
+6. Implement TestElementType enum for categorizing test elements (function, class, method, module)
+7. Add custom validators for data integrity:
+   - Line ranges must be valid (start <= end, positive numbers)
+   - Coverage percentages must be between 0.0 and 1.0
+   - Missing lines are sorted and deduplicated
+   - Error messages required when generation fails
+   - All required mappings must cover all files in lists
 
 # Test Strategy:
-Unit tests for each model verifying initialization, validation rules, serialization/deserialization, and edge cases like empty values or invalid inputs.
+Unit tests for each model verifying initialization, validation rules, serialization/deserialization, and edge cases like empty values or invalid inputs. Specifically test custom validators for line ranges, coverage percentages, and other data integrity rules.
+
+# Subtasks:
+## 1. Implement TestElement model [done]
+### Dependencies: None
+### Description: Create TestElement model with name, type, line range, and docstring fields
+### Details:
+
+
+## 2. Implement CoverageResult model [done]
+### Dependencies: None
+### Description: Create CoverageResult model with line/branch coverage and missing lines
+### Details:
+
+
+## 3. Implement GenerationResult model [done]
+### Dependencies: None
+### Description: Create GenerationResult model with file path, content, success/failure status and error message
+### Details:
+
+
+## 4. Implement TestGenerationPlan model [done]
+### Dependencies: None
+### Description: Create TestGenerationPlan model with elements to test, existing tests, and coverage information
+### Details:
+
+
+## 5. Implement RefineOutcome model [done]
+### Dependencies: None
+### Description: Create RefineOutcome model with updated files, rationale and plan
+### Details:
+
+
+## 6. Implement AnalysisReport model [done]
+### Dependencies: None
+### Description: Create AnalysisReport model with files to process, reasons, and existing test presence
+### Details:
+
+
+## 7. Implement TestElementType enum [done]
+### Dependencies: None
+### Description: Create enum for categorizing test elements (function, class, method, module)
+### Details:
+
+
+## 8. Add custom validators [done]
+### Dependencies: None
+### Description: Implement validators for line ranges, coverage percentages, missing lines, and other data integrity rules
+### Details:
+
+
+## 9. Configure model immutability [done]
+### Dependencies: None
+### Description: Set models as immutable using `frozen = True` configuration
+### Details:
+
+
+## 10. Add field descriptions [done]
+### Dependencies: None
+### Description: Add detailed field descriptions for better API documentation
+### Details:

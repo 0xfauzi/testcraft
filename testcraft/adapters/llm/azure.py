@@ -14,6 +14,7 @@ from ...ports.cost_port import CostPort
 from ...ports.llm_port import LLMPort
 from ...prompts.registry import PromptRegistry
 from .common import parse_json_response, with_retries
+from .pricing import calculate_cost as pricing_calculate_cost
 from .token_calculator import TokenCalculator
 
 logger = logging.getLogger(__name__)
@@ -40,7 +41,7 @@ class AzureOpenAIAdapter(LLMPort):
 
     def __init__(
         self,
-        deployment: str = "claude-sonnet-4",
+        deployment: str = "gpt-4.1",
         api_version: str = "2024-02-15-preview",
         timeout: float = 180.0,
         max_tokens: int | None = None,  # Will be calculated automatically
@@ -49,6 +50,7 @@ class AzureOpenAIAdapter(LLMPort):
         credential_manager: CredentialManager | None = None,
         prompt_registry: PromptRegistry | None = None,
         cost_port: CostPort | None = None,
+        beta: dict[str, Any] | None = None,
         **kwargs: Any,
     ):
         """Initialize Azure OpenAI adapter.
@@ -79,6 +81,7 @@ class AzureOpenAIAdapter(LLMPort):
 
         # Initialize cost tracking
         self.cost_port = cost_port
+        self.beta = beta or {}
 
         # Initialize token calculator - map deployment to normalized model name
         model_name = self._map_deployment_to_model(deployment)
@@ -192,51 +195,9 @@ class AzureOpenAIAdapter(LLMPort):
             self._client = _StubClient()  # type: ignore[assignment]
 
     def _calculate_api_cost(self, usage_info: dict[str, Any], deployment: str) -> float:
-        """
-        Calculate the cost of an API call based on token usage and deployment.
-
-        Args:
-            usage_info: Dictionary containing prompt_tokens, completion_tokens, total_tokens
-            deployment: The Azure OpenAI deployment name
-
-        Returns:
-            The calculated cost in USD
-        """
-        # Azure OpenAI pricing tiers (prices per 1000 tokens in USD)
-        # These are example rates - update based on your actual Azure pricing
-        pricing_tiers = {
-            # GPT-4 models
-            "gpt-4": {"prompt": 0.03, "completion": 0.06},
-            "gpt-4-32k": {"prompt": 0.06, "completion": 0.12},
-            "gpt-4-turbo": {"prompt": 0.01, "completion": 0.03},
-            "gpt-4o": {"prompt": 0.005, "completion": 0.015},
-            "gpt-4o-mini": {"prompt": 0.00015, "completion": 0.0006},
-            # GPT-3.5 models
-            "gpt-35-turbo": {"prompt": 0.0005, "completion": 0.0015},
-            "gpt-35-turbo-16k": {"prompt": 0.003, "completion": 0.004},
-            # Default/fallback pricing
-            "default": {"prompt": 0.001, "completion": 0.002},
-        }
-
-        # Find matching pricing tier
-        tier_pricing = pricing_tiers.get("default")
-        deployment_lower = deployment.lower()
-
-        for tier_name, prices in pricing_tiers.items():
-            if tier_name in deployment_lower:
-                tier_pricing = prices
-                break
-
-        # Calculate cost
-        prompt_tokens = usage_info.get("prompt_tokens", 0)
-        completion_tokens = usage_info.get("completion_tokens", 0)
-
-        prompt_cost = (prompt_tokens / 1000) * tier_pricing["prompt"]
-        completion_cost = (completion_tokens / 1000) * tier_pricing["completion"]
-
-        total_cost = prompt_cost + completion_cost
-
-        return total_cost
+        # Delegate to centralized pricing with normalized model for azure-openai
+        model = self._map_deployment_to_model(deployment)
+        return pricing_calculate_cost(usage_info, "azure-openai", model)
 
     def _map_deployment_to_model(self, deployment: str) -> str:
         """Map Azure deployment name to normalized model identifier.
@@ -797,6 +758,12 @@ class AzureOpenAIAdapter(LLMPort):
 
         # Use provided max_tokens or fallback to instance default
         tokens_to_use = max_tokens if max_tokens is not None else self.max_tokens
+        # Clamp to catalog cap
+        try:
+            cap = self.token_calculator.limits.max_output
+            tokens_to_use = min(int(tokens_to_use or cap), int(cap))
+        except Exception:
+            pass
 
         messages = [
             {"role": "system", "content": system_prompt},

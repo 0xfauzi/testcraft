@@ -41,14 +41,18 @@ package = true
 [build-system]
 requires = ["setuptools>=45", "wheel"]
 build-backend = "setuptools.build_meta"
-
+# Development dependency group - configured correctly for PEP 735
+# Install with: uv sync --group dev
+# Or with pip: pip install -e .[dev] (requires converting to optional-dependencies)
 [dependency-groups]
 dev = [
     "mypy>=1.17.1",
     "pytest>=8.4.2",
     "pytest-asyncio>=0.23.7",
+    "anyio>=4.10.0",
     "pytest-cov>=6.3.0",
     "ruff>=0.12.12",
+    "pre-commit>=4.3.0",
 ]
 
 [tool.ruff]
