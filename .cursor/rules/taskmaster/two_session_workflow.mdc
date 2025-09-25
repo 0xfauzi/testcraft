@@ -32,12 +32,6 @@ git push -u origin feature/task-{task_id}-{brief-description}
 ```
 
 - **Environment setup and baseline tests**
-```bash
-# ✅ MANDATORY: Set up environment before running tests
-source .venv/bin/activate
-uv sync --all-extras --all-groups
-pytest tests/ -v
-```
 
 - **If tests fail in baseline**
   - Document failing tests (names, brief error summaries)
