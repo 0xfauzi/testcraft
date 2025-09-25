@@ -251,16 +251,27 @@ class Target(BaseModel):
 class ImportMap(BaseModel):
     """Import mapping information for a target file."""
 
-    target_import: str = Field(..., description="Canonical import statement to use")
-    sys_path_roots: list[str] = Field(
-        ..., description="List of sys.path root directories"
-    )
-    needs_bootstrap: bool = Field(
-        ..., description="Whether bootstrap conftest.py is needed"
-    )
-    bootstrap_conftest: str = Field(
-        ..., description="Bootstrap conftest.py content (empty if not needed)"
-    )
+ class ImportMap(BaseModel):
+     target_import: str = Field(..., description="Canonical import statement to use")
+     sys_path_roots: list[str] = Field(
+         ..., description="List of sys.path root directories"
+     )
+     needs_bootstrap: bool = Field(
+         ..., description="Whether bootstrap conftest.py is needed"
+     )
+     bootstrap_conftest: str = Field(
+         ..., description="Bootstrap conftest.py content (empty if not needed)"
+     )
+
+     @model_validator(mode="after")
+     def _validate_bootstrap(self) -> "ImportMap":
+         needs = self.needs_bootstrap
+         content = (self.bootstrap_conftest or "").strip()
+         if needs and not content:
+             raise ValueError("bootstrap_conftest must be non-empty when needs_bootstrap is True")
+         if not needs and content:
+             raise ValueError("bootstrap_conftest must be empty when needs_bootstrap is False")
+         return self
 
     class Config:
         """Pydantic configuration for ImportMap."""
