@@ -5,7 +5,6 @@ This module tests the ContextPack schema compliance with the context assembly
 specification and validates the ContextPackBuilder service functionality.
 """
 
-import tempfile
 from pathlib import Path
 
 import pytest
