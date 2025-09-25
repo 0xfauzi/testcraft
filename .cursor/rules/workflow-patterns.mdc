@@ -40,14 +40,34 @@ python -m pytest tests/
 - **CRITICAL**: ALWAYS activate .venv and sync dependencies before any test runs
 
 ### 3. Implementation Planning 📋
-```bash
-# ✅ DO: Generate detailed implementation plan using Task Master
-taskmaster expand --id={task_id} --research --force
-taskmaster show {task_id}
-```
-- Use Task Master's planning capabilities
-- Generate detailed sub-task breakdown
-- Include research-backed implementation strategies
+- **Codebase Analysis**: Thoroughly scan the codebase to understand:
+  - Existing abstractions, patterns, and architectural decisions
+  - Similar implementations that can be referenced or extended
+  - Relevant modules, classes, and functions already available
+  - Current testing patterns and utilities
+  - Configuration and setup mechanisms
+  - Error handling and validation approaches
+
+- **Implementation Strategy Development**:
+  - Identify reusable components and avoid reinventing existing functionality
+  - Map task requirements to existing codebase patterns
+  - Determine integration points with current architecture
+  - Plan for minimal code changes that maximize existing code reuse
+
+- **Detailed Step-by-Step Plan Creation**:
+  - Break down implementation into granular, executable steps
+  - Specify exact files to modify and new files to create
+  - Define clear interfaces and data structures to use
+  - Identify existing utilities, helpers, and abstractions to leverage
+  - Plan test coverage using existing test patterns and fixtures
+  - Document dependencies between implementation steps
+
+- **Plan Validation**:
+  - Ensure plan aligns with existing codebase conventions
+  - Verify all required abstractions exist or plan their creation
+  - Confirm approach minimizes technical debt and maintains consistency
+  - Validate that implementation can be executed step-by-step without ambiguity
+
 
 ### 4. Plan Review & Approval ✅
 - **Present plan for review** before implementation
