@@ -1,29 +1,37 @@
 ---
+description: Complete Task Master workflow standards including two-session methodology
 alwaysApply: true
-description: Task Master workflow and development process standards
 ---
-
 # Task Master Workflow Standards
 
 ## MANDATORY Two-Session Workflow
 
-**CRITICAL**: All Task Master tasks MUST use the two-session workflow defined in [two_session_workflow.mdc](mdc:.cursor/rules/taskmaster/two_session_workflow.mdc). This is NON-NEGOTIABLE.
+**CRITICAL**: All Task Master tasks and subtasks MUST use the two-session workflow. This is NON-NEGOTIABLE.
 
-- **Session 1**: Planning & Handoff (no coding allowed)
-- **Session 2**: Implementation & Delivery
+### Session 1 — Planning & Handoff (no coding)
+- **Pick up the task**: Identify task via `get_tasks` / `next_task`; confirm ID, title, tag context
+- **Create branch immediately**: Use the naming scheme `feature/task-{task_id}-{brief-description}` and push upstream
+- **Baseline assessment**: Run full test suite to understand the current state; capture results (pass/fail, failures summary)
+- **Deep research**: Analyze architecture, relevant files, ports/adapters, tests; use Taskmaster research where beneficial
+- **Produce a DETAILED plan**: Include objectives, scope, step-by-step implementation with file paths/functions, testing strategy, risks with mitigations, acceptance criteria, and rollout/backout considerations
+- **Output a complete handoff**: Provide a copy/paste artifact to start Session 2 with everything needed
 
-## Task Master Integration Workflow
+### Session 2 — Implementation & Delivery
+- **Start from handoff**: Validate branch and environment match the handoff
+- **Execute the plan end-to-end**: Implement step-by-step, updating Taskmaster subtasks and logging progress
+- **Verification**: Run test suite; fix failures; re-run until green
+- **Quality gates**: Ensure linting/formatting and pre-commit hooks pass
+- **Finalize**: Commit with descriptive message referencing the task; push branch; mark task/subtasks done per standards
 
-When working with Task Master tasks (taskmaster mcp), **STRICTLY FOLLOW** this workflow:
+## Session 1 — Commands and Required Outputs
 
-### 1. Branch Creation 🌿
+### Create and push branch
 ```bash
-# ✅ DO: Create feature branch immediately for the task
 git checkout -b feature/task-{task_id}-{brief-description}
 git push -u origin feature/task-{task_id}-{brief-description}
 ```
 
-### 2. Current State Assessment 🧪
+### Environment setup and baseline tests
 ```bash
 # ✅ MANDATORY: Set up environment before running tests
 source .venv/bin/activate
@@ -31,17 +39,52 @@ uv sync --all-extras --all-groups
 
 # ✅ DO: Run test suite to ensure clean starting state
 pytest tests/ -v
-# or
-python -m pytest tests/
 ```
-- **Purpose**: Understand current application state
-- **Requirement**: All tests must pass before proceeding
-- **Action**: If tests fail, fix them before starting task implementation
-- **CRITICAL**: ALWAYS activate .venv and sync dependencies before any test runs
 
-### 3. Implementation Planning 📋
+### Handoff package requirements
+The handoff must include:
+- **Task meta**: ID, title, tag, branch name
+- **Current state**: Test results summary, notable failing tests, environment notes
+- **Objectives**: Clear, measurable outcomes
+- **Implementation plan**: Concrete steps with file paths, functions/classes, expected edits/diffs, config changes
+- **Testing strategy**: Unit/integration/e2e updates and how to validate
+- **Risks & mitigations**: Technical risks, fallbacks, and safeguards
+- **Acceptance criteria**: What must be true to consider the task done
+- **Runbook**: Ordered commands to execute during Session 2
+
+## Session 2 — Execution Requirements
+
+### MANDATORY Environment Setup
+ALWAYS start Session 2 with:
+```bash
+source .venv/bin/activate
+uv sync --all-extras --all-groups
+```
+
+### Session 2 Runbook Template
+```bash
+# Run tests throughout implementation
+pytest tests/ -v
+
+# Pre-commit and finalize
+pre-commit run -a
+git add .
+git commit -m "feat(task-{id}): {concise change}
+
+- Implementation per plan
+- Tests: {passing}
+- Pre-commit: {passing}
+"
+git push origin feature/task-{id}-{brief-description}
+```
+
+## Task Master Integration Workflow
+
+When working with Task Master tasks or subtasks, **STRICTLY FOLLOW** this workflow:
+
+### 1. Implementation Planning 📋
 - **Codebase Analysis**: Thoroughly scan the codebase to understand:
-  - Existing abstractions, patterns, and architectural decisions
+  - Existing abstractions, patterns, and architectural decisions related to the task or subtask
   - Similar implementations that can be referenced or extended
   - Relevant modules, classes, and functions already available
   - Current testing patterns and utilities
@@ -54,38 +97,14 @@ python -m pytest tests/
   - Determine integration points with current architecture
   - Plan for minimal code changes that maximize existing code reuse
 
-- **Detailed Step-by-Step Plan Creation**:
-  - Break down implementation into granular, executable steps
-  - Specify exact files to modify and new files to create
-  - Define clear interfaces and data structures to use
-  - Identify existing utilities, helpers, and abstractions to leverage
-  - Plan test coverage using existing test patterns and fixtures
-  - Document dependencies between implementation steps
-
-- **Plan Validation**:
-  - Ensure plan aligns with existing codebase conventions
-  - Verify all required abstractions exist or plan their creation
-  - Confirm approach minimizes technical debt and maintains consistency
-  - Validate that implementation can be executed step-by-step without ambiguity
-
-
-### 4. Plan Review & Approval ✅
-- **Present plan for review** before implementation
-- Include:
-  - Sub-task breakdown
-  - Implementation approach
-  - Testing strategy
-  - Potential risks/challenges
-- **Wait for explicit approval** before proceeding
-
-### 5. Sub-Task Implementation 🔄
-For each sub-task:
+### 2. Sub-Task Implementation 🔄
+For each task or sub-task:
 
 ```bash
 # Update sub-task status
 taskmaster set-status --id={subtask_id} --status=in-progress
 
-# After completion
+# After completion with detailed progress logging
 taskmaster update-subtask --id={subtask_id} --prompt="Implementation complete: [details]"
 ```
 
@@ -95,7 +114,7 @@ taskmaster update-subtask --id={subtask_id} --prompt="Implementation complete: [
 - Document implementation details and decisions
 - Handle any issues or deviations from plan
 
-### 6. Test Validation After Each Sub-Task 🧪
+### 3. Test Validation After Each Sub-Task 🧪
 ```bash
 # ✅ MANDATORY: Environment setup before every test run
 source .venv/bin/activate
@@ -112,7 +131,7 @@ pytest tests/test_specific_module.py -v
 - **Documentation**: Update sub-task with test results
 - **CRITICAL**: NEVER run tests without environment setup
 
-### 7. Commit & Push Process 🚀
+### 4. Commit & Push Process 🚀
 **Only after approval and passing tests**:
 
 ```bash
@@ -133,7 +152,7 @@ git push origin feature/task-{task_id}-{brief-description}
 taskmaster set-status --id={subtask_id} --status=done
 ```
 
-### 8. Task Completion 🎯
+### 5. Task Completion 🎯
 When all sub-tasks are complete:
 
 ```bash
@@ -155,6 +174,7 @@ gh pr create --title "feat: {task_description}" --body "Completes task {task_id}
 - **Never mark task done without approval**
 - **Always run tests after each sub-task**
 - **Never run tests without environment activated**
+- **Always follow the handoff package requirements**
 
 ### 🔄 Review Points
 1. **Plan Review**: Before any implementation
@@ -166,6 +186,7 @@ gh pr create --title "feat: {task_description}" --body "Completes task {task_id}
 - Include test results in commit messages
 - Reference task IDs in all commits
 - Update any affected documentation files
+- Log all progress in Taskmaster subtask updates
 
 ### 🐛 Error Handling
 - If tests fail: Fix immediately, don't proceed
@@ -194,6 +215,9 @@ Any deviation from these standards is a critical error:
 - Running tests without environment setup
 - Implementing before plan approval
 - Committing without passing tests
+- Writing code in Session 1
+- Skipping the handoff document
+- Starting implementation without a complete plan
 
 **If you violate these rules: STOP and restart properly.**
 

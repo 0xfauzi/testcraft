@@ -66,11 +66,12 @@ This directory contains comprehensive coding standards and architectural guideli
 - Approved models and documentation standards
 
 ### 🔄 [workflow-patterns.mdc](mdc:.cursor/rules/workflow-patterns.mdc)
-**Always Applied** - Task Master workflow and development process:
-- Strict Task Master task workflow (branch → test → plan → review → implement → commit)
-- Git branching conventions
-- Review and approval processes
-- Test validation requirements
+**Always Applied** - Complete Task Master workflow standards including two-session methodology:
+- MANDATORY two-session workflow (Session 1: Planning & Handoff, Session 2: Implementation & Delivery)
+- Task Master integration workflow with detailed handoff templates
+- Git branching conventions and commit standards
+- Environment setup and test validation requirements
+- Comprehensive enforcement and error handling procedures
 
 ## Quick Reference
 

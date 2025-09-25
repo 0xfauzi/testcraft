@@ -159,7 +159,7 @@ class LLMOrchestrator:
                 plan_prompt = self._create_plan_prompt(current_context)
 
                 # Call LLM for planning
-                response = self._llm.generate_test(plan_prompt)
+                response = self._llm.generate_tests(code_content=plan_prompt)
                 response_text = self._extract_response_text(response)
 
                 # Parse response as JSON
@@ -234,7 +234,7 @@ class LLMOrchestrator:
             generate_prompt = self._create_generate_prompt(context_pack, plan)
 
             # Call LLM for generation
-            response = self._llm.generate_test(generate_prompt)
+            response = self._llm.generate_tests(code_content=generate_prompt)
             response_text = self._extract_response_text(response)
 
             # Extract code from response
@@ -281,7 +281,7 @@ class LLMOrchestrator:
                 )
 
                 # Call LLM for refinement
-                response = self._llm.generate_test(refine_prompt)
+                response = self._llm.generate_tests(code_content=refine_prompt)
                 response_text = self._extract_response_text(response)
 
                 # Parse response as JSON or extract code
