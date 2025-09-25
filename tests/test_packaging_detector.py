@@ -101,9 +101,9 @@ class TestPackagingDetectorBasic:
 
             assert isinstance(result, RepoLayoutInfo)
             assert len(result.src_roots) > 0
-            assert len(result.packages) >= 0  # Could be empty for edge cases
+           assert isinstance(result.packages, set)
+           assert all(isinstance(p, str) for p in result.packages)
             assert isinstance(result.mapping, dict)
-
 
 class TestPyprojectDrivenLayouts:
     """Test pyproject.toml-driven layout detection."""
