@@ -136,12 +136,16 @@ class ImportResolver:
         while current != current.parent:
             # If current directory doesn't have __init__.py but contains Python packages,
             # it's likely the project root
-            if not (current / "__init__.py").exists() and any(
-                (child / "__init__.py").exists()
-                for child in current.iterdir()
-                if child.is_dir() and not child.name.startswith(".")
-            ):
-                return current
+            try:
+                if not (current / "__init__.py").exists() and any(
+                    (child / "__init__.py").exists()
+                    for child in current.iterdir()
+                    if child.is_dir() and not child.name.startswith(".")
+                ):
+                    return current
+            except (PermissionError, OSError):
+                # Skip directories we can't access (e.g., system directories)
+                pass
 
             # Stop if we've gone too far
             if self._is_beyond_project_boundary(current, original_start):

@@ -295,12 +295,16 @@ testpaths = ["tests"]
 
         # Verify result structure
         assert context_result is not None
-        assert isinstance(context_result, dict)
+        from testcraft.domain.models import ContextPack
+
+        assert isinstance(context_result, ContextPack), (
+            f"Expected ContextPack, got {type(context_result)}"
+        )
 
         # Extract context string and import_map
-        enriched_context = context_result.get("context", "")
+        enriched_context = context_result.context or ""
         # TODO: USE REAL import_map
-        # import_map = context_result.get("import_map")
+        # import_map = context_result.import_map
 
         # Should have context string
         assert enriched_context is not None
