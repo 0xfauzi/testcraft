@@ -91,11 +91,12 @@ class BootstrapRunner:
             return {}
 
         # Remove duplicates while preserving order
-        unique_roots = []
+        unique_roots: list[str] = []
+        seen: set[str] = set()
         for root in valid_roots:
-            if root not in unique_roots:
+            if root not in seen:
+                seen.add(root)
                 unique_roots.append(root)
-
         # Get existing PYTHONPATH
         existing_pythonpath = os.environ.get("PYTHONPATH", "")
 
