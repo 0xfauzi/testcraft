@@ -1491,7 +1491,7 @@
             "title": "LLM Orchestrator (PLAN/GENERATE/REFINE/MANUAL FIX)",
             "description": "Implement the 4-stage orchestration using PromptRegistry; enforce canonical import and structured outputs.",
             "details": "- Use prompts/registry.py to provide system/user prompts per stage\n- PLAN: produce plan JSON; if missing_symbols -> resolve then re-plan\n- GENERATE: include canonical import at top; reject outputs lacking it\n- REFINE: use PytestRefiner feedback; honor import path rule and gate unrefinable failures\n- MANUAL FIX: produce failing test file + BUG NOTE when real bug suspected\n- Integration tests with mocked LLMPort",
-            "status": "pending",
+            "status": "done",
             "dependencies": [],
             "parentTaskId": 34
           },
@@ -1653,7 +1653,7 @@
     ],
     "metadata": {
       "created": "2025-01-27T20:16:58.061Z",
-      "updated": "2025-09-25T22:27:24.349Z",
+      "updated": "2025-09-26T15:15:01.996Z",
       "description": "Tasks for master context"
     }
   }
