@@ -282,12 +282,22 @@ class LLMOrchestrator:
 
                 # Call LLM for refinement
                 response = self._llm.generate_tests(code_content=refine_prompt)
-                response_text = self._extract_response_text(response)
 
-                # Parse response as JSON or extract code
-                if response_text.strip().startswith("{"):
+                # Parse response as dict/JSON or extract code
+                if isinstance(response, dict):
+                    response_data = response
+                else:
+                    response_text = self._extract_response_text(response)
+                    if response_text.strip().startswith("{"):
+                        try:
+                            response_data = json.loads(response_text)
+                        except json.JSONDecodeError:
+                            response_data = None
+                    else:
+                        response_data = None
+
+                if response_data is not None:
                     try:
-                        response_data = json.loads(response_text)
                         if "missing_symbols" in response_data:
                             # Handle missing symbols
                             missing_symbols = response_data["missing_symbols"]
@@ -306,7 +316,7 @@ class LLMOrchestrator:
                                     # Add resolved definitions to context pack
                                     updated_resolved_defs = (
                                         list(current_context.resolved_defs)
-                                        + resolved_defs
+                                         resolved_defs
                                     )
                                     current_context = (
                                         self._update_context_pack_resolved_defs(
@@ -317,21 +327,15 @@ class LLMOrchestrator:
                                     retry_count += 1
                                     continue  # Retry with resolved symbols
 
-                            # If no symbols to resolve, extract code from response
-                            refined_code = response_data.get(
-                                "refined_code", existing_code
-                            )
-                        else:
-                            # No missing symbols, extract code
-                            refined_code = response_data.get(
-                                "refined_code", existing_code
-                            )
-                    except json.JSONDecodeError:
-                        # Not JSON, treat as code
-                        refined_code = response_text
+                        # If no symbols to resolve, extract code from response
+                        refined_code = response_data.get(
+                            "refined_code", existing_code
+                        )
+                    except Exception:
+                        refined_code = response_data.get("refined_code", existing_code)
                 else:
-                    # Treat as code
-                    refined_code = response_text
+                    # Treat as code text
+                    refined_code = self._extract_response_text(response)
 
                 # Extract code from response
                 refined_code = self._extract_code_from_response(refined_code)
