@@ -13,7 +13,7 @@ import logging
 from pathlib import Path
 from typing import Any
 
-from ....domain.models import ContextPack, ResolvedDef
+from ....domain.models import ContextPack, Conventions, ResolvedDef
 from ....ports.llm_port import LLMPort
 from ....ports.parser_port import ParserPort
 from .context_assembler import ContextAssembler
@@ -316,7 +316,7 @@ class LLMOrchestrator:
                                     # Add resolved definitions to context pack
                                     updated_resolved_defs = (
                                         list(current_context.resolved_defs)
-                                         resolved_defs
+                                        + resolved_defs
                                     )
                                     current_context = (
                                         self._update_context_pack_resolved_defs(
@@ -328,9 +328,7 @@ class LLMOrchestrator:
                                     continue  # Retry with resolved symbols
 
                         # If no symbols to resolve, extract code from response
-                        refined_code = response_data.get(
-                            "refined_code", existing_code
-                        )
+                        refined_code = response_data.get("refined_code", existing_code)
                     except Exception:
                         refined_code = response_data.get("refined_code", existing_code)
                 else:
@@ -503,6 +501,7 @@ TASK:
 - Determinism: seed={conventions.determinism.seed}, tz={conventions.determinism.tz}, freeze_time={conventions.determinism.freeze_time}
 - IO policy: network={conventions.io_policy.network}, fs={conventions.io_policy.fs}
 """.strip()
+
     def _format_property_context(self, property_context) -> str:
         """Format property context for prompt."""
         context_parts = []
