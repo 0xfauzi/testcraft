@@ -1,12 +1,12 @@
 ---
-description: Two-session Cursor chat workflow for Taskmaster (planning handoff then implementation)
+description: Two-session Cursor chat workflow for Taskmaster (detailed implementation guide)
 globs: **/*
 alwaysApply: true
 ---
 
 ## Two-Session Cursor Chat Workflow for Taskmaster
 
-This rule defines a strict two-session workflow for working with Taskmaster inside Cursor. It complements and does not replace the standards in [workflow-patterns.mdc](mdc:.cursor/rules/workflow-patterns.mdc) and the detailed guidance in [dev_workflow.mdc](mdc:.cursor/rules/taskmaster/dev_workflow.mdc).
+This rule provides detailed implementation guidance for the two-session workflow. It is fully integrated with the comprehensive standards in [workflow-patterns.mdc](mdc:.cursor/rules/workflow-patterns.mdc) and complements the detailed guidance in [dev_workflow.mdc](mdc:.cursor/rules/taskmaster/dev_workflow.mdc).
 
 - **Session 1 — Planning & Handoff (no coding)**
   - **Pick up the task**: Identify task via `get_tasks` / `next_task`; confirm ID, title, tag context
@@ -127,10 +127,10 @@ pre-commit run -a
 
 ### Alignment with Existing Standards
 
-- **This rule augments**: [workflow-patterns.mdc](mdc:.cursor/rules/workflow-patterns.mdc)
+- **This rule integrates with**: [workflow-patterns.mdc](mdc:.cursor/rules/workflow-patterns.mdc) (comprehensive workflow standards)
 - **Detailed process & tooling**: [dev_workflow.mdc](mdc:.cursor/rules/taskmaster/dev_workflow.mdc)
 
-Keep rules DRY by referencing the above for full command and tool references. This document focuses only on the two-session split and the required handoff structure.
+Keep rules DRY by referencing the above for full command and tool references. This document provides detailed implementation guidance for the two-session methodology defined in workflow-patterns.mdc.
 
 ## ENFORCEMENT
 

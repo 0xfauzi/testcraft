@@ -14,7 +14,85 @@ import pytest
 
 from testcraft.application.generate_usecase import GenerateUseCase
 from testcraft.application.generation.services.pytest_refiner import PytestRefiner
-from testcraft.domain.models import GenerationResult
+from testcraft.domain.models import (
+    Budget,
+    ContextPack,
+    Conventions,
+    DeterminismConfig,
+    Focal,
+    GenerationResult,
+    GwtSnippets,
+    ImportMap,
+    PropertyContext,
+    ResolvedDef,
+    Target,
+    TestBundle,
+    TestElement,
+    TestElementType,
+    TestGenerationPlan,
+)
+
+
+def create_test_generation_plan(source_file_path: str) -> TestGenerationPlan:
+    """Helper function to create a proper TestGenerationPlan object for testing."""
+    return TestGenerationPlan(
+        elements_to_test=[
+            TestElement(
+                name="test_function",
+                type=TestElementType.FUNCTION,
+                line_range=(1, 10),
+                docstring="Test function docstring",
+            )
+        ],
+        existing_tests=[],
+        coverage_before=None,
+    )
+
+
+def create_test_context_pack(source_file_path: str, function_name: str) -> ContextPack:
+    """Helper function to create a real ContextPack instance for testing."""
+    return ContextPack(
+        target=Target(module_file=source_file_path, object=function_name),
+        import_map=ImportMap(
+            target_import="src.example",
+            sys_path_roots=["/tmp/test_dir/src"],
+            needs_bootstrap=False,
+            bootstrap_conftest="",
+        ),
+        focal=Focal(
+            source="def example(): pass",
+            signature="def example():",
+            docstring="Test function docstring",
+        ),
+        resolved_defs=[
+            ResolvedDef(
+                name="helper_function",
+                kind="func",
+                signature="def helper_function():",
+                doc="Helper function",
+                body="def helper_function(): return 'help'",
+            )
+        ],
+        property_context=PropertyContext(
+            ranked_methods=[],
+            gwt_snippets=GwtSnippets(given=[], when=[], then=[]),
+            test_bundles=[
+                TestBundle(
+                    test_name="test_helper_function",
+                    imports=["from src.example import helper_function"],
+                    fixtures=[],
+                    mocks=[],
+                    assertions=["assert helper_function() == 'help'"],
+                )
+            ],
+        ),
+        conventions=Conventions(
+            test_style="pytest",
+            allowed_libs=["pytest", "unittest"],
+            determinism=DeterminismConfig(),
+        ),
+        budget=Budget(max_input_tokens=60000),
+    )
 
 
 @pytest.fixture
@@ -72,10 +150,13 @@ class TestImmediateRefinement:
 
     async def test_immediate_mode_happy_path(self, mock_ports, immediate_config):
         """Test successful immediate pipeline: generate→write→refine on first try."""
-        # Setup mocks
-        mock_ports["llm_port"].generate_tests = AsyncMock(
-            return_value={"tests": "def test_example(): pass"}
-        )
+        # Setup mocks - LLM orchestrator uses generate_tests
+        mock_response = Mock()
+        mock_response.choices = [Mock()]
+        mock_response.choices[0].message = Mock()
+        mock_response.choices[
+            0
+        ].message.content = '{"plan": ["Test basic functionality", "Test edge cases"], "missing_symbols": [], "import_line": "from src.example import example"}'
         mock_ports["writer_port"].write_test_file.return_value = {
             "success": True,
             "bytes_written": 100,
@@ -98,97 +179,166 @@ class TestImmediateRefinement:
         mock_file_discovery.discover_test_files.return_value = []
 
         # Mock pytest refiner to return successful refinement on first try
-        with patch(
-            "testcraft.application.generate_usecase.PytestRefiner"
-        ) as mock_pytest_refiner_class:
-            mock_refiner = AsyncMock()
-            mock_refiner.refine_until_pass = AsyncMock(
-                return_value={
-                    "success": True,
-                    "iterations": 1,
-                    "final_status": "passed",
-                    "test_file": "tests/test_example.py",
-                }
-            )
-            mock_pytest_refiner_class.return_value = mock_refiner
-
-            # Create use case with validation disabled to avoid mock issues
-            config = immediate_config.copy()
-            config["enable_validation"] = False
-
-            usecase = GenerateUseCase(
-                config=config,
-                file_discovery_service=mock_file_discovery,
-                **mock_ports,
-            )
-
-            # Mock the service methods
-            usecase._state_discovery = Mock()
-            usecase._state_discovery.sync_and_discover.return_value = {
-                "files": ["src/example.py"]
+        mock_refiner = AsyncMock()
+        mock_refiner.refine_until_pass = AsyncMock(
+            return_value={
+                "success": True,
+                "iterations": 1,
+                "final_status": "passed",
+                "test_file": "tests/test_example.py",
             }
+        )
 
-            usecase._coverage_evaluator = Mock()
-            usecase._coverage_evaluator.measure_initial.return_value = {
-                "overall_line_coverage": 0.5
-            }
-            usecase._coverage_evaluator.measure_final.return_value = {
-                "overall_line_coverage": 0.8
-            }
-            usecase._coverage_evaluator.calculate_delta.return_value = {
-                "line_coverage_delta": 0.3
-            }
+        # Create use case with validation disabled to avoid mock issues
+        config = immediate_config.copy()
+        config["enable_validation"] = False
 
-            usecase._plan_builder = Mock()
-            usecase._plan_builder.decide_files_to_process.return_value = [
-                "src/example.py"
-            ]
-            usecase._plan_builder.build_plans.return_value = [
-                {"source_file": "src/example.py"}
-            ]
-            usecase._plan_builder.get_source_path_for_plan.return_value = Path(
-                "src/example.py"
+        usecase = GenerateUseCase(
+            config=config,
+            file_discovery_service=mock_file_discovery,
+            **mock_ports,
+        )
+
+        # Mock the already created pytest refiner instance
+        usecase._pytest_refiner = mock_refiner
+
+        # Mock the LLM orchestrator's LLM port instead of the test's LLM port
+        def debug_generate_tests(**kwargs):
+            code_content = kwargs.get("code_content", "")
+
+            # Return different responses based on the prompt content
+            if "Output ONLY the complete test module" in code_content:
+                # GENERATE stage - return Python code in triple backticks
+                result = Mock()
+                result.choices = [Mock()]
+                result.choices[0].message = Mock()
+                result.choices[0].message.content = '''```python
+def test_example():
+    """Test basic functionality of example function."""
+    result = example()
+    assert result is None  # Function returns None
+
+def test_example_edge_cases():
+    """Test edge cases for example function."""
+    # Test with various inputs - since function takes no parameters
+    pass
+```'''
+            else:
+                # PLAN stage - return JSON
+                result = mock_response
+
+            return result
+
+        usecase._llm_orchestrator._llm.generate_tests = Mock(
+            side_effect=debug_generate_tests
+        )
+
+        # Mock the service methods
+        usecase._state_discovery = Mock()
+        usecase._state_discovery.sync_and_discover.return_value = {
+            "files": ["src/example.py"]
+        }
+
+        usecase._coverage_evaluator = Mock()
+        usecase._coverage_evaluator.measure_initial.return_value = {
+            "overall_line_coverage": 0.5
+        }
+        usecase._coverage_evaluator.measure_final.return_value = {
+            "overall_line_coverage": 0.8
+        }
+        usecase._coverage_evaluator.calculate_delta.return_value = {
+            "line_coverage_delta": 0.3
+        }
+
+        usecase._plan_builder = Mock()
+        usecase._plan_builder.decide_files_to_process.return_value = ["src/example.py"]
+        test_plan = create_test_generation_plan("src/example.py")
+        usecase._plan_builder.build_plans.return_value = [test_plan]
+        usecase._plan_builder.get_source_path_for_plan.return_value = Path(
+            "src/example.py"
+        )
+
+        usecase._content_builder = Mock()
+        usecase._content_builder.build_code_content.return_value = "def example(): pass"
+        usecase._context_assembler = Mock()
+        usecase._context_assembler.context_for_generation.return_value = {}
+        usecase._context_assembler.get_last_enriched_context.return_value = None
+
+        # Mock the context assembler's import resolver to return proper ImportMap
+        mock_context_assembler_import_resolver = Mock()
+        import_map = ImportMap(
+            target_import="src.example",
+            sys_path_roots=["/tmp/test_dir/src"],
+            needs_bootstrap=False,
+            bootstrap_conftest="",
+        )
+        mock_context_assembler_import_resolver.resolve.return_value = import_map
+        usecase._context_assembler._import_resolver = (
+            mock_context_assembler_import_resolver
+        )
+
+        # Mock import resolver to return proper ImportMap object
+        usecase._symbol_resolver = Mock()
+        usecase._symbol_resolver.resolve_imports.return_value = import_map
+
+        # Mock context pack builder to return a real ContextPack instance
+        usecase._context_pack_builder = Mock()
+
+        # Mock the import resolver on the context pack builder to return proper ImportMap
+        mock_import_resolver = Mock()
+        mock_import_resolver.resolve.return_value = import_map
+        usecase._context_pack_builder._import_resolver = mock_import_resolver
+
+        usecase._context_pack_builder.build_context_pack.return_value = (
+            create_test_context_pack("src/example.py", "example")
+        )
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            # Create the source file that the plan builder expects to exist
+            source_file_path = Path(temp_dir) / "src" / "example.py"
+            source_file_path.parent.mkdir(parents=True, exist_ok=True)
+            source_file_path.write_text(
+                "def example():\n    '''Test function docstring'''\n    pass"
             )
 
-            usecase._content_builder = Mock()
-            usecase._content_builder.build_code_content.return_value = (
-                "def example(): pass"
+            # Create the test file that the refinement method expects to exist
+            test_file_path = Path(temp_dir) / "tests" / "test_example.py"
+            test_file_path.parent.mkdir(parents=True, exist_ok=True)
+            test_file_path.write_text("def test_example(): pass")
+
+            # Mock get_source_path_for_plan to return the absolute path to the source file
+            usecase._plan_builder.get_source_path_for_plan.return_value = (
+                source_file_path
             )
-            usecase._context_assembler = Mock()
-            usecase._context_assembler.context_for_generation.return_value = {}
-            usecase._context_assembler.get_last_enriched_context.return_value = None
 
-            with tempfile.TemporaryDirectory() as temp_dir:
-                # Create the test file that the refinement method expects to exist
-                test_file_path = Path(temp_dir) / "tests" / "test_example.py"
-                test_file_path.parent.mkdir(parents=True, exist_ok=True)
-                test_file_path.write_text("def test_example(): pass")
+            # Mock determine_test_path to return the absolute path
+            usecase._content_builder.determine_test_path.return_value = str(
+                test_file_path
+            )
 
-                # Mock determine_test_path to return the absolute path
-                usecase._content_builder.determine_test_path.return_value = str(
-                    test_file_path
-                )
+            # Run the test
+            results = await usecase.generate_tests(project_path=temp_dir)
 
-                # Run the test
-                results = await usecase.generate_tests(project_path=temp_dir)
+            # Verify results
+            assert results["success"] is True
+            assert results["tests_generated"] > 0
+            assert results["files_written"] > 0
+            assert results["files_refined"] > 0
 
-                # Verify results
-                assert results["success"] is True
-                assert results["tests_generated"] > 0
-                assert results["files_written"] > 0
-                assert results["files_refined"] > 0
-
-                # Verify refinement was called
-                mock_refiner.refine_until_pass.assert_called_once()
+            # Verify refinement was called
+            mock_refiner.refine_until_pass.assert_called_once()
 
     async def test_immediate_mode_syntax_invalid_no_write(
         self, mock_ports, immediate_config
     ):
         """Test that invalid syntax prevents write when keep_failed_writes=False."""
         # Setup mock to return invalid Python syntax
-        mock_ports["llm_port"].generate_tests = AsyncMock(
-            return_value={"tests": "def test_invalid( pass"}  # Invalid syntax
-        )
+        mock_response = Mock()
+        mock_response.choices = [Mock()]
+        mock_response.choices[0].message = Mock()
+        mock_response.choices[
+            0
+        ].message.content = '{"plan": ["Test invalid syntax"], "missing_symbols": [], "import_line": "from src.example import example"}'  # Invalid syntax
 
         # Writer should raise an exception due to syntax validation
         mock_ports["writer_port"].write_test_file.side_effect = Exception(
@@ -235,9 +385,8 @@ class TestImmediateRefinement:
 
         usecase._plan_builder = Mock()
         usecase._plan_builder.decide_files_to_process.return_value = ["src/example.py"]
-        usecase._plan_builder.build_plans.return_value = [
-            {"source_file": "src/example.py"}
-        ]
+        test_plan = create_test_generation_plan("src/example.py")
+        usecase._plan_builder.build_plans.return_value = [test_plan]
         usecase._plan_builder.get_source_path_for_plan.return_value = Path(
             "src/example.py"
         )
@@ -252,36 +401,104 @@ class TestImmediateRefinement:
         usecase._context_assembler.context_for_generation.return_value = {}
         usecase._context_assembler.get_last_enriched_context.return_value = None
 
-        with patch(
-            "testcraft.application.generate_usecase.PytestRefiner"
-        ) as mock_pytest_refiner_class:
-            mock_refiner = AsyncMock()
-            mock_pytest_refiner_class.return_value = mock_refiner
+        # Mock the context assembler's import resolver to return proper ImportMap
+        mock_context_assembler_import_resolver = Mock()
+        import_map = ImportMap(
+            target_import="src.example",
+            sys_path_roots=["/tmp/test_dir/src"],
+            needs_bootstrap=False,
+            bootstrap_conftest="",
+        )
+        mock_context_assembler_import_resolver.resolve.return_value = import_map
+        usecase._context_assembler._import_resolver = (
+            mock_context_assembler_import_resolver
+        )
 
-            with tempfile.TemporaryDirectory() as temp_dir:
-                # Mock rollback method
-                with patch.object(
-                    usecase, "_rollback_failed_write", new_callable=AsyncMock
-                ) as mock_rollback:
-                    # Run the test
-                    results = await usecase.generate_tests(project_path=temp_dir)
+        # Mock import resolver to return proper ImportMap object
+        usecase._symbol_resolver = Mock()
+        usecase._symbol_resolver.resolve_imports.return_value = import_map
 
-                    # Verify write was attempted but failed (still counts as 1 in files_written)
-                    assert results["files_written"] == 1
+        # Mock context pack builder to return a real ContextPack instance
+        usecase._context_pack_builder = Mock()
 
-                    # Verify rollback was called for failed write
-                    mock_rollback.assert_called()
+        # Mock the import resolver on the context pack builder to return proper ImportMap
+        mock_import_resolver = Mock()
+        mock_import_resolver.resolve.return_value = import_map
+        usecase._context_pack_builder._import_resolver = mock_import_resolver
+
+        usecase._context_pack_builder.build_context_pack.return_value = (
+            create_test_context_pack("src/example.py", "example")
+        )
+
+        mock_refiner = AsyncMock()
+
+        # Mock the LLM orchestrator's LLM port to return proper responses
+        def mock_generate_tests(**kwargs):
+            code_content = kwargs.get("code_content", "")
+
+            # Return different responses based on the prompt content
+            if "Output ONLY the complete test module" in code_content:
+                # GENERATE stage - return Python code in triple backticks
+                result = Mock()
+                result.choices = [Mock()]
+                result.choices[0].message = Mock()
+                result.choices[0].message.content = '''```python
+def test_example():
+    """Test basic functionality of example function."""
+    result = example()
+    assert result is None  # Function returns None
+```'''
+            else:
+                # PLAN stage - return JSON
+                result = mock_response
+
+            return result
+
+        usecase._llm_orchestrator._llm.generate_tests = Mock(
+            side_effect=mock_generate_tests
+        )
+
+        # Mock the already created pytest refiner instance
+        usecase._pytest_refiner = mock_refiner
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            # Create the source file that the plan builder expects to exist
+            source_file_path = Path(temp_dir) / "src" / "example.py"
+            source_file_path.parent.mkdir(parents=True, exist_ok=True)
+            source_file_path.write_text(
+                "def example():\n    '''Test function docstring'''\n    pass"
+            )
+
+            # Mock get_source_path_for_plan to return the absolute path to the source file
+            usecase._plan_builder.get_source_path_for_plan.return_value = (
+                source_file_path
+            )
+
+            # Mock rollback method
+            with patch.object(
+                usecase, "_rollback_failed_write", new_callable=AsyncMock
+            ) as mock_rollback:
+                # Run the test
+                results = await usecase.generate_tests(project_path=temp_dir)
+
+                # Verify write was attempted but failed (still counts as 1 in files_written)
+                assert results["files_written"] == 1
+
+                # Verify rollback was called for failed write
+                mock_rollback.assert_called()
 
     async def test_immediate_mode_refinement_iterations_exhausted(
         self, mock_ports, immediate_config
     ):
         """Test refinement continues until max iterations are exhausted."""
-        # Setup mocks
-        mock_ports["llm_port"].generate_tests = AsyncMock(
-            return_value={
-                "tests": "def test_example(): assert False"
-            }  # Test that will fail
-        )
+        # Setup mocks - test that will fail
+        mock_response = Mock()
+        mock_response.choices = [Mock()]
+        mock_response.choices[0].message = Mock()
+        mock_response.choices[
+            0
+        ].message.content = '{"plan": ["Test that will fail"], "missing_symbols": [], "import_line": "from src.example import example"}'
+
         mock_ports["writer_port"].write_test_file.return_value = {
             "success": True,
             "bytes_written": 100,
@@ -306,6 +523,32 @@ class TestImmediateRefinement:
             **mock_ports,
         )
 
+        # Mock the LLM orchestrator's LLM port to return proper responses
+        def mock_generate_tests(**kwargs):
+            code_content = kwargs.get("code_content", "")
+
+            # Return different responses based on the prompt content
+            if "Output ONLY the complete test module" in code_content:
+                # GENERATE stage - return Python code in triple backticks
+                result = Mock()
+                result.choices = [Mock()]
+                result.choices[0].message = Mock()
+                result.choices[0].message.content = '''```python
+def test_example():
+    """Test basic functionality of example function."""
+    result = example()
+    assert result is None  # Function returns None
+```'''
+            else:
+                # PLAN stage - return JSON
+                result = mock_response
+
+            return result
+
+        usecase._llm_orchestrator._llm.generate_tests = Mock(
+            side_effect=mock_generate_tests
+        )
+
         # Mock the service methods
         usecase._state_discovery = Mock()
         usecase._state_discovery.sync_and_discover.return_value = {
@@ -325,9 +568,8 @@ class TestImmediateRefinement:
 
         usecase._plan_builder = Mock()
         usecase._plan_builder.decide_files_to_process.return_value = ["src/example.py"]
-        usecase._plan_builder.build_plans.return_value = [
-            {"source_file": "src/example.py"}
-        ]
+        test_plan = create_test_generation_plan("src/example.py")
+        usecase._plan_builder.build_plans.return_value = [test_plan]
         usecase._plan_builder.get_source_path_for_plan.return_value = Path(
             "src/example.py"
         )
@@ -340,41 +582,77 @@ class TestImmediateRefinement:
 
         usecase._context_assembler = Mock()
         usecase._context_assembler.context_for_generation.return_value = {}
+        usecase._context_assembler.get_last_enriched_context.return_value = None
+
+        # Mock the context assembler's import resolver to return proper ImportMap
+        mock_context_assembler_import_resolver = Mock()
+        import_map = ImportMap(
+            target_import="src.example",
+            sys_path_roots=["/tmp/test_dir/src"],
+            needs_bootstrap=False,
+            bootstrap_conftest="",
+        )
+        mock_context_assembler_import_resolver.resolve.return_value = import_map
+        usecase._context_assembler._import_resolver = (
+            mock_context_assembler_import_resolver
+        )
+
+        # Mock import resolver to return proper ImportMap object
+        usecase._symbol_resolver = Mock()
+        usecase._symbol_resolver.resolve_imports.return_value = import_map
+
+        # Mock context pack builder to return a real ContextPack instance
+        usecase._context_pack_builder = Mock()
+
+        # Mock the import resolver on the context pack builder to return proper ImportMap
+        mock_import_resolver = Mock()
+        mock_import_resolver.resolve.return_value = import_map
+        usecase._context_pack_builder._import_resolver = mock_import_resolver
+
+        usecase._context_pack_builder.build_context_pack.return_value = (
+            create_test_context_pack("src/example.py", "example")
+        )
 
         # Mock pytest refiner to exhaust all iterations without success
-        with patch(
-            "testcraft.application.generate_usecase.PytestRefiner"
-        ) as mock_pytest_refiner_class:
-            mock_refiner = AsyncMock()
-            mock_refiner.refine_until_pass = AsyncMock(
-                return_value={
-                    "success": False,
-                    "iterations": immediate_config["max_refinement_iterations"],
-                    "final_status": "failed",
-                    "test_file": "tests/test_example.py",
-                    "error": "Maximum refinement iterations exceeded",
-                }
+        mock_refiner = AsyncMock()
+        mock_refiner.refine_until_pass = AsyncMock(
+            return_value={
+                "success": False,
+                "iterations": immediate_config["max_refinement_iterations"],
+                "final_status": "failed",
+                "test_file": "tests/test_example.py",
+                "error": "Maximum refinement iterations exceeded",
+            }
+        )
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            # Create the source file that the plan builder expects to exist
+            source_file_path = Path(temp_dir) / "src" / "example.py"
+            source_file_path.parent.mkdir(parents=True, exist_ok=True)
+            source_file_path.write_text(
+                "def example():\n    '''Test function docstring'''\n    pass"
             )
-            mock_pytest_refiner_class.return_value = mock_refiner
 
-            with tempfile.TemporaryDirectory() as temp_dir:
-                # Run the test
-                results = await usecase.generate_tests(project_path=temp_dir)
+            # Mock get_source_path_for_plan to return the absolute path to the source file
+            usecase._plan_builder.get_source_path_for_plan.return_value = (
+                source_file_path
+            )
 
-                # Verify refinement was attempted but may have failed early
-                assert (
-                    results["files_refined"] == 1
-                )  # One refinement attempt was counted
+            # Run the test
+            results = await usecase.generate_tests(project_path=temp_dir)
 
-                # Verify that although refinement was attempted, it failed
-                refinement_results = results.get("refinement_results", [])
-                assert len(refinement_results) > 0, (
-                    "Expected at least one refinement result"
-                )
-                # Check that the refinement failed (success: False in refinement result)
-                assert not refinement_results[0]["success"], (
-                    f"Expected refinement to fail, got: {refinement_results[0]}"
-                )
+            # Verify refinement was attempted but may have failed early
+            assert results["files_refined"] == 1  # One refinement attempt was counted
+
+            # Verify that although refinement was attempted, it failed
+            refinement_results = results.get("refinement_results", [])
+            assert len(refinement_results) > 0, (
+                "Expected at least one refinement result"
+            )
+            # Check that the refinement failed (success: False in refinement result)
+            assert not refinement_results[0]["success"], (
+                f"Expected refinement to fail, got: {refinement_results[0]}"
+            )
 
     @pytest.mark.asyncio
     async def test_concurrency_semaphore_respected(self):
@@ -454,9 +732,11 @@ class TestImmediateRefinement:
     async def test_legacy_mode_still_works(self, mock_ports, legacy_config):
         """Test that legacy mode (immediate_refinement=False) still works."""
         # Setup mocks for legacy mode
-        mock_ports["llm_port"].generate_tests = AsyncMock(
-            return_value={"tests": "def test_example(): pass"}
-        )
+        mock_response = Mock()
+        mock_response.choices = [Mock()]
+        mock_response.choices[0].message = Mock()
+        mock_response.choices[0].message.content = "def test_example(): pass"
+
         mock_ports["writer_port"].write_test_file.return_value = {
             "success": True,
             "bytes_written": 100,

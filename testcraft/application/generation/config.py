@@ -40,6 +40,10 @@ class GenerationConfig:
             "refine_on_first_failure_only": True,  # Stop at first pytest failure inside file
             "refinement_backoff_sec": 0.2,  # Small backoff between refinement iterations
             "disable_ruff_format": False,  # Disable Ruff formatting if it causes issues
+            # Symbol resolution configuration (task 34.5)
+            "enable_symbol_resolution": True,  # Enable missing_symbols resolution loop
+            "max_plan_retries": 2,  # Maximum retries for PLAN stage with symbol resolution
+            "max_refine_retries": 3,  # Maximum retries for REFINE stage with symbol resolution
             # Context enrichment feature flags and budgets
             "context_categories": {
                 "snippets": True,
