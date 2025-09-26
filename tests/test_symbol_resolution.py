@@ -467,11 +467,13 @@ class TestClass:
         context_assembler = Mock()
         context_assembler.gather_project_context.return_value = {}
 
+        from testcraft.config.models import OrchestratorConfig
+
         orchestrator = LLMOrchestrator(
             llm_port=llm_port,
             parser_port=parser_port,
             context_assembler=context_assembler,
-            max_plan_retries=2,  # Only 2 retries allowed
+            config=OrchestratorConfig(max_plan_retries=2),  # Only 2 retries allowed
         )
 
         context_pack = ContextPack(
@@ -621,11 +623,13 @@ def test_something():
         context_assembler = Mock()
         context_assembler.gather_project_context.return_value = {}
 
+        from testcraft.config.models import OrchestratorConfig
+
         orchestrator = LLMOrchestrator(
             llm_port=llm_port,
             parser_port=parser_port,
             context_assembler=context_assembler,
-            max_refine_retries=3,  # Only 3 retries allowed
+            config=OrchestratorConfig(max_refine_retries=3),  # Only 3 retries allowed
         )
 
         context_pack = ContextPack(

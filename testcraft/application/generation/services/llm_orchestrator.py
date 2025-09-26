@@ -46,6 +46,8 @@ class LLMOrchestrator:
         symbol_resolver: SymbolResolver | None = None,
         prompt_registry: PromptRegistry | None = None,
         config: OrchestratorConfig | None = None,
+        max_plan_retries: int | None = None,
+        max_refine_retries: int | None = None,
     ) -> None:
         """
         Initialize the LLM orchestrator.
@@ -58,6 +60,8 @@ class LLMOrchestrator:
             symbol_resolver: Service for resolving missing symbols (optional)
             prompt_registry: Prompt registry for stage-specific prompts (optional)
             config: Orchestrator configuration (optional)
+            max_plan_retries: Maximum retries for PLAN stage (overrides config if provided)
+            max_refine_retries: Maximum retries for REFINE stage (overrides config if provided)
         """
         self._llm = llm_port
         self._parser = parser_port
@@ -67,9 +71,17 @@ class LLMOrchestrator:
         self._prompt_registry = prompt_registry or PromptRegistry()
         self._config = config or OrchestratorConfig()
 
-        # Use config values
-        self._max_plan_retries = self._config.max_plan_retries
-        self._max_refine_retries = self._config.max_refine_retries
+        # Use config values or override with direct parameters
+        self._max_plan_retries = (
+            max_plan_retries
+            if max_plan_retries is not None
+            else self._config.max_plan_retries
+        )
+        self._max_refine_retries = (
+            max_refine_retries
+            if max_refine_retries is not None
+            else self._config.max_refine_retries
+        )
 
     def plan_and_generate(
         self,

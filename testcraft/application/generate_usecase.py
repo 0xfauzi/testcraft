@@ -14,6 +14,8 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any
 
+from testcraft.config.models import OrchestratorConfig
+
 from ..adapters.io.file_discovery import FileDiscoveryService
 from ..adapters.io.file_status_tracker import FileStatus
 from ..domain.models import GenerationResult
@@ -156,14 +158,19 @@ class GenerateUseCase:
 
         self._context_pack_builder = ContextPackBuilder()
 
+        # Create orchestrator config with values from configuration
+        orchestrator_config = OrchestratorConfig(
+            max_plan_retries=self._config.get("max_plan_retries", 2),
+            max_refine_retries=self._config.get("max_refine_retries", 3),
+        )
+
         self._llm_orchestrator = LLMOrchestrator(
             llm_port=llm_port,
             parser_port=parser_port,
             context_assembler=self._context_assembler,
             context_pack_builder=self._context_pack_builder,
             symbol_resolver=self._symbol_resolver,
-            max_plan_retries=self._config.get("max_plan_retries", 2),
-            max_refine_retries=self._config.get("max_refine_retries", 3),
+            config=orchestrator_config,
         )
 
         # Status tracker will be injected per generation operation
