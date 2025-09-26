@@ -491,7 +491,7 @@ TASK:
 
         return "\n".join(f"- {snippet}" for snippet in snippets)
 
-    def _format_conventions(self, conventions) -> str:
+    def _format_conventions(self, conventions: Conventions) -> str:
         """Format conventions for prompt."""
         return f"""
 - Test style: {conventions.test_style}
@@ -499,7 +499,6 @@ TASK:
 - Determinism: seed={conventions.determinism.seed}, tz={conventions.determinism.tz}, freeze_time={conventions.determinism.freeze_time}
 - IO policy: network={conventions.io_policy.network}, fs={conventions.io_policy.fs}
 """.strip()
-
     def _format_property_context(self, property_context) -> str:
         """Format property context for prompt."""
         context_parts = []
