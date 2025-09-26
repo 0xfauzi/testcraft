@@ -90,6 +90,7 @@ class GeneratorGuardrails:
 
             # Run validation checks
             issues.extend(self._validate_imports(test_content, tree))
+            issues.extend(self._validate_canonical_import_first(test_content, tree))
             issues.extend(self._validate_instantiation_safety(test_content, tree))
             issues.extend(self._validate_loop_safety(test_content, tree))
             issues.extend(self._validate_mocking_patterns(test_content, tree))
@@ -194,6 +195,62 @@ class GeneratorGuardrails:
                                 suggested_fix=suggested_fix,
                             )
                         )
+
+        return issues
+
+    def _validate_canonical_import_first(
+        self, content: str, tree: ast.AST
+    ) -> list[ValidationIssue]:
+        """Validate that canonical import is first non-comment import."""
+        issues = []
+
+        canonical_import = self.enriched_context.get("imports", {}).get("target_import")
+        if not canonical_import:
+            # No canonical import defined, skip this validation
+            return issues
+
+        # Find first non-comment import
+        first_import = None
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import | ast.ImportFrom) and getattr(
+                node, "module", None
+            ):
+                # Check if it's a comment by examining the source line
+                lines = content.split("\n")
+                line_num = getattr(node, "lineno", 1) - 1  # 0-based index
+                if 0 <= line_num < len(lines):
+                    line = lines[line_num].strip()
+                    if not line.startswith("#") and line:  # Not a comment and not empty
+                        first_import = node
+                        break
+
+        if first_import is None:
+            issues.append(
+                ValidationIssue(
+                    severity="error",
+                    category="import",
+                    message="No import statements found in generated test",
+                    suggested_fix=f"Add 'import {canonical_import}' as the first import",
+                )
+            )
+            return issues
+
+        # Check if first import matches canonical import
+        if isinstance(first_import, ast.Import):
+            actual_import = first_import.names[0].name
+        else:  # ast.ImportFrom
+            actual_import = first_import.module or ""
+
+        if actual_import != canonical_import:
+            issues.append(
+                ValidationIssue(
+                    severity="error",
+                    category="import",
+                    message=f"First import '{actual_import}' != canonical import '{canonical_import}'",
+                    line_number=getattr(first_import, "lineno", None),
+                    suggested_fix=f"Change first import to '{canonical_import}'",
+                )
+            )
 
         return issues
 
