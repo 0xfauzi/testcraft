@@ -51,8 +51,7 @@ class BootstrapRunner:
 
         # If conftest already exists and we prefer conftest, use it
         if conftest_path.exists() and self._prefer_conftest:
-            return BootstrapStrategy.PYTHONPATH_ENV
-
+            return BootstrapStrategy.CONFTEST_FILE
         # If we prefer conftest and no conftest exists, create one
         if self._prefer_conftest and import_map.bootstrap_conftest:
             self.write_bootstrap_conftest(tests_dir, import_map.bootstrap_conftest)
