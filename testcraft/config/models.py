@@ -501,6 +501,11 @@ class TestGenerationConfig(BaseModel):
         default_factory=MergeConfig, description="Test merging configuration"
     )
 
+    # Quality gates
+    enable_quality_gates: bool = Field(
+        default=True, description="Enable quality gates validation before writing tests"
+    )
+
     refine: RefineConfig = Field(
         default_factory=RefineConfig, description="Test refinement configuration"
     )
@@ -667,6 +672,44 @@ class QualityConfig(BaseModel):
 
     max_mutants_per_file: int = Field(
         default=50, ge=1, description="Maximum mutants per file for performance"
+    )
+
+    # Quality gates configuration
+    enable_import_gate: bool = Field(
+        default=True, description="Enforce canonical import as first import"
+    )
+
+    enable_bootstrap_gate: bool = Field(
+        default=True, description="Ensure bootstrap requirements are met"
+    )
+
+    enable_compile_gate: bool = Field(
+        default=True, description="Ensure pytest can import generated tests"
+    )
+
+    enable_determinism_gate: bool = Field(
+        default=True, description="Run pytest twice with same seed and compare"
+    )
+
+    enable_coverage_gate: bool = Field(
+        default=True, description="Measure coverage delta and validate improvement"
+    )
+
+    enable_mutation_gate: bool = Field(
+        default=False, description="Enable mutation sampling gate"
+    )
+
+    # Gate-specific settings
+    determinism_timeout_seconds: int = Field(
+        default=60, ge=10, description="Timeout for determinism testing"
+    )
+
+    compile_timeout_seconds: int = Field(
+        default=30, ge=5, description="Timeout for compile testing"
+    )
+
+    import_timeout_seconds: int = Field(
+        default=30, ge=5, description="Timeout for import validation"
     )
 
     mutation_timeout: int = Field(

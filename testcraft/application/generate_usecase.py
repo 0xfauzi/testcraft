@@ -18,7 +18,7 @@ from testcraft.config.models import OrchestratorConfig
 
 from ..adapters.io.file_discovery import FileDiscoveryService
 from ..adapters.io.file_status_tracker import FileStatus
-from ..domain.models import GenerationResult
+from ..domain.models import GenerationResult, ImportMap
 from ..ports.context_port import ContextPort
 from ..ports.coverage_port import CoveragePort
 from ..ports.llm_port import LLMPort
@@ -29,6 +29,7 @@ from ..ports.telemetry_port import MetricValue, SpanKind, TelemetryPort
 from ..ports.writer_port import WriterPort
 from .generation.config import GenerationConfig
 from .generation.services.batch_executor import BatchExecutor
+from .generation.services.bootstrap_runner import BootstrapRunner
 from .generation.services.content_builder import ContentBuilder
 from .generation.services.context_assembler import ContextAssembler
 from .generation.services.context_pack import ContextPackBuilder
@@ -37,6 +38,7 @@ from .generation.services.generator_guardrails import TestContentValidator
 from .generation.services.llm_orchestrator import LLMOrchestrator
 from .generation.services.plan_builder import PlanBuilder
 from .generation.services.pytest_refiner import PytestRefiner
+from .generation.services.quality_gates import QualityGatesService
 from .generation.services.state_discovery import (
     GenerateUseCaseError,
     StateSyncDiscovery,
@@ -897,10 +899,128 @@ class GenerateUseCase:
         except Exception as e:
             logger.warning("Immediate plan processing failed: %s", e)
             result["errors"].append(f"Processing error: {e}")
-            return result
-        finally:
-            # Record incremental state for this file
-            await self._record_per_file_state(result)
+
+    async def _run_quality_gates(
+        self, generation_result: GenerationResult
+    ) -> dict[str, Any]:
+        """
+        Run quality gates on generated test content.
+
+        Args:
+            generation_result: The generation result to validate
+
+        Returns:
+            Quality gates result dictionary
+        """
+        try:
+            # Get enriched context for quality gates
+            enriched_context = self._context_assembler.get_last_enriched_context()
+            if not enriched_context:
+                return {
+                    "success": False,
+                    "message": "No enriched context available for quality gates",
+                    "gate_results": [],
+                }
+
+            # Get import map for the target
+            import_map = enriched_context.get("imports", {}).get("import_map")
+            if not import_map:
+                return {
+                    "success": False,
+                    "message": "No import map available for quality gates",
+                    "gate_results": [],
+                }
+
+            # Create quality gates service
+            quality_gates_service = self._create_quality_gates_service(
+                enriched_context, generation_result, import_map
+            )
+
+            # Run all quality gates
+            success, gate_results = quality_gates_service.run_all_gates()
+
+            # Format results
+            formatted_results = []
+            for result in gate_results:
+                formatted_results.append(
+                    {
+                        "gate_name": result.gate_name,
+                        "passed": result.passed,
+                        "message": result.message,
+                        "metadata": result.metadata,
+                    }
+                )
+
+            # Log gate results
+            failed_gates = [r for r in gate_results if not r.passed]
+            if failed_gates:
+                logger.warning(
+                    "Quality gates failed for %s: %s",
+                    generation_result.file_path,
+                    ", ".join([f"{g.gate_name}: {g.message}" for g in failed_gates]),
+                )
+            else:
+                logger.debug(
+                    "All quality gates passed for %s", generation_result.file_path
+                )
+
+            return {
+                "success": success,
+                "message": f"{len(failed_gates)} gates failed"
+                if failed_gates
+                else "All gates passed",
+                "gate_results": formatted_results,
+                "failed_gates": len(failed_gates),
+                "total_gates": len(gate_results),
+            }
+
+        except Exception as e:
+            logger.error("Error running quality gates: %s", e)
+            return {
+                "success": False,
+                "message": f"Quality gates evaluation error: {e}",
+                "error": str(e),
+                "gate_results": [],
+            }
+
+    def _create_quality_gates_service(
+        self,
+        enriched_context: dict[str, Any],
+        generation_result: GenerationResult,
+        import_map: ImportMap,
+    ) -> QualityGatesService:
+        """
+        Create a QualityGatesService instance with proper dependencies.
+
+        Args:
+            enriched_context: Enriched context data
+            generation_result: Generated test result
+            import_map: Import map for the target
+
+        Returns:
+            Configured QualityGatesService instance
+        """
+        from ..config.models import QualityConfig
+
+        # Get quality configuration
+        quality_config = QualityConfig(**self._config.get("quality", {}))
+
+        bootstrap_runner = BootstrapRunner(prefer_conftest=True)
+
+        # Create coverage evaluator (stub for now)
+        coverage_evaluator = None  # This would need proper initialization
+
+        # Create quality gates service
+        quality_gates_service = QualityGatesService(
+            enriched_context=enriched_context,
+            generation_result=generation_result,
+            import_map=import_map,
+            coverage_evaluator=coverage_evaluator,
+            bootstrap_runner=bootstrap_runner,
+            quality_config=quality_config,
+        )
+
+        return quality_gates_service
 
     async def _record_per_file_state(self, file_result: dict[str, Any]) -> None:
         """
@@ -1268,7 +1388,27 @@ class GenerateUseCase:
             }
 
         try:
-            # Pre-validate content before writing (syntax check happens in writer)
+            # Step 1: Run quality gates validation
+            if self._config.get("enable_quality_gates", True):
+                try:
+                    quality_gates_result = await self._run_quality_gates(
+                        generation_result
+                    )
+                    if not quality_gates_result["success"]:
+                        return {
+                            "success": False,
+                            "error": f"Quality gates failed: {quality_gates_result['message']}",
+                            "file_path": generation_result.file_path,
+                            "quality_gates_result": quality_gates_result,
+                            "source_result": generation_result,
+                        }
+                except Exception as qg_error:
+                    logger.warning("Quality gates evaluation failed: %s", qg_error)
+                    # Continue with write if quality gates fail (non-blocking)
+            else:
+                logger.debug("Quality gates disabled, skipping validation")
+
+            # Step 2: Pre-validate content before writing (syntax check happens in writer)
             write_result = self._writer.write_test_file(
                 test_path=generation_result.file_path,
                 test_content=generation_result.content,
