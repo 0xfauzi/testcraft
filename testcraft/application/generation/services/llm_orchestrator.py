@@ -13,9 +13,11 @@ import logging
 from pathlib import Path
 from typing import Any
 
+from ....config.models import OrchestratorConfig
 from ....domain.models import ContextPack, Conventions, ResolvedDef
 from ....ports.llm_port import LLMPort
 from ....ports.parser_port import ParserPort
+from ....prompts.registry import PromptRegistry
 from .context_assembler import ContextAssembler
 from .context_pack import ContextPackBuilder
 from .symbol_resolver import SymbolResolver
@@ -25,12 +27,13 @@ logger = logging.getLogger(__name__)
 
 class LLMOrchestrator:
     """
-    LLM orchestrator implementing PLAN/GENERATE/REFINE loops with symbol resolution.
+    LLM orchestrator implementing the 4-stage test generation pipeline with symbol resolution.
 
     Handles the complete test generation workflow including:
     - PLAN stage with missing_symbols resolution
     - GENERATE stage for test creation
     - REFINE stage for test repair with symbol resolution
+    - MANUAL FIX stage for real product bugs (failing test + bug report)
     - Context re-packing and retry logic
     """
 
@@ -41,8 +44,10 @@ class LLMOrchestrator:
         context_assembler: ContextAssembler,
         context_pack_builder: ContextPackBuilder | None = None,
         symbol_resolver: SymbolResolver | None = None,
-        max_plan_retries: int = 2,
-        max_refine_retries: int = 3,
+        prompt_registry: PromptRegistry | None = None,
+        config: OrchestratorConfig | None = None,
+        max_plan_retries: int | None = None,
+        max_refine_retries: int | None = None,
     ) -> None:
         """
         Initialize the LLM orchestrator.
@@ -53,16 +58,30 @@ class LLMOrchestrator:
             context_assembler: Service for assembling context
             context_pack_builder: Builder for context packs (optional)
             symbol_resolver: Service for resolving missing symbols (optional)
-            max_plan_retries: Maximum retries for PLAN stage
-            max_refine_retries: Maximum retries for REFINE stage
+            prompt_registry: Prompt registry for stage-specific prompts (optional)
+            config: Orchestrator configuration (optional)
+            max_plan_retries: Maximum retries for PLAN stage (overrides config if provided)
+            max_refine_retries: Maximum retries for REFINE stage (overrides config if provided)
         """
         self._llm = llm_port
         self._parser = parser_port
         self._context_assembler = context_assembler
         self._context_pack_builder = context_pack_builder
         self._symbol_resolver = symbol_resolver or SymbolResolver(parser_port)
-        self._max_plan_retries = max_plan_retries
-        self._max_refine_retries = max_refine_retries
+        self._prompt_registry = prompt_registry or PromptRegistry()
+        self._config = config or OrchestratorConfig()
+
+        # Use config values or override with direct parameters
+        self._max_plan_retries = (
+            max_plan_retries
+            if max_plan_retries is not None
+            else self._config.max_plan_retries
+        )
+        self._max_refine_retries = (
+            max_refine_retries
+            if max_refine_retries is not None
+            else self._config.max_refine_retries
+        )
 
     def plan_and_generate(
         self,
@@ -98,6 +117,139 @@ class LLMOrchestrator:
             "generated_code": generated_code,
             "context_pack": context_pack,
         }
+
+    def plan_generate_refine(
+        self,
+        context_pack: ContextPack,
+        project_root: Path | None = None,
+        existing_code: str | None = None,
+        feedback: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """
+        Execute the full 3-stage workflow: PLAN/GENERATE/REFINE.
+
+        Args:
+            context_pack: Context pack for test generation
+            project_root: Project root directory
+            existing_code: Existing test code to refine (if any)
+            feedback: Execution feedback for refinement
+
+        Returns:
+            Dictionary containing plan, generated/refined code, and metadata
+        """
+        logger.info(
+            "Starting PLAN/GENERATE/REFINE workflow for %s", context_pack.target.object
+        )
+
+        # PLAN stage with symbol resolution
+        plan = self._plan_stage(context_pack, project_root)
+        if not plan:
+            raise ValueError("PLAN stage failed - no plan generated")
+
+        # GENERATE stage (or refine if existing code provided)
+        if existing_code and feedback:
+            # REFINE stage
+            refined_code = self._refine_stage(
+                context_pack, existing_code, feedback, project_root
+            )
+            if not refined_code:
+                raise ValueError("REFINE stage failed - no refined code generated")
+
+            return {
+                "plan": plan,
+                "refined_code": refined_code,
+                "context_pack": context_pack,
+                "stage": "refine",
+            }
+        else:
+            # GENERATE stage
+            generated_code = self._generate_stage(context_pack, plan)
+            if not generated_code:
+                raise ValueError("GENERATE stage failed - no code generated")
+
+            return {
+                "plan": plan,
+                "generated_code": generated_code,
+                "context_pack": context_pack,
+                "stage": "generate",
+            }
+
+    def manual_fix_stage(
+        self,
+        context_pack: ContextPack,
+        feedback: dict[str, Any],
+        project_root: Path | None = None,
+    ) -> dict[str, Any] | None:
+        """
+        Execute the MANUAL FIX stage for suspected product bugs.
+
+        Args:
+            context_pack: Context pack for the failing code
+            feedback: Execution feedback indicating the bug
+            project_root: Project root directory
+
+        Returns:
+            Dictionary containing failing test and bug report, or None if not applicable
+        """
+        if not self._config.enable_manual_fix:
+            logger.info(
+                "MANUAL FIX stage disabled by configuration for %s",
+                context_pack.target.object,
+            )
+            return None
+
+        logger.info("Starting MANUAL FIX stage for %s", context_pack.target.object)
+
+        try:
+            # Get prompts from registry
+            system_prompt = self._prompt_registry.get_system_prompt(
+                "orchestrator_manual_fix"
+            )
+
+            # Prepare context for user prompt
+            context = {
+                "import_map": {
+                    "target_import": context_pack.import_map.target_import,
+                },
+                "focal": {
+                    "source": context_pack.focal.source,
+                },
+                "gwt_snippets": {
+                    "then": context_pack.property_context.gwt_snippets.then,
+                },
+                "feedback": {
+                    "trace_excerpt": feedback.get("trace_excerpt", ""),
+                    "notes": feedback.get("notes", ""),
+                },
+                "conventions": self._format_conventions(context_pack.conventions),
+            }
+
+            # Get user prompt from registry
+            user_prompt = self._prompt_registry.get_user_prompt(
+                "orchestrator_manual_fix",
+                additional_context=context,
+                version=self._prompt_registry.version,
+            )
+
+            # Combine prompts
+            full_prompt = f"{system_prompt}\n\n{user_prompt}"
+
+            # Call LLM for manual fix guidance
+            response = self._llm.generate_tests(code_content=full_prompt)
+            response_text = self._extract_response_text(response)
+
+            # Parse the response - it should contain both test and bug report
+            # For now, return the response as-is
+            # In a full implementation, we'd parse it into structured format
+            return {
+                "manual_fix_response": response_text,
+                "context_pack": context_pack,
+                "stage": "manual_fix",
+            }
+
+        except Exception as e:
+            logger.exception("Error in MANUAL FIX stage: %s", e)
+            return None
 
     def plan_stage(
         self, context_pack: ContextPack, project_root: Path | None = None
@@ -351,111 +503,106 @@ class LLMOrchestrator:
         return existing_code  # Return original code as fallback
 
     def _create_plan_prompt(self, context_pack: ContextPack) -> str:
-        """Create PLAN stage prompt."""
-        return f"""
-You are a senior Python test engineer. You write small, correct, deterministic pytest tests.
-Do NOT guess missing symbols. List them.
+        """Create PLAN stage prompt using PromptRegistry."""
+        # Get system prompt from registry
+        system_prompt = self._prompt_registry.get_system_prompt("orchestrator_plan")
 
-TARGET
-- File: {context_pack.target.module_file}
-- Object: {context_pack.target.object}
-- Canonical import to use in tests (must use exactly this):
-  {context_pack.import_map.target_import}
+        # Prepare context for user prompt
+        context = {
+            "target": {
+                "module_file": str(context_pack.target.module_file),
+                "object": context_pack.target.object,
+            },
+            "import_map": {
+                "target_import": context_pack.import_map.target_import,
+            },
+            "focal": {
+                "source": context_pack.focal.source,
+                "signature": context_pack.focal.signature,
+                "docstring": context_pack.focal.docstring or "",
+            },
+            "resolved_defs_compact": self._format_resolved_defs(
+                context_pack.resolved_defs
+            ),
+            "gwt_snippets": context_pack.property_context.gwt_snippets,
+            "conventions": self._format_conventions(context_pack.conventions),
+        }
 
-Focal code:
-{context_pack.focal.source}
+        # Get user prompt from registry
+        user_prompt = self._prompt_registry.get_user_prompt(
+            "orchestrator_plan",
+            additional_context=context,
+            version=self._prompt_registry.version,
+        )
 
-Signature/docstring:
-{context_pack.focal.signature}
-{context_pack.focal.docstring or ""}
-
-Precise repository context (curated):
-Resolved definitions you can rely on:
-{self._format_resolved_defs(context_pack.resolved_defs)}
-
-Property-related examples (GIVEN/WHEN/THEN):
-GIVEN:
-{self._format_gwt_snippets(context_pack.property_context.gwt_snippets.given)}
-WHEN:
-{self._format_gwt_snippets(context_pack.property_context.gwt_snippets.when)}
-THEN:
-{self._format_gwt_snippets(context_pack.property_context.gwt_snippets.then)}
-
-Repo conventions:
-{self._format_conventions(context_pack.conventions)}
-
-TASK:
-1) Produce a TEST PLAN (cases, boundaries, exceptions, side-effects, fixtures/mocks).
-2) List "missing_symbols" you need (fully qualified where possible).
-3) Confirm the import you will write at the top of the test file.
-Output strictly as JSON: {{"plan":[...], "missing_symbols":[...], "import_line":"..."}}
-""".strip()
+        return f"{system_prompt}\n\n{user_prompt}"
 
     def _create_generate_prompt(
         self, context_pack: ContextPack, plan: dict[str, Any]
     ) -> str:
-        """Create GENERATE stage prompt."""
-        return f"""
-You are a senior Python test engineer. Output a single runnable pytest module. Use ONLY the provided canonical import.
-No network. Use tmp_path for FS. Keep imports minimal.
+        """Create GENERATE stage prompt using PromptRegistry."""
+        # Get system prompt from registry
+        system_prompt = self._prompt_registry.get_system_prompt("orchestrator_generate")
 
-Canonical import (must appear at top of the file):
-{context_pack.import_map.target_import}
+        # Prepare context for user prompt
+        context = {
+            "import_map": {
+                "target_import": context_pack.import_map.target_import,
+            },
+            "focal": {
+                "source": context_pack.focal.source,
+            },
+            "resolved_defs_compact": self._format_resolved_defs(
+                context_pack.resolved_defs
+            ),
+            "property_context_compact": self._format_property_context(
+                context_pack.property_context
+            ),
+            "conventions": self._format_conventions(context_pack.conventions),
+            "approved_plan_json": json.dumps(plan.get("plan", []), indent=2),
+        }
 
-Focal code (trimmed):
-{context_pack.focal.source}
+        # Get user prompt from registry
+        user_prompt = self._prompt_registry.get_user_prompt(
+            "orchestrator_generate",
+            additional_context=context,
+            version=self._prompt_registry.version,
+        )
 
-Resolved definitions (only what you can call):
-{self._format_resolved_defs(context_pack.resolved_defs)}
-
-Property-related patterns and test-bundle fragments:
-{self._format_property_context(context_pack.property_context)}
-
-Repo conventions / determinism:
-{self._format_conventions(context_pack.conventions)}
-
-Approved TEST PLAN:
-{plan.get("plan", [])}
-
-REQUIREMENTS:
-- Use EXACTLY the canonical import above.
-- Prefer pytest parametrization for partitions/boundaries.
-- Assertions must check behavior (not just "no exception").
-- If side-effects occur, assert on state/IO/logs accordingly.
-- Name tests `test_<target_simplename>_<behavior>`.
-- Output ONLY the complete test module in one fenced block.
-""".strip()
+        return f"{system_prompt}\n\n{user_prompt}"
 
     def _create_refine_prompt(
         self, context_pack: ContextPack, existing_code: str, feedback: dict[str, Any]
     ) -> str:
-        """Create REFINE stage prompt."""
-        return f"""
-You repair Python tests with minimal edits. Keep style and canonical import unchanged.
+        """Create REFINE stage prompt using PromptRegistry."""
+        # Get system prompt from registry
+        system_prompt = self._prompt_registry.get_system_prompt("orchestrator_refine")
 
-Last tests (trim to failing parts):
-{self._extract_failing_parts(existing_code, feedback)}
+        # Prepare context for user prompt
+        context = {
+            "import_map": {
+                "target_import": context_pack.import_map.target_import,
+            },
+            "focal": {
+                "source": context_pack.focal.source,
+            },
+            "current_tests": self._extract_failing_parts(existing_code, feedback),
+            "feedback": {
+                "result": feedback.get("result", "unknown"),
+                "trace_excerpt": feedback.get("trace_excerpt", ""),
+                "coverage_gaps": feedback.get("coverage", {}),
+                "notes": feedback.get("notes", ""),
+            },
+        }
 
-Focal code (trimmed):
-{context_pack.focal.source}
+        # Get user prompt from registry
+        user_prompt = self._prompt_registry.get_user_prompt(
+            "orchestrator_refine",
+            additional_context=context,
+            version=self._prompt_registry.version,
+        )
 
-Canonical import (DO NOT change):
-{context_pack.import_map.target_import}
-
-Execution feedback:
-- Result: {feedback.get("result", "unknown")}
-- Trace excerpt: {feedback.get("trace_excerpt", "")}
-- Coverage gaps: {feedback.get("coverage", {})}
-- Surviving mutants: {feedback.get("mutants_survived", [])}
-
-Constraints:
-- Do NOT introduce new undefined symbols. If truly needed, output {{"missing_symbols":[...]}} and nothing else.
-
-TASK:
-1) Brief rationale of changes (compile fix / wrong assumption / new branch case / stronger oracle).
-2) Output the corrected full test module.
-3) If you require new symbols, output only {{"missing_symbols":[...]}}.
-""".strip()
+        return f"{system_prompt}\n\n{user_prompt}"
 
     def _update_context_pack_resolved_defs(
         self, context_pack: ContextPack, new_resolved_defs: list[ResolvedDef]

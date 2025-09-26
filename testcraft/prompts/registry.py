@@ -108,6 +108,11 @@ class PromptRegistry:
                 "llm_test_generation": self._system_prompt_llm_test_generation_v1(),
                 "llm_code_analysis": self._system_prompt_llm_code_analysis_v1(),
                 "llm_content_refinement": self._system_prompt_llm_content_refinement_v1(),
+                # LLM Orchestrator prompts for 4-stage pipeline
+                "orchestrator_plan": self._system_prompt_orchestrator_plan_v1(),
+                "orchestrator_generate": self._system_prompt_orchestrator_generate_v1(),
+                "orchestrator_refine": self._system_prompt_orchestrator_refine_v1(),
+                "orchestrator_manual_fix": self._system_prompt_orchestrator_manual_fix_v1(),
                 # Evaluation-specific prompts for LLM-as-judge and A/B testing
                 "llm_judge_v1": self._system_prompt_llm_judge_v1(),
                 "pairwise_comparison_v1": self._system_prompt_pairwise_comparison_v1(),
@@ -125,6 +130,11 @@ class PromptRegistry:
                 "llm_test_generation": self._user_prompt_llm_test_generation_v1(),
                 "llm_code_analysis": self._user_prompt_llm_code_analysis_v1(),
                 "llm_content_refinement": self._user_prompt_llm_content_refinement_v1(),
+                # LLM Orchestrator user prompts for 4-stage pipeline
+                "orchestrator_plan": self._user_prompt_orchestrator_plan_v1(),
+                "orchestrator_generate": self._user_prompt_orchestrator_generate_v1(),
+                "orchestrator_refine": self._user_prompt_orchestrator_refine_v1(),
+                "orchestrator_manual_fix": self._user_prompt_orchestrator_manual_fix_v1(),
                 # Evaluation-specific user prompts
                 "llm_judge_v1": self._user_prompt_llm_judge_v1(),
                 "pairwise_comparison_v1": self._user_prompt_pairwise_comparison_v1(),
@@ -955,6 +965,209 @@ class PromptRegistry:
             "ANALYSIS SCOPE: {analysis_scope}\n"
             f"{SAFE_END}\n\n"
             "Return ONLY the JSON object as specified in the system prompt."
+        )
+
+    # ------------------------
+    # LLM Orchestrator Templates (v1) - 4-stage pipeline
+    # ------------------------
+    def _system_prompt_orchestrator_plan_v1(self) -> str:
+        return (
+            "You are a senior Python test engineer. You write small, correct, deterministic pytest tests.\n"
+            "Do NOT guess missing symbols. List them.\n\n"
+            "Your task is to create a comprehensive TEST PLAN for the target code.\n"
+            "Analyze the code thoroughly and create a plan that covers:\n"
+            "- Happy path scenarios with typical inputs\n"
+            "- Edge cases and boundary conditions\n"
+            "- Error conditions and exception handling\n"
+            "- Side effects and external dependencies\n"
+            "- Fixtures and mocking requirements\n\n"
+            "IMPORTANT: Use EXACTLY the canonical import provided - do not modify it.\n"
+            "If you need additional symbols, list them in missing_symbols.\n\n"
+            "Output strictly as JSON with no additional commentary."
+        )
+
+    def _system_prompt_orchestrator_generate_v1(self) -> str:
+        return (
+            "You are a senior Python test engineer. Output a single runnable pytest module.\n"
+            "Use ONLY the provided canonical import. No network. Use tmp_path for FS.\n"
+            "Keep imports minimal.\n\n"
+            "Requirements:\n"
+            "- Use EXACTLY the canonical import provided\n"
+            "- Prefer pytest parametrization for partitions/boundaries\n"
+            "- Assertions must check behavior (not just 'no exception')\n"
+            "- If side-effects occur, assert on state/IO/logs accordingly\n"
+            "- Name tests `test_<target_simplename>_<behavior>`\n"
+            "- Output ONLY the complete test module in one fenced block\n"
+            "- Follow the approved test plan exactly\n"
+            "- Ensure deterministic behavior\n\n"
+            "Do NOT include any commentary outside the single fenced code block."
+        )
+
+    def _system_prompt_orchestrator_refine_v1(self) -> str:
+        return (
+            "You repair Python tests with minimal edits. Keep style and canonical import unchanged.\n\n"
+            "Process:\n"
+            "1. Analyze the test failures and execution feedback\n"
+            "2. Identify the minimal changes needed to fix issues\n"
+            "3. Apply targeted fixes while preserving test intent\n"
+            "4. Ensure no regressions or side effects\n\n"
+            "Rules:\n"
+            "- Do NOT introduce new undefined symbols\n"
+            '- If truly needed symbols are missing, output only {"missing_symbols":[...]}\n'
+            "- Keep changes minimal and focused\n"
+            "- Preserve existing test structure and style\n"
+            "- Maintain canonical import exactly as provided\n"
+            "- Ensure tests remain deterministic\n\n"
+            "Output the corrected full test module."
+        )
+
+    def _system_prompt_orchestrator_manual_fix_v1(self) -> str:
+        return (
+            "When code has a real defect, deliver:\n"
+            "(1) a deliberately failing, high-signal pytest test (it will PASS once code is fixed),\n"
+            "(2) a concise BUG NOTE for engineers.\n\n"
+            "Process:\n"
+            "1. Analyze the execution feedback to understand the bug\n"
+            "2. Create a test that demonstrates the bug clearly\n"
+            "3. Provide detailed bug report with reproduction steps\n"
+            "4. Suggest potential fix approach\n\n"
+            "Output format:\n"
+            "1. One fenced code block (python) with a single test file\n"
+            "2. One fenced code block (markdown) with the BUG NOTE\n\n"
+            "BUG NOTE format:\n"
+            "- Title: Clear, actionable title\n"
+            "- Summary: Brief description of the issue\n"
+            "- Steps to Reproduce: Exact steps to reproduce\n"
+            "- Expected vs Actual: What should happen vs what happens\n"
+            "- Suspected root-cause: Specific file:line if possible\n"
+            "- Related methods/tests: Context and related code\n"
+            "- Risk/Blast radius: Impact assessment\n"
+            "- Suggested fix sketch: High-level approach\n\n"
+            "The test should use the canonical import and fail clearly until the bug is fixed."
+        )
+
+    def _user_prompt_orchestrator_plan_v1(self) -> str:
+        return (
+            f"{SAFE_BEGIN}\n"
+            "VERSION: {version}\n"
+            "STAGE: PLAN\n"
+            "TASK: Create comprehensive test plan for the target code.\n\n"
+            "TARGET INFORMATION:\n"
+            "- File: {{target.module_file}}\n"
+            "- Object: {{target.object}}\n"
+            "- Canonical import (USE EXACTLY THIS):\n"
+            "  {{import_map.target_import}}\n\n"
+            "FOCAL CODE:\n"
+            "```python\n{{focal.source}}\n```\n\n"
+            "SIGNATURE/DOCSTRING:\n"
+            "{{focal.signature}}\n"
+            "{{focal.docstring}}\n\n"
+            "REPOSITORY CONTEXT:\n"
+            "Resolved definitions:\n"
+            "{{resolved_defs_compact}}\n\n"
+            "PROPERTY CONTEXT:\n"
+            "GIVEN patterns:\n"
+            "{{gwt_snippets.given}}\n\n"
+            "WHEN patterns:\n"
+            "{{gwt_snippets.when}}\n\n"
+            "THEN patterns:\n"
+            "{{gwt_snippets.then}}\n\n"
+            "REPO CONVENTIONS:\n"
+            "{{conventions}}\n\n"
+            "INSTRUCTIONS:\n"
+            "1. Produce a TEST PLAN (cases, boundaries, exceptions, side-effects, fixtures/mocks)\n"
+            "2. List missing_symbols you need (fully qualified where possible)\n"
+            "3. Confirm the import you will write at the top of the test file\n\n"
+            f"{SAFE_END}\n"
+            'Output strictly as JSON: {{"plan":[...], "missing_symbols":[...], "import_line":"..."}}'
+        )
+
+    def _user_prompt_orchestrator_generate_v1(self) -> str:
+        return (
+            f"{SAFE_BEGIN}\n"
+            "VERSION: {version}\n"
+            "STAGE: GENERATE\n"
+            "TASK: Generate complete test module from approved plan.\n\n"
+            "CANONICAL IMPORT (USE EXACTLY THIS):\n"
+            "{{import_map.target_import}}\n\n"
+            "FOCAL CODE:\n"
+            "```python\n{{focal.source}}\n```\n\n"
+            "RESOLVED DEFINITIONS:\n"
+            "{{resolved_defs_compact}}\n\n"
+            "PROPERTY CONTEXT:\n"
+            "{{property_context_compact}}\n\n"
+            "REPO CONVENTIONS:\n"
+            "{{conventions}}\n\n"
+            "APPROVED TEST PLAN:\n"
+            "{{approved_plan_json}}\n\n"
+            "REQUIREMENTS:\n"
+            "- Use EXACTLY the canonical import above\n"
+            "- Follow the approved test plan precisely\n"
+            "- Prefer pytest parametrization\n"
+            "- Include proper assertions\n"
+            "- Handle side effects appropriately\n"
+            "- Name tests descriptively\n"
+            "- Ensure deterministic behavior\n\n"
+            f"{SAFE_END}\n"
+            "Output ONLY the complete test module in one fenced code block."
+        )
+
+    def _user_prompt_orchestrator_refine_v1(self) -> str:
+        return (
+            f"{SAFE_BEGIN}\n"
+            "VERSION: {version}\n"
+            "STAGE: REFINE\n"
+            "TASK: Repair failing tests with minimal changes.\n\n"
+            "CURRENT TESTS:\n"
+            "```python\n{{current_tests}}\n```\n\n"
+            "FOCAL CODE:\n"
+            "```python\n{{focal.source}}\n```\n\n"
+            "CANONICAL IMPORT (DO NOT CHANGE):\n"
+            "{{import_map.target_import}}\n\n"
+            "EXECUTION FEEDBACK:\n"
+            "- Result: {{feedback.result}}\n"
+            "- Trace excerpt: {{feedback.trace_excerpt}}\n"
+            "- Coverage gaps: {{feedback.coverage_gaps}}\n"
+            "- Other notes: {{feedback.notes}}\n\n"
+            "CONSTRAINTS:\n"
+            "- Do NOT introduce new undefined symbols\n"
+            "- Keep changes minimal and focused\n"
+            "- Preserve existing test structure\n"
+            "- Maintain canonical import\n"
+            "- Ensure determinism\n\n"
+            "PROCESS:\n"
+            "1. Analyze the test failures thoroughly\n"
+            "2. Identify minimal changes needed\n"
+            "3. Apply targeted fixes\n"
+            "4. Ensure no regressions\n\n"
+            f"{SAFE_END}\n"
+            "Output the corrected full test module."
+        )
+
+    def _user_prompt_orchestrator_manual_fix_v1(self) -> str:
+        return (
+            f"{SAFE_BEGIN}\n"
+            "VERSION: {version}\n"
+            "STAGE: MANUAL FIX\n"
+            "TASK: Create failing test and bug report for real product bug.\n\n"
+            "CANONICAL IMPORT:\n"
+            "{{import_map.target_import}}\n\n"
+            "FOCAL CODE:\n"
+            "```python\n{{focal.source}}\n```\n\n"
+            "PROPERTY CONTEXT (THEN patterns):\n"
+            "{{gwt_snippets.then}}\n\n"
+            "EXECUTION FEEDBACK:\n"
+            "- Trace excerpt: {{feedback.trace_excerpt}}\n"
+            "- Other details: {{feedback.notes}}\n\n"
+            "REPO CONVENTIONS:\n"
+            "{{conventions}}\n\n"
+            "INSTRUCTIONS:\n"
+            "1. Create a deliberately failing test that demonstrates the bug\n"
+            "2. The test should PASS once the code is fixed\n"
+            "3. Provide detailed BUG NOTE with reproduction steps\n"
+            "4. Suggest potential fix approach\n\n"
+            f"{SAFE_END}\n"
+            "Output two fenced code blocks as specified in system prompt."
         )
 
     # ------------------------

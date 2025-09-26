@@ -441,6 +441,34 @@ class RefineConfig(BaseModel):
     )
 
 
+class OrchestratorConfig(BaseModel):
+    """Configuration for LLM orchestrator behavior."""
+
+    enable_manual_fix: bool = Field(
+        default=True, description="Enable MANUAL FIX stage for suspected product bugs"
+    )
+
+    max_plan_retries: int = Field(
+        default=2, ge=0, le=5, description="Maximum retries for PLAN stage"
+    )
+
+    max_refine_retries: int = Field(
+        default=3, ge=0, le=10, description="Maximum retries for REFINE stage"
+    )
+
+    symbol_resolution_timeout: int = Field(
+        default=30, ge=5, description="Timeout for symbol resolution in seconds"
+    )
+
+    enable_context_repacking: bool = Field(
+        default=True, description="Enable context repacking when symbols are resolved"
+    )
+
+    enforce_canonical_imports: bool = Field(
+        default=True, description="Enforce use of canonical imports in generated tests"
+    )
+
+
 class TestGenerationConfig(BaseModel):
     """Configuration for test generation behavior."""
 
@@ -475,6 +503,10 @@ class TestGenerationConfig(BaseModel):
 
     refine: RefineConfig = Field(
         default_factory=RefineConfig, description="Test refinement configuration"
+    )
+
+    orchestrator: OrchestratorConfig = Field(
+        default_factory=OrchestratorConfig, description="LLM orchestrator configuration"
     )
 
 
