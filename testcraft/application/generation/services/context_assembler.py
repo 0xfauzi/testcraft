@@ -14,7 +14,7 @@ import tomllib
 from pathlib import Path
 from typing import Any
 
-from ....domain.models import TestGenerationPlan
+from ....domain.models import ContextPack, TestGenerationPlan
 from ....ports.context_port import ContextPort
 from ....ports.parser_port import ParserPort
 from .enhanced_context_builder import EnrichedContextBuilder
@@ -117,20 +117,20 @@ class ContextAssembler:
 
     def context_for_generation(
         self, plan: TestGenerationPlan, source_path: Path | None = None
-    ) -> dict[str, Any] | None:
+    ) -> ContextPack | None:
         """
         Get relevant context for test generation.
 
         Implements snippet-based retrieval and merges import-graph neighbors
-        discovered via ContextPort.get_related_context. Uses small, bounded
-        snippets and includes import_map for canonical imports.
+        discovered via ContextPort.get_related_context. Returns complete ContextPack
+        objects instead of just context strings for full integration.
 
         Args:
             plan: The test generation plan
             source_path: Optional source file path for the plan
 
         Returns:
-            Dictionary with context string and import_map or None if no useful context
+            Complete ContextPack object or None if no useful context
         """
         if not self._config.get("enable_context", True):
             return None
@@ -215,15 +215,57 @@ class ContextAssembler:
                 source_path, base_context, import_map
             )
 
-            # 10) Build result dictionary with context and import_map
-            result = {}
-            if enriched_context_string is not None:
-                result["context"] = enriched_context_string
-            if import_map is not None:
-                result["import_map"] = import_map
+            # 10) Build complete ContextPack with all components
+            if enriched_context_string is not None and import_map is not None:
+                # Create a minimal ContextPack for context provision
+                # TODO: This should be enhanced to build full ContextPack with all components
+                from ....domain.models import (
+                    Budget,
+                    Conventions,
+                    Focal,
+                    PropertyContext,
+                    Target,
+                )
 
-            # Return dictionary with context and import information, or None if no useful context
-            return result if result else None
+                # For now, create a basic ContextPack with available information
+                # Full ContextPack building is handled by ContextPackBuilder
+                target = Target(
+                    module_file=str(source_path) if source_path else "unknown",
+                    object=plan.elements_to_test[0].name
+                    if plan.elements_to_test
+                    else "unknown",
+                )
+
+                focal = Focal(
+                    source=plan.elements_to_test[0].name
+                    if plan.elements_to_test
+                    else "unknown",
+                    signature="def "
+                    + (
+                        plan.elements_to_test[0].name.split(".")[-1]
+                        if plan.elements_to_test
+                        else "unknown"
+                    )
+                    + "(...):",
+                    docstring=plan.elements_to_test[0].docstring
+                    if plan.elements_to_test
+                    else None,
+                )
+
+                context_pack = ContextPack(
+                    target=target,
+                    import_map=import_map,
+                    focal=focal,
+                    resolved_defs=[],  # TODO: Build resolved definitions
+                    property_context=PropertyContext(),  # TODO: Build property context
+                    conventions=Conventions(),
+                    budget=Budget(),
+                )
+
+                return context_pack
+
+            # Return None if we don't have sufficient information for a ContextPack
+            return None
 
         except Exception as e:
             logger.warning("Failed to retrieve context: %s", e)

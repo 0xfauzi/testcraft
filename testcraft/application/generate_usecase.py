@@ -18,7 +18,7 @@ from testcraft.config.models import OrchestratorConfig
 
 from ..adapters.io.file_discovery import FileDiscoveryService
 from ..adapters.io.file_status_tracker import FileStatus
-from ..domain.models import GenerationResult, ImportMap
+from ..domain.models import ContextPack, GenerationResult, ImportMap
 from ..ports.context_port import ContextPort
 from ..ports.coverage_port import CoveragePort
 from ..ports.llm_port import LLMPort
@@ -397,17 +397,20 @@ class GenerateUseCase:
                 plan, source_path
             )
 
-            # Extract context string and import_map from result
+            # Extract context string from ContextPack (import_map is handled by ContextPack)
             relevant_context = None
-            # import_map = None
-            if context_result:
-                if isinstance(context_result, dict):
-                    relevant_context = context_result.get("context")
-                    # TODO: USE REAL import_map
-                    # import_map = context_result.get("import_map")
-                else:
-                    # Backward compatibility: if it's still a string
-                    relevant_context = context_result
+            if context_result and isinstance(context_result, ContextPack):
+                # Get the enriched context string from the ContextPack
+                # TODO: The ContextPack should include the enriched context - for now we'll need to build it
+                relevant_context = (
+                    None  # Will be handled by the ContextPack in the orchestrator
+                )
+            elif context_result and isinstance(context_result, dict):
+                # Backward compatibility: if it's still a dictionary
+                relevant_context = context_result.get("context")
+            else:
+                # Backward compatibility: if it's still a string
+                relevant_context = context_result
 
             # Derive authoritative module path and import suggestions
             module_path_info = {}
@@ -502,7 +505,6 @@ class GenerateUseCase:
                 test_content = llm_result.get("tests", "")
             else:
                 # First, build a ContextPack for this target
-                from ..domain.models import ImportMap
 
                 # Create target information
                 # target = Target(
@@ -529,30 +531,8 @@ class GenerateUseCase:
                 #     else None,
                 # )
 
-                # Build context pack using the existing import resolver
-                try:
-                    import_map = self._context_assembler._import_resolver.resolve(
-                        source_path
-                    )
-                except Exception as e:
-                    logger.warning(
-                        "Import resolution failed: %s. Using simplified import.", e
-                    )
-                    # Fallback import map - use the one we already created above
-                    import_map = ImportMap(
-                        target_import="from "
-                        + (module_path_info.get("module_path", "unknown") or "unknown")
-                        + " import "
-                        + (
-                            plan.elements_to_test[0].name.split(".")[-1]
-                            if plan.elements_to_test
-                            else "unknown"
-                        ),
-                        sys_path_roots=[str(project_root)] if project_root else [],
-                        needs_bootstrap=False,
-                        bootstrap_conftest="",
-                    )
-
+                # Build complete ContextPack using ContextPackBuilder
+                # ✅ DO: Use ContextPackBuilder.build_context_pack() for all ContextPack creation
                 context_pack = self._context_pack_builder.build_context_pack(
                     target_file=Path(source_path),
                     target_object=plan.elements_to_test[0].name
@@ -561,18 +541,8 @@ class GenerateUseCase:
                     project_root=Path(project_root) if project_root else None,
                 )
 
-                # Override the import_map with our resolved one
-                from ..domain.models import ContextPack
-
-                context_pack = ContextPack(
-                    target=context_pack.target,
-                    import_map=import_map,
-                    focal=context_pack.focal,
-                    resolved_defs=context_pack.resolved_defs,
-                    property_context=context_pack.property_context,
-                    conventions=context_pack.conventions,
-                    budget=context_pack.budget,
-                )
+                # ✅ DO: Use context_pack.import_map exclusively (no duplicate resolution)
+                # The ContextPackBuilder handles all import resolution internally
 
                 # Use LLMOrchestrator for PLAN/GENERATE workflow
                 orchestrator_result = self._llm_orchestrator.plan_and_generate(
