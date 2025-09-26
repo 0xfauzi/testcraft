@@ -645,6 +645,18 @@ class CostConfig(BaseModel):
     )
 
 
+class DeterminismConfig(BaseModel):
+    """Configuration for determinism testing in quality gates."""
+
+    seed: int = Field(default=42, description="Random seed for reproducible test runs")
+
+    freeze_time: bool = Field(
+        default=False, description="Freeze time during determinism testing"
+    )
+
+    tz: str = Field(default="UTC", description="Timezone for determinism testing")
+
+
 class QualityConfig(BaseModel):
     """Configuration for test quality analysis."""
 
