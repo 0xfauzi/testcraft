@@ -80,8 +80,8 @@ def create_test_context_pack(source_file_path: str, function_name: str) -> Conte
                 TestBundle(
                     test_name="test_helper_function",
                     imports=["from src.example import helper_function"],
-                    test_code="def test_helper_function(): assert helper_function() == 'help'",
-                    dependencies=[],
+                    fixtures=[],
+                    mocks=[],
                     assertions=["assert helper_function() == 'help'"],
                 )
             ],
