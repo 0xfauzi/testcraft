@@ -1000,7 +1000,7 @@ class PromptRegistry:
             "- Output ONLY the complete test module in one fenced block\n"
             "- Follow the approved test plan exactly\n"
             "- Ensure deterministic behavior\n\n"
-            "Do NOT include any commentary outside the JSON structure."
+            "Do NOT include any commentary outside the single fenced code block."
         )
 
     def _system_prompt_orchestrator_refine_v1(self) -> str:
