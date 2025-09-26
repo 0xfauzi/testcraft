@@ -92,7 +92,7 @@ class QualityGatesService:
             else quality_config.enable_mutation_gate
         )
         self.determinism_config = determinism_config or DeterminismConfig()
-        self.test_content = generation_result.test_content
+        self.test_content = generation_result.content
         self.test_file_path = generation_result.file_path
 
     def run_all_gates(self) -> tuple[bool, list[QualityGateResult]]:

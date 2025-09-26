@@ -189,9 +189,10 @@ class TestImmediateRefinement:
             }
         )
 
-        # Create use case with validation disabled to avoid mock issues
+        # Create use case with validation and quality gates disabled to avoid mock issues
         config = immediate_config.copy()
         config["enable_validation"] = False
+        config["disable_quality_gates"] = True
 
         usecase = GenerateUseCase(
             config=config,
@@ -262,7 +263,24 @@ def test_example_edge_cases():
         usecase._content_builder.build_code_content.return_value = "def example(): pass"
         usecase._context_assembler = Mock()
         usecase._context_assembler.context_for_generation.return_value = {}
-        usecase._context_assembler.get_last_enriched_context.return_value = None
+
+        # Create import_map for enriched context
+        import_map = ImportMap(
+            target_import="src.example",
+            sys_path_roots=["/tmp/test_dir/src"],
+            needs_bootstrap=False,
+            bootstrap_conftest="",
+        )
+
+        # Mock enriched context for quality gates
+        mock_enriched_context = {
+            "imports": {"import_map": import_map},
+            "focal": "def example(): pass",
+            "source_file": "src/example.py",
+        }
+        usecase._context_assembler.get_last_enriched_context.return_value = (
+            mock_enriched_context
+        )
 
         # Mock the context assembler's import resolver to return proper ImportMap
         mock_context_assembler_import_resolver = Mock()
@@ -292,6 +310,15 @@ def test_example_edge_cases():
         usecase._context_pack_builder.build_context_pack.return_value = (
             create_test_context_pack("src/example.py", "example")
         )
+
+        # Mock quality gates to return success
+        mock_quality_gates = Mock()
+        mock_quality_gates.validate.return_value = (True, [])
+        mock_quality_gates.run_all_gates.return_value = (True, [])
+        usecase._quality_gates = mock_quality_gates
+
+        # Mock the _create_quality_gates_service method to return our mock
+        usecase._create_quality_gates_service = Mock(return_value=mock_quality_gates)
 
         with tempfile.TemporaryDirectory() as temp_dir:
             # Create the source file that the plan builder expects to exist
@@ -533,12 +560,12 @@ def test_example():
                 result = Mock()
                 result.choices = [Mock()]
                 result.choices[0].message = Mock()
-                result.choices[0].message.content = '''```python
+                result.choices[0].message.content = '''from src.example import example
+
 def test_example():
     """Test basic functionality of example function."""
     result = example()
-    assert result is None  # Function returns None
-```'''
+    assert result is None  # Function returns None'''
             else:
                 # PLAN stage - return JSON
                 result = mock_response
@@ -582,16 +609,27 @@ def test_example():
 
         usecase._context_assembler = Mock()
         usecase._context_assembler.context_for_generation.return_value = {}
-        usecase._context_assembler.get_last_enriched_context.return_value = None
 
-        # Mock the context assembler's import resolver to return proper ImportMap
-        mock_context_assembler_import_resolver = Mock()
+        # Create import_map for enriched context
         import_map = ImportMap(
             target_import="src.example",
             sys_path_roots=["/tmp/test_dir/src"],
             needs_bootstrap=False,
             bootstrap_conftest="",
         )
+
+        # Create proper enriched context for quality gates
+        enriched_context = {
+            "imports": {"import_map": import_map},
+            "focal": "def example(): pass",
+            "source_file": "src/example.py",
+        }
+        usecase._context_assembler.get_last_enriched_context.return_value = (
+            enriched_context
+        )
+
+        # Mock the context assembler's import resolver to return proper ImportMap
+        mock_context_assembler_import_resolver = Mock()
         mock_context_assembler_import_resolver.resolve.return_value = import_map
         usecase._context_assembler._import_resolver = (
             mock_context_assembler_import_resolver
@@ -612,6 +650,16 @@ def test_example():
         usecase._context_pack_builder.build_context_pack.return_value = (
             create_test_context_pack("src/example.py", "example")
         )
+
+        # Mock quality gates to return success
+        mock_quality_gates = Mock()
+        mock_quality_gates.validate.return_value = (True, [])
+        mock_quality_gates.run_all_gates.return_value = (True, [])
+        mock_quality_gates.get_gate_results.return_value = []
+        usecase._quality_gates = mock_quality_gates
+
+        # Mock the _create_quality_gates_service method to return our mock
+        usecase._create_quality_gates_service = Mock(return_value=mock_quality_gates)
 
         # Mock pytest refiner to exhaust all iterations without success
         mock_refiner = AsyncMock()
