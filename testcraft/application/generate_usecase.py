@@ -401,10 +401,14 @@ class GenerateUseCase:
             relevant_context = None
             if context_result and isinstance(context_result, ContextPack):
                 # Get the enriched context string from the ContextPack
-                # TODO: The ContextPack should include the enriched context - for now we'll need to build it
-                relevant_context = (
-                    None  # Will be handled by the ContextPack in the orchestrator
+                # Preserve enriched context for legacy fallback path
+                enriched_context_data = (
+                    self._context_assembler.get_last_enriched_context()
                 )
+                if enriched_context_data and isinstance(enriched_context_data, dict):
+                    relevant_context = enriched_context_data.get("enriched_context")
+                else:
+                    relevant_context = None
             elif context_result and isinstance(context_result, dict):
                 # Backward compatibility: if it's still a dictionary
                 relevant_context = context_result.get("context")
