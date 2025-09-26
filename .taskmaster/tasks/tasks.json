@@ -1509,7 +1509,7 @@
             "title": "Quality gates & guardrails",
             "description": "Enforce import presence, determinism, coverage delta, and integrate guardrails for safety patterns.",
             "details": "- Import gate: generated test must contain canonical import as first import\n- Determinism gate: run focused pytest twice (same seed) and compare\n- Coverage gate: measure delta via CoveragePort; feed gaps to next REFINE\n- Hook GeneratorGuardrails to enforce disallowed prefixes and suggest fixes\n- Optional mutation sampling flag in config; stub if disabled",
-            "status": "pending",
+            "status": "done",
             "dependencies": [],
             "parentTaskId": 34
           },
@@ -1653,7 +1653,7 @@
     ],
     "metadata": {
       "created": "2025-01-27T20:16:58.061Z",
-      "updated": "2025-09-26T15:58:09.933Z",
+      "updated": "2025-09-26T16:23:31.635Z",
       "description": "Tasks for master context"
     }
   }
