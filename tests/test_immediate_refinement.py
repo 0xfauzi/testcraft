@@ -150,7 +150,7 @@ class TestImmediateRefinement:
 
     async def test_immediate_mode_happy_path(self, mock_ports, immediate_config):
         """Test successful immediate pipeline: generate→write→refine on first try."""
-        # Setup mocks - LLM orchestrator expects generate_test, not generate_tests
+        # Setup mocks - LLM orchestrator uses generate_tests
         mock_response = Mock()
         mock_response.choices = [Mock()]
         mock_response.choices[0].message = Mock()
