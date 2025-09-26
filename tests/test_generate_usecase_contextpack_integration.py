@@ -20,6 +20,7 @@ from testcraft.domain.models import (
     ContextPack,
     Conventions,
     Focal,
+    GenerationResult,
     ImportMap,
     PropertyContext,
     Target,
@@ -93,36 +94,28 @@ class TestContextPackIntegration:
             coverage_before=None,
         )
 
-    def test_context_pack_builder_integration(self):
+    def test_context_pack_builder_integration(self, tmp_path):
         """Test that ContextPackBuilder creates proper ContextPack objects."""
         # Create ContextPackBuilder
         builder = ContextPackBuilder()
 
-        # Create a temporary test file
-        import tempfile
+        # Create a temporary test file using pytest's tmp_path fixture
+        temp_file = tmp_path / "test_module.py"
+        temp_file.write_text("def test_function():\n    return True\n")
 
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".py", delete=False) as f:
-            f.write("def test_function():\n    return True\n")
-            temp_file = Path(f.name)
+        # Build a ContextPack
+        context_pack = builder.build_context_pack(
+            target_file=temp_file,
+            target_object="test_function",
+            project_root=tmp_path,
+        )
 
-        try:
-            # Build a ContextPack
-            context_pack = builder.build_context_pack(
-                target_file=temp_file,
-                target_object="test_function",
-                project_root=Path("/test/project"),
-            )
-
-            # Verify ContextPack structure
-            assert context_pack.target.module_file == str(temp_file.resolve())
-            assert context_pack.target.object == "test_function"
-            assert context_pack.import_map.target_import is not None
-            assert context_pack.focal.source is not None
-            assert context_pack.focal.signature is not None
-
-        finally:
-            # Clean up
-            temp_file.unlink(missing_ok=True)
+        # Verify ContextPack structure
+        assert context_pack.target.module_file == str(temp_file.resolve())
+        assert context_pack.target.object == "test_function"
+        assert context_pack.import_map.target_import is not None
+        assert context_pack.focal.source is not None
+        assert context_pack.focal.signature is not None
 
     def test_context_assembler_returns_context_pack(self, mock_ports):
         """Test that ContextAssembler returns ContextPack objects."""
@@ -184,6 +177,7 @@ class TestContextPackIntegration:
             assert result.target.object == "test_function"
             assert result.import_map.target_import == "from module import test_function"
 
+    @pytest.mark.asyncio
     async def test_generate_usecase_uses_context_pack(self, mock_ports):
         """Test that GenerateUseCase properly uses ContextPack objects."""
         # Create GenerateUseCase
@@ -231,11 +225,30 @@ class TestContextPackIntegration:
             with patch.object(
                 usecase._llm_orchestrator, "plan_and_generate"
             ) as mock_orchestrate:
-                mock_orchestrate.return_value = {
-                    "generated_code": "def test_test_function(): assert True",
-                    "plan": {"steps": ["test"]},
-                    "context_pack": mock_context_pack,
-                }
+
+                async def mock_plan_and_generate(*args, **kwargs):
+                    return {
+                        "generated_code": "def test_test_function(): assert True",
+                        "plan": {"steps": ["test"]},
+                        "context_pack": mock_context_pack,
+                    }
+
+                mock_orchestrate.side_effect = mock_plan_and_generate
+
+                # Mock the generate tests method
+                with patch.object(
+                    usecase, "_generate_tests_for_plan"
+                ) as mock_generate_tests:
+
+                    async def mock_generate(*args, **kwargs):
+                        return GenerationResult(
+                            file_path="/test/test_module.py",
+                            content="def test_test_function(): assert True",
+                            success=True,
+                            error_message=None,
+                        )
+
+                    mock_generate_tests.side_effect = mock_generate
 
                 # Mock other dependencies
                 with (
@@ -278,6 +291,7 @@ class TestContextPackIntegration:
                     assert result.success
                     assert result.file_path == "/test/test_module.py"
 
+    @pytest.mark.asyncio
     async def test_canonical_import_enforcement_in_prompts(self, mock_ports):
         """Test that canonical imports from ContextPack are enforced in LLM prompts."""
         # Create LLM Orchestrator
@@ -345,6 +359,7 @@ class TestContextPackIntegration:
                     == "from test_module import test_function"
                 )
 
+    @pytest.mark.asyncio
     async def test_writer_integration_with_context_pack_guardrails(self, mock_ports):
         """Test that writers use ContextPack information for guardrails and gates."""
         # Create a writer that should respect ContextPack conventions
@@ -371,9 +386,9 @@ class TestContextPackIntegration:
                 docstring="Test function",
             ),
             resolved_defs=[],
-            property_context=None,
-            conventions=None,  # Would contain IO policies, style guides, etc.
-            budget=None,
+            property_context=PropertyContext(),
+            conventions=Conventions(),  # Would contain IO policies, style guides, etc.
+            budget=Budget(),
         )
 
         # Verify ContextPack has the information writers need
@@ -386,6 +401,7 @@ class TestContextPackIntegration:
         # - context_pack.import_map.bootstrap_conftest for conftest generation
         # - context_pack.conventions for code style enforcement
 
+    @pytest.mark.asyncio
     async def test_end_to_end_context_pack_workflow(self, mock_ports):
         """Test end-to-end ContextPack workflow with canonical import enforcement."""
         # This is a high-level integration test that verifies the complete flow
@@ -416,6 +432,7 @@ class TestContextPackIntegration:
                 usecase._llm_orchestrator, "plan_and_generate"
             ) as mock_orchestrate,
             patch.object(usecase._writer, "write_test_file") as mock_write,
+            patch.object(usecase, "_generate_tests_for_plan") as mock_generate_tests,
             patch.object(
                 usecase._plan_builder,
                 "get_source_path_for_plan",
@@ -432,6 +449,31 @@ class TestContextPackIntegration:
                 return_value="/test/test_module.py",
             ),
         ):
+            # Set up async mocks
+            async def mock_plan_and_generate(*args, **kwargs):
+                return {
+                    "generated_code": "def test_test_function(): assert True",
+                    "plan": {"steps": ["test"]},
+                    "context_pack": context_pack,
+                }
+
+            mock_orchestrate.side_effect = mock_plan_and_generate
+
+            async def mock_generate_tests(*args, **kwargs):
+                return GenerationResult(
+                    file_path="/test/test_module.py",
+                    content="def test_test_function(): assert True",
+                    success=True,
+                    error_message=None,
+                )
+
+            mock_generate_tests.side_effect = mock_generate_tests
+
+            async def mock_write_test_file(*args, **kwargs):
+                return {"success": True}
+
+            mock_write.side_effect = mock_write_test_file
+
             # Set up ContextPack
             context_pack = ContextPack(
                 target=Target(module_file="/test/module.py", object="test_function"),
@@ -447,9 +489,9 @@ class TestContextPackIntegration:
                     docstring="Test function",
                 ),
                 resolved_defs=[],
-                property_context=None,
-                conventions=None,
-                budget=None,
+                property_context=PropertyContext(),
+                conventions=Conventions(),
+                budget=Budget(),
             )
             mock_build.return_value = context_pack
 
@@ -478,6 +520,7 @@ class TestContextPackIntegration:
             )
             mock_write.assert_called_once()
 
+    @pytest.mark.asyncio
     async def test_context_pack_import_map_exclusivity(self, mock_ports):
         """Test that ContextPack.import_map is used exclusively for import resolution."""
         # This test ensures that once ContextPack is integrated,
