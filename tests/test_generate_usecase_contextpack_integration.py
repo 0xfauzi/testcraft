@@ -114,7 +114,7 @@ class TestContextPackIntegration:
             )
 
             # Verify ContextPack structure
-            assert context_pack.target.module_file == str(temp_file)
+            assert context_pack.target.module_file == str(temp_file.resolve())
             assert context_pack.target.object == "test_function"
             assert context_pack.import_map.target_import is not None
             assert context_pack.focal.source is not None
@@ -184,7 +184,7 @@ class TestContextPackIntegration:
             assert result.target.object == "test_function"
             assert result.import_map.target_import == "from module import test_function"
 
-    def test_generate_usecase_uses_context_pack(self, mock_ports):
+    async def test_generate_usecase_uses_context_pack(self, mock_ports):
         """Test that GenerateUseCase properly uses ContextPack objects."""
         # Create GenerateUseCase
         usecase = GenerateUseCase(**mock_ports, config={})
@@ -252,7 +252,7 @@ class TestContextPackIntegration:
                     patch.object(
                         usecase._context_assembler,
                         "context_for_generation",
-                        return_value=None,
+                        return_value=None,  # Force fallback to ContextPackBuilder
                     ),
                     patch.object(
                         usecase._writer,
@@ -266,7 +266,7 @@ class TestContextPackIntegration:
                     ),
                 ):
                     # Call the method that should use ContextPack
-                    result = usecase._generate_tests_for_plan(plan, {})
+                    result = await usecase._generate_tests_for_plan(plan, {})
 
                     # Verify ContextPack was built and used
                     mock_build.assert_called_once()
@@ -278,7 +278,7 @@ class TestContextPackIntegration:
                     assert result.success
                     assert result.file_path == "/test/test_module.py"
 
-    def test_canonical_import_enforcement_in_prompts(self, mock_ports):
+    async def test_canonical_import_enforcement_in_prompts(self, mock_ports):
         """Test that canonical imports from ContextPack are enforced in LLM prompts."""
         # Create LLM Orchestrator
         orchestrator = LLMOrchestrator(
@@ -345,7 +345,7 @@ class TestContextPackIntegration:
                     == "from test_module import test_function"
                 )
 
-    def test_writer_integration_with_context_pack_guardrails(self, mock_ports):
+    async def test_writer_integration_with_context_pack_guardrails(self, mock_ports):
         """Test that writers use ContextPack information for guardrails and gates."""
         # Create a writer that should respect ContextPack conventions
         # This is a conceptual test - actual implementation would depend on
@@ -386,7 +386,7 @@ class TestContextPackIntegration:
         # - context_pack.import_map.bootstrap_conftest for conftest generation
         # - context_pack.conventions for code style enforcement
 
-    def test_end_to_end_context_pack_workflow(self, mock_ports):
+    async def test_end_to_end_context_pack_workflow(self, mock_ports):
         """Test end-to-end ContextPack workflow with canonical import enforcement."""
         # This is a high-level integration test that verifies the complete flow
 
@@ -464,7 +464,7 @@ class TestContextPackIntegration:
             mock_write.return_value = {"success": True}
 
             # Execute the workflow
-            result = usecase._generate_tests_for_plan(plan, {})
+            result = await usecase._generate_tests_for_plan(plan, {})
 
             # Verify the complete workflow
             assert result.success
@@ -478,7 +478,7 @@ class TestContextPackIntegration:
             )
             mock_write.assert_called_once()
 
-    def test_context_pack_import_map_exclusivity(self, mock_ports):
+    async def test_context_pack_import_map_exclusivity(self, mock_ports):
         """Test that ContextPack.import_map is used exclusively for import resolution."""
         # This test ensures that once ContextPack is integrated,
         # duplicate import resolution logic is removed and only ContextPack.import_map is used
@@ -553,7 +553,7 @@ class TestContextPackIntegration:
                 return_value="/test/test_module.py",
             ),
         ):
-            result = usecase._generate_tests_for_plan(plan, {})
+            result = await usecase._generate_tests_for_plan(plan, {})
 
             # The key assertion: the generated test should use the canonical import
             # from the ContextPack, not from any other source

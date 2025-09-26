@@ -14,7 +14,7 @@ import tomllib
 from pathlib import Path
 from typing import Any
 
-from ....domain.models import ContextPack, TestGenerationPlan
+from ....domain.models import ContextPack, ImportMap, TestGenerationPlan
 from ....ports.context_port import ContextPort
 from ....ports.parser_port import ParserPort
 from .enhanced_context_builder import EnrichedContextBuilder
@@ -216,7 +216,8 @@ class ContextAssembler:
             )
 
             # 10) Build complete ContextPack with all components
-            if enriched_context_string is not None and import_map is not None:
+            # We can proceed even if import_map is None (e.g., for files without proper package structure)
+            if enriched_context_string is not None:
                 # Create a minimal ContextPack for context provision
                 # TODO: This should be enhanced to build full ContextPack with all components
                 from ....domain.models import (
@@ -254,12 +255,13 @@ class ContextAssembler:
 
                 context_pack = ContextPack(
                     target=target,
-                    import_map=import_map,
+                    import_map=import_map,  # Can be None if import resolution failed
                     focal=focal,
                     resolved_defs=[],  # TODO: Build resolved definitions
                     property_context=PropertyContext(),  # TODO: Build property context
                     conventions=Conventions(),
                     budget=Budget(),
+                    context=enriched_context_string,
                 )
 
                 return context_pack
@@ -1710,7 +1712,7 @@ class ContextAssembler:
         self,
         source_path: Path | None,
         base_context: str | None,
-        import_map: dict[str, Any] | None = None,
+        import_map: dict[str, Any] | ImportMap | None = None,
     ) -> str | None:
         """
         Build enriched context with packaging and safety information.
@@ -1737,24 +1739,33 @@ class ContextAssembler:
             if import_map is not None:
                 import_context_lines = []
 
+                # Handle both dict and ImportMap objects
+                if isinstance(import_map, dict):
+                    target_import = import_map.get("target_import")
+                    sys_path_roots = import_map.get("sys_path_roots")
+                    needs_bootstrap = import_map.get("needs_bootstrap")
+                    bootstrap_conftest = import_map.get("bootstrap_conftest")
+                else:
+                    # Assume it's an ImportMap object
+                    target_import = getattr(import_map, "target_import", None)
+                    sys_path_roots = getattr(import_map, "sys_path_roots", None)
+                    needs_bootstrap = getattr(import_map, "needs_bootstrap", None)
+                    bootstrap_conftest = getattr(import_map, "bootstrap_conftest", None)
+
                 # Add canonical import line
-                if "target_import" in import_map:
-                    import_context_lines.append(
-                        f"# Canonical import: {import_map['target_import']}"
-                    )
+                if target_import:
+                    import_context_lines.append(f"# Canonical import: {target_import}")
 
                 # Add sys.path roots information
-                if import_map.get("sys_path_roots"):
-                    import_context_lines.append(
-                        f"# Sys.path roots: {import_map['sys_path_roots']}"
-                    )
+                if sys_path_roots:
+                    import_context_lines.append(f"# Sys.path roots: {sys_path_roots}")
 
                 # Add bootstrap requirements
-                if import_map.get("needs_bootstrap"):
+                if needs_bootstrap:
                     import_context_lines.append(
                         "# Bootstrap: conftest.py setup required"
                     )
-                    if import_map.get("bootstrap_conftest"):
+                    if bootstrap_conftest:
                         import_context_lines.append("# Bootstrap content available")
 
                 # Prepend import context to enriched context if we have it

@@ -460,7 +460,9 @@ class ContextPack(BaseModel):
     """
 
     target: Target = Field(..., description="Target information")
-    import_map: ImportMap = Field(..., description="Import mapping and bootstrap")
+    import_map: ImportMap | None = Field(
+        None, description="Import mapping and bootstrap"
+    )
     focal: Focal = Field(..., description="Focal code information")
     resolved_defs: list[ResolvedDef] = Field(
         default_factory=list,
@@ -476,6 +478,54 @@ class ContextPack(BaseModel):
     budget: Budget = Field(
         default_factory=Budget, description="Token budget configuration"
     )
+    context: str | None = Field(
+        None, description="Enriched context string for backward compatibility"
+    )
+
+    def dict(
+        self,
+        *,
+        include: Any | None = None,
+        exclude: Any | None = None,
+        by_alias: bool = False,
+        exclude_unset: bool = False,
+        exclude_defaults: bool = False,
+        exclude_none: bool = False,
+    ) -> dict[str, Any]:
+        """Convert ContextPack to dictionary for backward compatibility."""
+        # Get the base dictionary using model_dump for proper serialization
+        result: dict[str, Any] = self.model_dump(
+            include=include,
+            exclude=exclude,
+            by_alias=by_alias,
+            exclude_unset=exclude_unset,
+            exclude_defaults=exclude_defaults,
+            exclude_none=exclude_none,
+        )
+
+        return result
+
+    def get(self, key: str, default: Any = None) -> Any:
+        """Get attribute by key for backward compatibility."""
+        return getattr(self, key, default)
+
+    def __contains__(self, key: str) -> bool:
+        """Check if key exists in ContextPack."""
+        return hasattr(self, key)
+
+    def __getitem__(self, key: str) -> Any:
+        """Get item by key for backward compatibility."""
+        if hasattr(self, key):
+            value = getattr(self, key)
+            # Return the actual object for nested models, not their dict representation
+            if hasattr(value, "__dict__") and not key == "context":
+                return value
+            return value
+        raise KeyError(f"Key '{key}' not found in ContextPack")
+
+    def __len__(self) -> int:
+        """Return number of fields in ContextPack."""
+        return 8  # target, import_map, focal, resolved_defs, property_context, conventions, budget, context
 
     class Config:
         """Pydantic configuration for ContextPack."""

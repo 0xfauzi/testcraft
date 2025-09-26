@@ -494,16 +494,8 @@ class GenerateUseCase:
                     )
 
             # Use LLMOrchestrator for PLAN/GENERATE/REFINE with symbol resolution
-            # Check if symbol resolution is enabled in config
-            if not self._config.get("enable_symbol_resolution", True):
-                # Fall back to legacy LLM call
-                llm_result = await self._llm.generate_tests(
-                    code_content=code_content,
-                    context=enhanced_context,
-                    test_framework=self._config["test_framework"],
-                )
-                test_content = llm_result.get("tests", "")
-            else:
+            # Check if context is available - if so, use ContextPackBuilder
+            if enhanced_context is not None:
                 # First, build a ContextPack for this target
 
                 # Create target information
@@ -552,6 +544,14 @@ class GenerateUseCase:
 
                 # Extract test content from orchestrator result
                 test_content = orchestrator_result.get("generated_code", "")
+            else:
+                # Fall back to legacy LLM call when context is not available
+                llm_result = await self._llm.generate_tests(
+                    code_content=code_content,
+                    context=enhanced_context,
+                    test_framework=self._config["test_framework"],
+                )
+                test_content = llm_result.get("tests", "")
             if not test_content or not test_content.strip():
                 return GenerationResult(
                     file_path="unknown",  # Would use actual path
