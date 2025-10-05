@@ -6,7 +6,7 @@ Tests the bootstrap functionality including conftest.py and PYTHONPATH strategie
 
 from pathlib import Path
 from unittest.mock import patch
-
+import os
 from testcraft.application.generation.services.bootstrap_runner import (
     BootstrapRunner,
     BootstrapStrategy,

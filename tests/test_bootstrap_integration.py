@@ -13,7 +13,7 @@ from testcraft.application.generation.services.bootstrap_runner import (
     BootstrapRunner,
     BootstrapStrategy,
 )
-from testcraft.application.generation.services.context_pack import ContextPack
+from testcraft.domain.models import ContextPack
 from testcraft.application.generation.services.pytest_refiner import PytestRefiner
 from testcraft.config.models import RefineConfig
 from testcraft.domain.models import (
