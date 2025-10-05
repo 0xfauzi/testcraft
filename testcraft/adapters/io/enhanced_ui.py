@@ -11,6 +11,7 @@ This module provides a comprehensive UI system with:
 """
 
 import logging
+import threading
 import time
 from contextlib import contextmanager
 from pathlib import Path
@@ -52,6 +53,10 @@ class EnhancedUIAdapter(RichUIAdapter):
     - Performance metrics display
     """
 
+    # Class-level lock for thread-safe logging setup
+    _logging_setup_lock = threading.Lock()
+    _logging_handler_ref: RichHandler | None = None
+
     def __init__(
         self,
         console: Console | None = None,
@@ -78,40 +83,65 @@ class EnhancedUIAdapter(RichUIAdapter):
         self._metrics: dict[str, Any] = {}
 
     def _setup_rich_logging(self) -> None:
-        """Set up beautiful Rich logging integration."""
-        # Check if root logger already has a RichHandler - if so, do nothing
-        root_logger = logging.getLogger()
-        has_rich_handler = any(isinstance(h, RichHandler) for h in root_logger.handlers)
+        """Set up beautiful Rich logging integration with thread safety."""
+        with self._logging_setup_lock:
+            # Check if we already set up logging for this instance
+            if hasattr(self, "logger") and getattr(self, "logger", None):
+                return
 
-        if has_rich_handler:
-            # Root already configured by CLI, just create our logger
-            self.logger = logging.getLogger("testcraft.enhanced_ui")
-            self.logger.handlers = []  # Remove any existing handlers
-            self.logger.propagate = True  # Ensure it uses root handler
-            return
+            # Check if root logger already has a RichHandler - if so, do nothing
+            root_logger = logging.getLogger()
+            has_rich_handler = any(
+                isinstance(h, RichHandler) for h in root_logger.handlers
+            )
 
-        # If we reach here, we're likely in library usage mode
-        # Set up minimal RichHandler on root (this should rarely happen in CLI mode)
-        rich_handler = RichHandler(
-            console=self.console,
-            show_time=True,
-            show_path=False,
-            markup=False,  # Avoid rich markup leaking in minimal logs
-            rich_tracebacks=True,
-        )
+            if has_rich_handler and self._logging_handler_ref:
+                # Root already configured, just create our logger
+                self.logger = logging.getLogger("testcraft.enhanced_ui")
+                self.logger.handlers = []  # Remove any existing handlers
+                self.logger.propagate = True  # Ensure it uses root handler
+                return
 
-        # Minimal formatter
-        rich_handler.setFormatter(logging.Formatter(fmt="%(message)s"))
+            try:
+                # If we reach here, we're likely in library usage mode
+                # Set up minimal RichHandler on root (this should rarely happen in CLI mode)
+                rich_handler = RichHandler(
+                    console=self.console,
+                    show_time=True,
+                    show_path=False,
+                    markup=False,  # Avoid rich markup leaking in minimal logs
+                    rich_tracebacks=True,
+                )
 
-        # Only add if no RichHandler exists
-        if not any(isinstance(h, RichHandler) for h in root_logger.handlers):
-            root_logger.addHandler(rich_handler)
-            root_logger.setLevel(logging.INFO)
+                # Store reference to prevent duplicate checks
+                self._logging_handler_ref = rich_handler
 
-        # Create enhanced logger for this class with no handlers, using propagation
-        self.logger = logging.getLogger("testcraft.enhanced_ui")
-        self.logger.handlers = []  # Ensure no per-logger handlers
-        self.logger.propagate = True
+                # Minimal formatter
+                rich_handler.setFormatter(logging.Formatter(fmt="%(message)s"))
+
+                # Only add if no RichHandler exists
+                if not any(isinstance(h, RichHandler) for h in root_logger.handlers):
+                    root_logger.addHandler(rich_handler)
+                    root_logger.setLevel(logging.INFO)
+
+                # Create enhanced logger for this class with no handlers, using propagation
+                self.logger = logging.getLogger("testcraft.enhanced_ui")
+                self.logger.handlers = []  # Ensure no per-logger handlers
+                self.logger.propagate = True
+
+            except Exception:
+                # Fallback: create a simple logger without Rich if setup fails
+                self.logger = logging.getLogger("testcraft.enhanced_ui")
+                self.logger.handlers = []
+                self.logger.propagate = True
+
+    def _cleanup_operation(self, operation_name: str) -> None:
+        """Clean up operation tracking data safely."""
+        try:
+            if operation_name in self._operation_start_times:
+                del self._operation_start_times[operation_name]
+        except KeyError:
+            pass  # Already cleaned up
 
     @contextmanager
     def create_operation_tracker(self, operation_name: str, total_steps: int = 1):
@@ -206,10 +236,19 @@ class EnhancedUIAdapter(RichUIAdapter):
                         "steps": total_steps,
                         "avg_step_time": duration / max(total_steps, 1),
                     }
+        except Exception:
+            # Ensure cleanup happens even on exceptions
+            duration = time.time() - self._operation_start_times[operation_name]
+            self._metrics[operation_name] = {
+                "duration": duration,
+                "steps": total_steps,
+                "avg_step_time": duration / max(total_steps, 1),
+                "error": True,
+            }
+            raise
         finally:
-            # Clean up
-            if operation_name in self._operation_start_times:
-                del self._operation_start_times[operation_name]
+            # Always clean up operation tracking data
+            self._cleanup_operation(operation_name)
 
     def create_real_time_dashboard(
         self, title: str = "TestCraft Dashboard"
@@ -221,92 +260,122 @@ class EnhancedUIAdapter(RichUIAdapter):
         self, files_data: list[dict[str, Any]], title: str = "File Processing Status"
     ):
         """Display a clean, minimal table showing file processing progress."""
-        table = Table(
-            title=f"[title]{title}[/]",
-            show_header=True,
-            header_style="header",
-            border_style="border",
-            title_style="title",
-            show_lines=False,
-            expand=True,
-            box=None,  # Remove box for cleaner look
-        )
 
-        # Minimal columns
-        table.add_column("File", style="primary", width=35)
-        table.add_column("Status", justify="center", width=12)
-        table.add_column("Progress", justify="center", width=15)
-        table.add_column("Tests", justify="center", width=8)
-        table.add_column("Time", justify="center", width=8)
+        def _create_and_display_table():
+            # Input validation
+            if not isinstance(files_data, list):
+                self.display_error_with_suggestions(
+                    f"Invalid files_data type: expected list, got {type(files_data)}",
+                    ["Ensure files_data is a list of dictionaries"],
+                )
+                return
 
-        for file_data in files_data:
-            file_path = str(file_data.get("file_path", ""))
-            file_name = Path(file_path).name if file_path else "Unknown"
+            if not files_data:
+                return  # Nothing to display
 
-            # Clean minimal status
-            status = file_data.get("status", "pending")
-            if status == "completed":
-                status_display = "[success]done[/]"
-            elif status in [
-                "processing",
-                "generating",
-                "writing",
-                "testing",
-                "refining",
-            ]:
-                status_display = "[status_working]active[/]"
-            elif status == "failed":
-                status_display = "[error]failed[/]"
-            else:
-                status_display = "[muted]waiting[/]"
-
-            # Simple progress dots
-            progress_val = file_data.get("progress", 0.0)
-            if status == "completed":
-                progress_display = "[success]●●●●[/]"
-            elif status == "failed":
-                progress_display = "[error]○○○○[/]"
-            elif progress_val > 0:
-                dots = int(progress_val / 25)  # 4 dots max
-                filled = "●" * dots
-                empty = "○" * (4 - dots)
-                progress_display = f"[accent]{filled}[/][muted]{empty}[/]"
-            else:
-                progress_display = "[muted]○○○○[/]"
-
-            # Minimal tests display
-            tests_count = file_data.get("tests_generated", 0)
-            tests_display = str(tests_count) if tests_count > 0 else "—"
-
-            # Clean duration
-            duration = file_data.get("duration", 0)
-            if duration > 0:
-                if duration < 60:
-                    duration_display = f"{duration:.1f}s"
-                else:
-                    mins, secs = divmod(duration, 60)
-                    duration_display = f"{int(mins)}m{secs:.0f}s"
-            else:
-                duration_display = "—"
-
-            table.add_row(
-                file_name,
-                status_display,
-                progress_display,
-                tests_display,
-                f"[muted]{duration_display}[/]",
+            table = Table(
+                title=f"[title]{title}[/]",
+                show_header=True,
+                header_style="header",
+                border_style="border",
+                title_style="title",
+                show_lines=False,
+                expand=True,
+                box=None,  # Remove box for cleaner look
             )
 
-        self.console.print(table)
+            # Minimal columns
+            table.add_column("File", style="primary", width=35)
+            table.add_column("Status", justify="center", width=12)
+            table.add_column("Progress", justify="center", width=15)
+            table.add_column("Tests", justify="center", width=8)
+            table.add_column("Time", justify="center", width=8)
+
+            for file_data in files_data:
+                # Defensive dict access with validation
+                if not isinstance(file_data, dict):
+                    continue  # Skip invalid entries
+
+                file_path = str(file_data.get("file_path", ""))
+                file_name = Path(file_path).name if file_path else "Unknown"
+
+                # Clean minimal status
+                status = file_data.get("status", "pending")
+                if status == "completed":
+                    status_display = "[success]done[/]"
+                elif status in [
+                    "processing",
+                    "generating",
+                    "writing",
+                    "testing",
+                    "refining",
+                ]:
+                    status_display = "[status_working]active[/]"
+                elif status == "failed":
+                    status_display = "[error]failed[/]"
+                else:
+                    status_display = "[muted]waiting[/]"
+
+                # Simple progress dots
+                progress_val = file_data.get("progress", 0.0)
+                if status == "completed":
+                    progress_display = "[success]●●●●[/]"
+                elif status == "failed":
+                    progress_display = "[error]○○○○[/]"
+                elif progress_val > 0:
+                    dots = min(
+                        4, max(0, int(progress_val * 4))
+                    )  # 4 dots max, ensure 0-4 range
+                    filled = "●" * dots
+                    empty = "○" * (4 - dots)
+                    progress_display = f"[accent]{filled}[/][muted]{empty}[/]"
+                else:
+                    progress_display = "[muted]○○○○[/]"
+
+                # Minimal tests display
+                tests_count = file_data.get("tests_generated", 0)
+                tests_display = str(tests_count) if tests_count > 0 else "—"
+
+                # Clean duration
+                duration = file_data.get("duration", 0)
+                if duration > 0:
+                    if duration < 60:
+                        duration_display = f"{duration:.1f}s"
+                    else:
+                        mins, secs = divmod(duration, 60)
+                        duration_display = f"{int(mins)}m{secs:.0f}s"
+                else:
+                    duration_display = "—"
+
+                table.add_row(
+                    file_name,
+                    status_display,
+                    progress_display,
+                    tests_display,
+                    f"[muted]{duration_display}[/]",
+                )
+
+            self.console.print(table)
+
+        # Wrap the entire operation in safe_execute
+        self._safe_execute("display_file_progress_table", _create_and_display_table)
 
     def display_metrics_panel(
         self, metrics: dict[str, Any], title: str = "Performance Metrics"
     ):
         """Display performance metrics in a clean, minimal panel."""
-        metrics_content = []
 
-        for operation, data in metrics.items():
-            if isinstance(data, dict):
+        def _create_and_display_metrics():
+            # Input validation
+            if not isinstance(metrics, dict):
+                return
+
+            metrics_content = []
+
+            for operation, data in metrics.items():
+                if not isinstance(data, dict):
+                    continue
+
                 duration = data.get("duration", 0)
                 success_rate = data.get("success_rate", 0)
                 items = data.get("items_processed", 0)
@@ -317,14 +386,16 @@ class EnhancedUIAdapter(RichUIAdapter):
                 )
                 metrics_content.append("")
 
-        if metrics_content:
-            panel = Panel(
-                "\n".join(metrics_content[:-1]),  # Remove last empty line
-                title=title.lower(),
-                border_style="border",
-                padding=(1, 1),
-            )
-            self.console.print(panel)
+            if metrics_content:
+                panel = Panel(
+                    "\n".join(metrics_content[:-1]),  # Remove last empty line
+                    title=title.lower(),
+                    border_style="border",
+                    padding=(1, 1),
+                )
+                self.console.print(panel)
+
+        self._safe_execute("display_metrics_panel", _create_and_display_metrics)
 
     def display_error_with_suggestions(
         self, error_message: str, suggestions: list[str], title: str = "Error"
@@ -346,19 +417,44 @@ class EnhancedUIAdapter(RichUIAdapter):
         )
         self.console.print(panel)
 
+    def _safe_execute(self, operation_name: str, operation_func, *args, **kwargs):
+        """Safely execute UI operations with error handling."""
+        try:
+            return operation_func(*args, **kwargs)
+        except Exception as e:
+            # Log error but don't crash the UI
+            if hasattr(self, "logger") and self.logger:
+                self.logger.warning(f"UI operation '{operation_name}' failed: {e}")
+            # Return None or empty result to allow graceful degradation
+            return None
+
     def display_success_summary(self, summary_data: dict[str, Any]):
         """Display a clean success summary with essential metrics."""
-        # Simple success message
-        main_message = summary_data.get("message", "Operation completed successfully!")
-        self.display_success(main_message, "success")
 
-        # Minimal metrics display
-        if "metrics" in summary_data:
-            self.display_metrics_panel(summary_data["metrics"], "metrics")
+        def _create_and_display_summary():
+            # Input validation
+            if not isinstance(summary_data, dict):
+                return
 
-        # Clean file results if available
-        if "files_processed" in summary_data:
-            self.display_file_progress_table(summary_data["files_processed"], "results")
+            # Simple success message
+            main_message = summary_data.get(
+                "message", "Operation completed successfully!"
+            )
+            self.display_success(main_message, "success")
+
+            # Minimal metrics display
+            if "metrics" in summary_data:
+                metrics = summary_data.get("metrics")
+                if isinstance(metrics, dict):
+                    self.display_metrics_panel(metrics, "metrics")
+
+            # Clean file results if available
+            if "files_processed" in summary_data:
+                files_processed = summary_data.get("files_processed")
+                if isinstance(files_processed, list):
+                    self.display_file_progress_table(files_processed, "results")
+
+        self._safe_execute("display_success_summary", _create_and_display_summary)
 
     def get_renderer(self):
         """Get the appropriate renderer based on UI style."""
@@ -446,15 +542,19 @@ class MinimalRenderer:
 
     def _render_compact_table(self, files_data: list[dict[str, Any]], console: Console):
         """Render a compact table with minimal styling."""
-        table = Table(
-            show_header=True,
-            header_style="header",
-            border_style="border",
-            show_lines=False,
-            expand=True,
-            box=None,  # Remove box for cleaner look
-            padding=(0, 1),  # Minimal padding
-        )
+        try:
+            table = Table(
+                show_header=True,
+                header_style="header",
+                border_style="border",
+                show_lines=False,
+                expand=True,
+                box=None,  # Remove box for cleaner look
+                padding=(0, 1),  # Minimal padding
+            )
+        except Exception:
+            # For table creation, just return early on error since it's not critical
+            return
 
         # Lowercase headers
         table.add_column("file", style="primary", width=35)
@@ -464,6 +564,10 @@ class MinimalRenderer:
         table.add_column("time", justify="center", width=8)
 
         for file_data in files_data:
+            # Defensive dict access with validation
+            if not isinstance(file_data, dict):
+                continue
+
             file_path = str(file_data.get("file_path", ""))
             file_name = Path(file_path).name if file_path else "Unknown"
 
@@ -491,7 +595,9 @@ class MinimalRenderer:
             elif status == "failed":
                 progress_display = "[error]○○○○[/]"
             elif progress_val > 0:
-                dots = int(progress_val / 0.25)  # 4 dots max (0.25 each)
+                dots = min(
+                    4, max(0, int(progress_val * 4))
+                )  # 4 dots max, ensure 0-4 range
                 filled = "●" * dots
                 empty = "○" * (4 - dots)
                 progress_display = f"[accent]{filled}[/][muted]{empty}[/]"
@@ -513,15 +619,15 @@ class MinimalRenderer:
             else:
                 duration_display = "—"
 
-            table.add_row(
-                file_name,
-                status_display,
-                progress_display,
-                tests_display,
-                f"[muted]{duration_display}[/]",
-            )
+                table.add_row(
+                    file_name,
+                    status_display,
+                    progress_display,
+                    tests_display,
+                    f"[muted]{duration_display}[/]",
+                )
 
-        console.print(table)
+            console.print(table)
 
 
 class DashboardManager:
@@ -555,16 +661,27 @@ class DashboardManager:
 
     def __enter__(self):
         """Start the live dashboard."""
-        self.live_display = Live(
-            self.layout, console=self.ui.console, refresh_per_second=2, transient=False
-        )
-        self.live_display.start()
-        return self
+        try:
+            self.live_display = Live(
+                self.layout,
+                console=self.ui.console,
+                refresh_per_second=2,
+                transient=False,
+            )
+            self.live_display.start()
+            return self
+        except Exception:
+            # If start fails, set to None to prevent cleanup errors
+            self.live_display = None
+            raise
 
     def __exit__(self, exc_type, exc_val, exc_tb) -> None:
         """Stop the live dashboard."""
-        if self.live_display:
-            self.live_display.stop()
+        if self.live_display is not None:
+            try:
+                self.live_display.stop()
+            except Exception:
+                pass  # Ignore cleanup errors
 
     def update_main_content(self, content: Any) -> Any:
         """Update the main content area."""

@@ -76,7 +76,9 @@ class SubprocessTimeoutError(SubprocessError):
 class SubprocessExecutionError(SubprocessError):
     """Raised when a subprocess returns a non-zero exit code."""
 
-    pass
+    def __init__(self, message: str, returncode: int = 1):
+        super().__init__(message)
+        self.returncode = returncode
 
 
 @contextlib.contextmanager
@@ -84,7 +86,7 @@ def run_subprocess_safe(
     cmd: list[str],
     timeout: int = 30,
     cwd: str | Path | None = None,
-    env: dict | None = None,
+    env: dict[str, str] | None = None,
     input_text: str | None = None,
 ):
     """
@@ -136,14 +138,19 @@ def run_subprocess_safe(
         if proc.returncode != 0:
             raise SubprocessExecutionError(
                 f"Command {cmd} failed with exit code {proc.returncode}. "
-                f"Stdout: {stdout}. Stderr: {stderr}"
+                f"Stdout: {stdout}. Stderr: {stderr}",
+                returncode=proc.returncode,
             )
         yield stdout, stderr
 
     except subprocess.TimeoutExpired:
         # Kill the process and clean up zombie
         logger.warning(f"Command {cmd} timed out after {timeout} seconds")
-        proc.kill()
+        try:
+            proc.kill()
+        except ProcessLookupError:
+            # Process already terminated
+            pass
         proc.communicate()  # Clean up zombie process
         raise SubprocessTimeoutError(
             f"Command {cmd} timed out after {timeout} seconds"
@@ -152,24 +159,42 @@ def run_subprocess_safe(
     except Exception:
         # Ensure cleanup on any other exception
         if proc.poll() is None:  # Process still running
-            proc.terminate()
+            try:
+                proc.terminate()
+            except ProcessLookupError:
+                # Process already terminated
+                pass
             try:
                 proc.wait(timeout=5)
             except subprocess.TimeoutExpired:
-                proc.kill()
+                try:
+                    proc.kill()
+                except ProcessLookupError:
+                    # Process already terminated
+                    pass
                 proc.wait()
         raise
 
     finally:
         # Ensure process is terminated if still running
+        # Note: In normal operation, if process_completed is True, poll() should return a value
+        # But we check both to be safe and handle edge cases
         if proc.poll() is None:  # Process still running
-            proc.terminate()
+            try:
+                proc.terminate()
+            except ProcessLookupError:
+                # Process already terminated
+                pass
             try:
                 proc.wait(timeout=5)  # Give it 5 seconds to terminate gracefully
             except subprocess.TimeoutExpired:
                 # Force kill if it won't terminate
                 logger.warning(f"Force killing stubborn process: {cmd}")
-                proc.kill()
+                try:
+                    proc.kill()
+                except ProcessLookupError:
+                    # Process already terminated
+                    pass
                 proc.wait()
 
 
@@ -177,7 +202,7 @@ def run_subprocess_simple(
     cmd: list[str],
     timeout: int = 30,
     cwd: str | Path | None = None,
-    env: dict | None = None,
+    env: dict[str, str] | None = None,
     input_text: str | None = None,
     raise_on_error: bool = True,
 ) -> tuple[str | None, str | None, int]:
@@ -217,9 +242,7 @@ def run_subprocess_simple(
     except SubprocessExecutionError as e:
         if raise_on_error:
             raise
-        # Extract return code from the exception message if possible
-        # This is a bit hacky but works with our error format
-        return None, str(e), getattr(e, "returncode", 1)
+        return None, str(e), e.returncode
 
     except (SubprocessTimeoutError, OSError) as e:
         if raise_on_error:

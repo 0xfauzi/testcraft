@@ -7,7 +7,7 @@ verifying artifact storage, retrieval, and cleanup functionality.
 
 import json
 import tempfile
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from testcraft.adapters.io.artifact_store import (
@@ -233,7 +233,7 @@ def test_another_function():
         assert metadata.expires_at is not None
 
         # Should expire approximately 1 day from now
-        expected_expiry = datetime.utcnow() + timedelta(days=1)
+        expected_expiry = datetime.now(UTC) + timedelta(days=1)
         time_diff = abs((metadata.expires_at - expected_expiry).total_seconds())
         assert time_diff < 60  # Within 1 minute tolerance
 
@@ -246,7 +246,7 @@ def test_another_function():
 
         # Manually set expiry to past
         metadata = self.store._metadata[artifact_id]
-        metadata.expires_at = datetime.utcnow() - timedelta(hours=1)
+        metadata.expires_at = datetime.now(UTC) - timedelta(hours=1)
         self.store._save_metadata()
 
         # Attempt to retrieve should return None and clean up
@@ -374,9 +374,11 @@ def test_another_function():
         )
 
         # Make one expired
-        self.store._metadata[expired_id].expires_at = datetime.utcnow() - timedelta(
+        self.store._metadata[expired_id].expires_at = datetime.now(UTC) - timedelta(
             hours=1
         )
+        # Save the modified metadata to disk
+        self.store._save_metadata()
 
         stats = self.store.get_storage_stats()
 
@@ -449,6 +451,8 @@ def test_another_function():
 
         # Create new adapter - should handle corruption gracefully
         new_store = ArtifactStoreAdapter(base_path=self.temp_dir)
+        # Force metadata loading
+        new_store._load_metadata()
         assert len(new_store._metadata) == 0  # Should start fresh
 
     def teardown_method(self) -> None:

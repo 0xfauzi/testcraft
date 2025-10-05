@@ -283,7 +283,9 @@ class TestStateSyncDiscovery:
 
         # Verify calls
         state_port.get_all_state.assert_called_once_with("generation")
-        file_discovery_service.filter_existing_files.assert_called_once()
+        file_discovery_service.filter_existing_files.assert_called_once_with(
+            ["file1.py", "file2.py", "nonexistent.py"], project_path
+        )
 
         # Verify result
         assert len(result["files"]) == 2

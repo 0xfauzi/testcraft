@@ -100,3 +100,17 @@ class CoveragePort(Protocol):
             Dictionary mapping file paths to lists of line numbers with poor coverage
         """
         ...
+
+    def get_measurement_method(self) -> str:
+        """
+        Get coverage measurement method identifier.
+
+        Returns:
+            String identifier for the measurement method used
+            (e.g., "coverage.py", "pytest-coverage", "ast-fallback", "noop")
+
+        Note:
+            This method was added to eliminate leaky abstraction where
+            use cases were calling getattr() on adapters directly.
+        """
+        ...

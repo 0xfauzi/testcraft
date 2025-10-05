@@ -54,7 +54,7 @@ class TestAnalyzeUseCase:
                 "/test/module2.py",
             ]
 
-        def mock_filter_existing_files(file_paths):
+        def mock_filter_existing_files(file_paths, project_path=None):
             # Filter based on what files are actually passed in
             # Return only valid files that exist in the input
             return [f for f in file_paths if f.endswith(".py")]

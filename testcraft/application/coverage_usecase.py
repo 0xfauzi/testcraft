@@ -8,8 +8,8 @@ with proper error handling and telemetry.
 
 from __future__ import annotations
 
-import asyncio
 import logging
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -170,9 +170,7 @@ class CoverageUseCase:
                         "project_path": str(project_path),
                         "config_used": self._config,
                         "timestamp": discovery_result.get("timestamp"),
-                        "coverage_method": getattr(
-                            self._coverage, "get_last_method_used", lambda: "unknown"
-                        )(),
+                        "coverage_method": self._coverage.get_measurement_method(),
                     },
                 }
 
@@ -220,9 +218,27 @@ class CoverageUseCase:
                 if source_files:
                     # Use provided source files, filtered for validity
                     discovered_source_files = (
-                        self._file_discovery.filter_existing_files(source_files)
+                        self._file_discovery.filter_existing_files(
+                            source_files, project_path
+                        )
                     )
-                    span.set_attribute("discovery_method", "provided_source_files")
+                    # Fallback if filtering removed all files
+                    if not discovered_source_files:
+                        logger.warning(
+                            "No valid files after filtering provided source files, "
+                            "falling back to discovery"
+                        )
+                        discovered_source_files = (
+                            self._file_discovery.discover_source_files(
+                                project_path,
+                                include_test_files=self._config.get(
+                                    "include_test_files", False
+                                ),
+                            )
+                        )
+                        span.set_attribute("fallback_to_discovery", True)
+                    else:
+                        span.set_attribute("discovery_method", "provided_source_files")
                 else:
                     # Discover source files using file discovery service
                     discovered_source_files = (
@@ -240,7 +256,9 @@ class CoverageUseCase:
                 if self._config.get("include_test_files", False):
                     if test_files:
                         discovered_test_files = (
-                            self._file_discovery.filter_existing_files(test_files)
+                            self._file_discovery.filter_existing_files(
+                                test_files, project_path
+                            )
                         )
                     else:
                         discovered_test_files = (
@@ -250,15 +268,14 @@ class CoverageUseCase:
                 span.set_attribute("source_files_found", len(discovered_source_files))
                 span.set_attribute("test_files_found", len(discovered_test_files))
 
+                # Cache trace context to avoid double call
+                trace_context = span.get_trace_context()
+
                 return {
                     "source_files": discovered_source_files,
                     "test_files": discovered_test_files,
                     "previous_state": current_state,
-                    "timestamp": (
-                        span.get_trace_context().trace_id
-                        if span.get_trace_context()
-                        else None
-                    ),
+                    "timestamp": trace_context.trace_id if trace_context else None,
                     "project_path": project_path,
                 }
 
@@ -302,9 +319,7 @@ class CoverageUseCase:
                 span.set_attribute("files_measured", len(coverage_data))
                 span.set_attribute(
                     "measurement_method",
-                    getattr(
-                        self._coverage, "get_last_method_used", lambda: "unknown"
-                    )(),
+                    self._coverage.get_measurement_method(),
                 )
 
                 return coverage_data
@@ -370,12 +385,10 @@ class CoverageUseCase:
         try:
             # Compile state data
             state_data = {
-                "last_coverage_run_timestamp": asyncio.get_event_loop().time(),
+                "last_coverage_run_timestamp": datetime.now(UTC).isoformat(),
                 "coverage_summary": coverage_summary,
                 "files_measured": len(coverage_data),
-                "coverage_method": getattr(
-                    self._coverage, "get_last_method_used", lambda: "unknown"
-                )(),
+                "coverage_method": self._coverage.get_measurement_method(),
                 "config_used": self._config.copy(),
                 "file_coverage_details": {
                     file_path: {
@@ -409,19 +422,13 @@ class CoverageUseCase:
             coverage_summary: Coverage summary statistics
         """
         try:
-            from datetime import datetime
-
             # Record coverage metrics
             metrics = [
                 MetricValue(
                     name="coverage_files_measured",
                     value=len(coverage_data),
                     unit="count",
-                    labels={
-                        "method": getattr(
-                            self._coverage, "get_last_method_used", lambda: "unknown"
-                        )()
-                    },
+                    labels={"method": self._coverage.get_measurement_method()},
                     timestamp=datetime.now(),
                 ),
                 MetricValue(
@@ -465,7 +472,7 @@ class CoverageUseCase:
             )
             span.set_attribute(
                 "coverage_method",
-                getattr(self._coverage, "get_last_method_used", lambda: "unknown")(),
+                self._coverage.get_measurement_method(),
             )
 
             # Flush telemetry data

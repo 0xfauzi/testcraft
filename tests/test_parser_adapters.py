@@ -158,8 +158,15 @@ class TestCodebaseParser:
             f.flush()
 
             parser = CodebaseParser()
-            with pytest.raises(ParseError, match="Syntax error"):
-                parser.parse_file(Path(f.name))
+            result = parser.parse_file(Path(f.name))
+
+            # Should collect syntax error instead of raising immediately
+            assert len(result["parse_errors"]) > 0
+            syntax_errors = [
+                e for e in result["parse_errors"] if e["type"] == "syntax_error"
+            ]
+            assert len(syntax_errors) > 0
+            assert "Syntax error" in syntax_errors[0]["message"]
 
         Path(f.name).unlink()
 

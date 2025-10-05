@@ -81,10 +81,11 @@ class RichUIAdapter(UIPort):
                     self.console, "quiet", False
                 ):
                     return
-                self._active_status = self.rich_cli.create_status_spinner(message)
+                self._active_status = self.rich_cli.create_status_spinner(message)  # type: ignore[assignment]
                 try:
                     # If minimal mode is in use, ensure transient=True is respected by rich_cli wrapper
-                    self._active_status.start()
+                    if self._active_status:
+                        self._active_status.start()
                 except Exception:
                     pass
 
@@ -621,4 +622,4 @@ class RichUIAdapter(UIPort):
         Returns:
             Rich Status instance
         """
-        return self.rich_cli.create_status_spinner(message)
+        return self.rich_cli.create_status_spinner(message)  # type: ignore[return-value]

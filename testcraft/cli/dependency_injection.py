@@ -1,5 +1,6 @@
 """Dependency injection container for CLI commands."""
 
+import logging
 from typing import Any
 
 from ..adapters.context.main_adapter import TestcraftContextAdapter
@@ -19,6 +20,8 @@ from ..application.generate_usecase import GenerateUseCase
 from ..application.status_usecase import StatusUseCase
 from ..application.utility_usecases import UtilityUseCase
 from ..config.models import TestCraftConfig
+
+logger = logging.getLogger(__name__)
 
 
 class DependencyError(Exception):
@@ -160,30 +163,20 @@ def create_dependency_container(config: TestCraftConfig) -> dict[str, Any]:
 
 
 def _create_coverage_adapter(config: TestCraftConfig):
-    """Create coverage adapter - placeholder implementation."""
+    """
+    Create coverage adapter - uses real implementation or graceful fallback.
 
-    # This is a placeholder - actual implementation would depend on available coverage adapters
-    class PlaceholderCoverageAdapter:
-        def __init__(self) -> None:
-            pass
+    Follows established pattern from LLM adapter creation.
+    """
+    try:
+        from ..adapters.coverage.coverage_py_adapter import CoveragePyAdapter
 
-        def measure_coverage(self, source_files, test_files=None):
-            # Placeholder implementation
-            return {}
+        return CoveragePyAdapter()
+    except ImportError:
+        logger.warning(
+            "coverage.py not installed, using no-op adapter. "
+            "Install with: pip install coverage"
+        )
+        from ..adapters.coverage.coverage_py_adapter import NoOpCoverageAdapter
 
-        def get_coverage_summary(self, coverage_data: Any) -> Any:
-            return {
-                "overall_line_coverage": 0.0,
-                "overall_branch_coverage": 0.0,
-                "files_covered": 0,
-                "total_lines": 0,
-                "missing_coverage": {},
-            }
-
-        def identify_gaps(self, coverage_data, threshold=0.8):
-            return {}
-
-        def report_coverage(self, coverage_data, output_format="detailed"):
-            return {"success": True, "format": output_format}
-
-    return PlaceholderCoverageAdapter()
+        return NoOpCoverageAdapter()

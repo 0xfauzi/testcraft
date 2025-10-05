@@ -25,6 +25,123 @@ from .symbol_resolver import SymbolResolver
 logger = logging.getLogger(__name__)
 
 
+class OrchestratorError(Exception):
+    """Base exception for LLM orchestrator errors."""
+
+    def __init__(
+        self,
+        message: str,
+        stage: str | None = None,
+        retry_count: int | None = None,
+        cause: Exception | None = None,
+        previous_errors: list[OrchestratorError] | None = None,
+    ):
+        super().__init__(message)
+        self.stage = stage
+        self.retry_count = retry_count
+        self.cause = cause
+        self.previous_errors = previous_errors or []
+
+    def __str__(self) -> str:
+        parts = [super().__str__()]
+        if self.stage:
+            parts.append(f"Stage: {self.stage}")
+        if self.retry_count is not None:
+            parts.append(f"Retry count: {self.retry_count}")
+        if self.previous_errors:
+            parts.append(f"Previous errors: {len(self.previous_errors)}")
+        if self.cause:
+            parts.append(f"Cause: {self.cause}")
+        return " | ".join(parts)
+
+    def add_previous_error(self, error: OrchestratorError) -> None:
+        """Add a previous error to the error chain."""
+        self.previous_errors.append(error)
+
+    @property
+    def all_errors(self) -> list[OrchestratorError]:
+        """Get all errors in the chain, including this one."""
+        return self.previous_errors + [self]
+
+
+class PlanStageFailedException(OrchestratorError):
+    """Exception raised when PLAN stage fails."""
+
+    def __init__(
+        self,
+        message: str,
+        retry_count: int | None = None,
+        cause: Exception | None = None,
+        previous_errors: list[OrchestratorError] | None = None,
+    ):
+        super().__init__(
+            message,
+            stage="PLAN",
+            retry_count=retry_count,
+            cause=cause,
+            previous_errors=previous_errors,
+        )
+
+
+class GenerateStageFailedException(OrchestratorError):
+    """Exception raised when GENERATE stage fails."""
+
+    def __init__(
+        self,
+        message: str,
+        retry_count: int | None = None,
+        cause: Exception | None = None,
+        previous_errors: list[OrchestratorError] | None = None,
+    ):
+        super().__init__(
+            message,
+            stage="GENERATE",
+            retry_count=retry_count,
+            cause=cause,
+            previous_errors=previous_errors,
+        )
+
+
+class RefineStageFailedException(OrchestratorError):
+    """Exception raised when REFINE stage fails."""
+
+    def __init__(
+        self,
+        message: str,
+        retry_count: int | None = None,
+        cause: Exception | None = None,
+        previous_errors: list[OrchestratorError] | None = None,
+    ):
+        super().__init__(
+            message,
+            stage="REFINE",
+            retry_count=retry_count,
+            cause=cause,
+            previous_errors=previous_errors,
+        )
+
+
+class SymbolResolutionFailedException(OrchestratorError):
+    """Exception raised when symbol resolution fails."""
+
+    def __init__(
+        self,
+        message: str,
+        missing_symbols: list[str] | None = None,
+        retry_count: int | None = None,
+        cause: Exception | None = None,
+        previous_errors: list[OrchestratorError] | None = None,
+    ):
+        super().__init__(
+            message,
+            stage="SYMBOL_RESOLUTION",
+            retry_count=retry_count,
+            cause=cause,
+            previous_errors=previous_errors,
+        )
+        self.missing_symbols = missing_symbols or []
+
+
 class LLMOrchestrator:
     """
     LLM orchestrator implementing the 4-stage test generation pipeline with symbol resolution.
@@ -103,14 +220,16 @@ class LLMOrchestrator:
         )
 
         # PLAN stage with symbol resolution
-        plan = self._plan_stage(context_pack, project_root)
-        if not plan:
-            raise ValueError("PLAN stage failed - no plan generated")
+        try:
+            plan = self._plan_stage(context_pack, project_root)
+        except PlanStageFailedException as e:
+            raise ValueError(f"PLAN stage failed: {e}") from e
 
         # GENERATE stage
-        generated_code = self._generate_stage(context_pack, plan)
-        if not generated_code:
-            raise ValueError("GENERATE stage failed - no code generated")
+        try:
+            generated_code = self._generate_stage(context_pack, plan)
+        except GenerateStageFailedException as e:
+            raise ValueError(f"GENERATE stage failed: {e}") from e
 
         return {
             "plan": plan,
@@ -142,18 +261,20 @@ class LLMOrchestrator:
         )
 
         # PLAN stage with symbol resolution
-        plan = self._plan_stage(context_pack, project_root)
-        if not plan:
-            raise ValueError("PLAN stage failed - no plan generated")
+        try:
+            plan = self._plan_stage(context_pack, project_root)
+        except PlanStageFailedException as e:
+            raise ValueError(f"PLAN stage failed: {e}") from e
 
         # GENERATE stage (or refine if existing code provided)
         if existing_code and feedback:
             # REFINE stage
-            refined_code = self._refine_stage(
-                context_pack, existing_code, feedback, project_root
-            )
-            if not refined_code:
-                raise ValueError("REFINE stage failed - no refined code generated")
+            try:
+                refined_code = self._refine_stage(
+                    context_pack, existing_code, feedback, project_root
+                )
+            except RefineStageFailedException as e:
+                raise ValueError(f"REFINE stage failed: {e}") from e
 
             return {
                 "plan": plan,
@@ -163,9 +284,10 @@ class LLMOrchestrator:
             }
         else:
             # GENERATE stage
-            generated_code = self._generate_stage(context_pack, plan)
-            if not generated_code:
-                raise ValueError("GENERATE stage failed - no code generated")
+            try:
+                generated_code = self._generate_stage(context_pack, plan)
+            except GenerateStageFailedException as e:
+                raise ValueError(f"GENERATE stage failed: {e}") from e
 
             return {
                 "plan": plan,
@@ -253,7 +375,7 @@ class LLMOrchestrator:
 
     def plan_stage(
         self, context_pack: ContextPack, project_root: Path | None = None
-    ) -> dict[str, Any] | None:
+    ) -> dict[str, Any]:
         """
         Execute the PLAN stage with symbol resolution.
 
@@ -262,9 +384,15 @@ class LLMOrchestrator:
             project_root: Project root directory
 
         Returns:
-            Plan dictionary if successful, None otherwise
+            Plan dictionary if successful
+
+        Raises:
+            ValueError: If PLAN stage fails
         """
-        return self._plan_stage(context_pack, project_root)
+        try:
+            return self._plan_stage(context_pack, project_root)
+        except PlanStageFailedException as e:
+            raise ValueError(f"PLAN stage failed: {e}") from e
 
     def refine_stage(
         self,
@@ -272,7 +400,7 @@ class LLMOrchestrator:
         existing_code: str,
         feedback: dict[str, Any],
         project_root: Path | None = None,
-    ) -> str | None:
+    ) -> str:
         """
         Execute the REFINE stage with symbol resolution.
 
@@ -283,13 +411,21 @@ class LLMOrchestrator:
             project_root: Project root directory
 
         Returns:
-            Refined code if successful, None otherwise
+            Refined code if successful
+
+        Raises:
+            ValueError: If REFINE stage fails
         """
-        return self._refine_stage(context_pack, existing_code, feedback, project_root)
+        try:
+            return self._refine_stage(
+                context_pack, existing_code, feedback, project_root
+            )
+        except RefineStageFailedException as e:
+            raise ValueError(f"REFINE stage failed: {e}") from e
 
     def _plan_stage(
         self, context_pack: ContextPack, project_root: Path | None = None
-    ) -> dict[str, Any] | None:
+    ) -> dict[str, Any]:
         """
         Execute PLAN stage with symbol resolution loop.
 
@@ -299,11 +435,21 @@ class LLMOrchestrator:
 
         Returns:
             Plan dictionary if successful
+
+        Raises:
+            PlanStageFailedException: If PLAN stage fails after all retries
         """
+        # Validate retry count parameters
+        if self._max_plan_retries < 0:
+            raise ValueError(
+                f"Invalid max_plan_retries: {self._max_plan_retries}. Must be >= 0"
+            )
+
         current_context = context_pack
         retry_count = 0
+        previous_errors: list[PlanStageFailedException] = []
 
-        while retry_count <= self._max_plan_retries:
+        while retry_count < self._max_plan_retries:
             try:
                 logger.info("Executing PLAN stage (attempt %d)", retry_count + 1)
 
@@ -319,7 +465,14 @@ class LLMOrchestrator:
                     plan = json.loads(response_text)
                 except json.JSONDecodeError as e:
                     logger.warning("Failed to parse PLAN response as JSON: %s", e)
-                    return None
+                    error = PlanStageFailedException(
+                        "Failed to parse PLAN response as JSON",
+                        retry_count=retry_count,
+                        cause=e,
+                    )
+                    previous_errors.append(error)
+                    retry_count += 1
+                    continue
 
                 # Check for missing symbols
                 missing_symbols = plan.get("missing_symbols", [])
@@ -340,9 +493,6 @@ class LLMOrchestrator:
                     logger.warning("Could not resolve any missing symbols")
                     # Continue retrying in case the next LLM call doesn't have missing symbols
                     retry_count += 1
-                    if retry_count > self._max_plan_retries:
-                        logger.warning("PLAN stage exceeded maximum retries")
-                        return None
                     continue
 
                 # Add resolved definitions to context pack
@@ -359,16 +509,28 @@ class LLMOrchestrator:
                     retry_count + 1,
                 )
 
+            except PlanStageFailedException:
+                # Re-raise our own exceptions to collect them
+                raise
             except Exception as e:
                 logger.exception("Error in PLAN stage: %s", e)
-                return None
+                error = PlanStageFailedException(
+                    "Unexpected error in PLAN stage", retry_count=retry_count, cause=e
+                )
+                previous_errors.append(error)
+                retry_count += 1
 
         logger.warning("PLAN stage exceeded maximum retries")
-        return None
+        final_error = PlanStageFailedException(
+            f"PLAN stage exceeded maximum retries ({self._max_plan_retries})",
+            retry_count=retry_count,
+        )
+        # Add all previous errors to the final error
+        for error in previous_errors:
+            final_error.add_previous_error(error)
+        raise final_error
 
-    def _generate_stage(
-        self, context_pack: ContextPack, plan: dict[str, Any]
-    ) -> str | None:
+    def _generate_stage(self, context_pack: ContextPack, plan: dict[str, Any]) -> str:
         """
         Execute GENERATE stage.
 
@@ -378,6 +540,9 @@ class LLMOrchestrator:
 
         Returns:
             Generated test code if successful
+
+        Raises:
+            GenerateStageFailedException: If generation fails
         """
         try:
             logger.info("Executing GENERATE stage")
@@ -393,13 +558,17 @@ class LLMOrchestrator:
             generated_code = self._extract_code_from_response(response_text)
             if not generated_code:
                 logger.warning("No code found in GENERATE response")
-                return None
+                raise GenerateStageFailedException("No code found in GENERATE response")
 
             return generated_code
 
+        except GenerateStageFailedException:
+            raise  # Re-raise our own exception
         except Exception as e:
             logger.exception("Error in GENERATE stage: %s", e)
-            return None
+            raise GenerateStageFailedException(
+                "Unexpected error in GENERATE stage", cause=e
+            ) from e
 
     def _refine_stage(
         self,
@@ -407,7 +576,7 @@ class LLMOrchestrator:
         existing_code: str,
         feedback: dict[str, Any],
         project_root: Path | None = None,
-    ) -> str | None:
+    ) -> str:
         """
         Execute REFINE stage with symbol resolution loop.
 
@@ -419,11 +588,21 @@ class LLMOrchestrator:
 
         Returns:
             Refined code if successful
+
+        Raises:
+            RefineStageFailedException: If REFINE stage fails after all retries
         """
+        # Validate retry count parameters
+        if self._max_refine_retries < 0:
+            raise ValueError(
+                f"Invalid max_refine_retries: {self._max_refine_retries}. Must be >= 0"
+            )
+
         current_context = context_pack
         retry_count = 0
+        previous_errors: list[RefineStageFailedException] = []
 
-        while retry_count <= self._max_refine_retries:
+        while retry_count < self._max_refine_retries:
             try:
                 logger.info("Executing REFINE stage (attempt %d)", retry_count + 1)
 
@@ -491,16 +670,35 @@ class LLMOrchestrator:
                 refined_code = self._extract_code_from_response(refined_code)
                 if not refined_code:
                     logger.warning("No code found in REFINE response")
-                    return existing_code  # Return original code
+                    error = RefineStageFailedException(
+                        "No code found in REFINE response", retry_count=retry_count
+                    )
+                    previous_errors.append(error)
+                    retry_count += 1
+                    continue
 
                 return refined_code
 
+            except RefineStageFailedException:
+                # Re-raise our own exceptions to collect them
+                raise
             except Exception as e:
                 logger.exception("Error in REFINE stage: %s", e)
+                error = RefineStageFailedException(
+                    "Unexpected error in REFINE stage", retry_count=retry_count, cause=e
+                )
+                previous_errors.append(error)
                 retry_count += 1
 
         logger.warning("REFINE stage exceeded maximum retries")
-        return existing_code  # Return original code as fallback
+        final_error = RefineStageFailedException(
+            f"REFINE stage exceeded maximum retries ({self._max_refine_retries})",
+            retry_count=retry_count,
+        )
+        # Add all previous errors to the final error
+        for error in previous_errors:
+            final_error.add_previous_error(error)
+        raise final_error
 
     def _create_plan_prompt(self, context_pack: ContextPack) -> str:
         """Create PLAN stage prompt using PromptRegistry."""

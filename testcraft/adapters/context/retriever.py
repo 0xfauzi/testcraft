@@ -20,8 +20,11 @@ def _tokenize(text: str) -> list[str]:
 
 
 class SimpleContextRetriever:
-    def __init__(self, indexer: InMemoryHybridIndexer) -> None:
+    def __init__(
+        self, indexer: InMemoryHybridIndexer, path_registry: Any = None
+    ) -> None:
         self._indexer = indexer
+        self._path_registry = path_registry or indexer._path_registry
 
     def retrieve(
         self,
@@ -73,7 +76,7 @@ class SimpleContextRetriever:
         return {
             "results": [
                 {
-                    "path": c.path,
+                    "path": self._path_registry.get_path(c.path_id) or "",
                     "chunk_id": c.chunk_id,
                     "symbol": c.symbol,
                     "snippet": c.text[:400],

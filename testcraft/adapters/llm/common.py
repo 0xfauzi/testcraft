@@ -23,8 +23,6 @@ def _fix_escape_sequences(text: str) -> str:
     # Fix unescaped backslashes that aren't part of valid JSON escape sequences
     # Valid JSON escape sequences: \" \\ \/ \b \f \n \r \t \uXXXX
 
-    import re
-
     def fix_string_content(match):
         quote, content, end_quote = match.groups()
         if not content:
@@ -42,10 +40,19 @@ def _fix_escape_sequences(text: str) -> str:
                     # Valid escape sequence, keep as is
                     result += content[i : i + 2]
                     i += 2
-                elif next_char == "u" and i + 5 < len(content):
-                    # Unicode escape sequence, keep as is
-                    result += content[i : i + 6]
-                    i += 6
+                elif next_char == "u" and i + 5 <= len(content):
+                    # Validate that we have 4 valid hex digits after \u
+                    if i + 5 < len(content):
+                        hex_part = content[i + 2 : i + 6]
+                        if all(c in "0123456789abcdefABCDEF" for c in hex_part):
+                            # Valid Unicode escape sequence, keep as is
+                            result += content[i : i + 6]
+                            i += 6
+                            continue
+
+                    # Invalid Unicode escape or not enough characters, escape the backslash
+                    result += "\\\\" + next_char
+                    i += 2
                 else:
                     # Invalid escape sequence, escape the backslash
                     result += "\\\\" + next_char
@@ -62,16 +69,12 @@ def _fix_escape_sequences(text: str) -> str:
 
 def _remove_control_chars(text: str) -> str:
     """Remove control characters that can cause JSON parsing issues."""
-    import re
-
     # Remove control characters except for valid JSON whitespace
     return re.sub(r"[\x00-\x08\x0B-\x0C\x0E-\x1F\x7F]", "", text)
 
 
 def _fix_trailing_commas(text: str) -> str:
     """Remove trailing commas that cause JSON parsing errors."""
-    import re
-
     # Remove trailing commas before closing brackets/braces
     text = re.sub(r",\s*}", "}", text)
     text = re.sub(r",\s*]", "]", text)
@@ -84,11 +87,23 @@ def strip_code_fences(text: str) -> str:
 
 
 def balance_braces(text: str) -> str:
-    """Best-effort brace balancing for JSON-like outputs."""
+    """Best-effort brace and bracket balancing for JSON-like outputs."""
+    # Count braces
     open_braces = text.count("{")
     close_braces = text.count("}")
+
+    # Count brackets
+    open_brackets = text.count("[")
+    close_brackets = text.count("]")
+
+    # Add missing closing braces
     if open_braces > close_braces:
         text += "}" * (open_braces - close_braces)
+
+    # Add missing closing brackets
+    if open_brackets > close_brackets:
+        text += "]" * (open_brackets - close_brackets)
+
     return text
 
 
@@ -295,12 +310,18 @@ def validate_and_repair_schema(
                         repair_type = "type_coercion"
                     elif expected_type is list:
                         if isinstance(current_value, str):
-                            # Try to convert string to list
+                            # Convert string to single-item list
                             repaired_data[field] = [current_value]
                             repair_performed = True
                             repair_type = "type_coercion"
-                        else:
+                        elif hasattr(current_value, "__iter__"):
+                            # Convert iterable to list
                             repaired_data[field] = list(current_value)
+                            repair_performed = True
+                            repair_type = "type_coercion"
+                        else:
+                            # Convert non-iterable to single-item list
+                            repaired_data[field] = [current_value]
                             repair_performed = True
                             repair_type = "type_coercion"
                 except (ValueError, TypeError):

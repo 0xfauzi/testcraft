@@ -7,6 +7,7 @@ for refining tests based on pytest failures and other quality issues.
 
 import ast
 import logging
+import subprocess
 import time
 from pathlib import Path
 from typing import Any
@@ -97,77 +98,80 @@ class RefineAdapter:
         """
         test_path = Path(test_file)
         if not test_path.exists():
-            return {
-                "success": False,
-                "error": f"Test file not found: {test_path}",
-                "iterations_used": 0,
-                "final_status": "file_not_found",
-                "fix_instructions": "",
-                "active_import_path": "",
-                "preflight_suggestions": "",
-                "llm_confidence": None,
-                "improvement_areas": [],
-                "iteration": 0,
-            }
+            return self._build_standard_response(
+                success=False,
+                error=f"Test file not found: {test_path}",
+                iterations_used=0,
+                final_status="file_not_found",
+            )
 
         start_time = time.time()
         iteration = 0
         previous_content = None
+        initial_mtime = None
+
+        # Get initial file modification time for race condition detection
+        try:
+            initial_mtime = test_path.stat().st_mtime
+        except Exception:
+            # Continue without race condition protection if we can't get mtime
+            pass
 
         for iteration in range(1, max_iterations + 1):
-            # Check timeout
+            iteration_start_time = time.time()
+            llm_made_changes = False
+
+            # Check total timeout
             if time.time() - start_time > timeout_seconds:
-                return {
-                    "success": False,
-                    "error": f"Timeout after {timeout_seconds} seconds",
-                    "iterations_used": iteration - 1,
-                    "final_status": "timeout",
-                    "fix_instructions": "",
-                    "active_import_path": "",
-                    "preflight_suggestions": "",
-                    "llm_confidence": None,
-                    "improvement_areas": [],
-                    "iteration": iteration,
-                }
+                return self._build_standard_response(
+                    success=False,
+                    error=f"Timeout after {timeout_seconds} seconds",
+                    iterations_used=iteration - 1,
+                    final_status="timeout",
+                )
+
+            # Check for file race condition
+            if initial_mtime is not None:
+                try:
+                    current_mtime = test_path.stat().st_mtime
+                    if current_mtime != initial_mtime:
+                        logger.warning(
+                            "File %s was modified externally during refinement, restarting iteration %d",
+                            test_path,
+                            iteration,
+                        )
+                        # Re-read the file and continue with this iteration
+                        try:
+                            current_content = test_path.read_text(encoding="utf-8")
+                            previous_content = current_content
+                            continue
+                        except Exception as e:
+                            return self._build_standard_response(
+                                success=False,
+                                error=f"Failed to re-read test file after external modification: {e}",
+                                iterations_used=iteration - 1,
+                                final_status="read_error",
+                            )
+                except (OSError, AttributeError) as e:
+                    # If we can't check mtime, continue without race condition protection
+                    logger.debug("Could not check file modification time: %s", e)
 
             # Read current test content
             try:
                 current_content = test_path.read_text(encoding="utf-8")
-            except Exception as e:
-                return {
-                    "success": False,
-                    "error": f"Failed to read test file: {e}",
-                    "iterations_used": iteration - 1,
-                    "final_status": "read_error",
-                    "fix_instructions": "",
-                    "active_import_path": "",
-                    "preflight_suggestions": "",
-                    "llm_confidence": None,
-                    "improvement_areas": [],
-                    "iteration": iteration,
-                }
-
-            # Check for no-change condition
-            if previous_content is not None and current_content == previous_content:
-                # For no-change before LLM, compute context manually
-                active_import_path = self._select_active_import_path(
-                    failure_output=failure_output,
-                    current_content=current_content,
+            except (OSError, UnicodeError) as e:
+                return self._build_standard_response(
+                    success=False,
+                    error=f"Failed to read test file: {e}",
+                    iterations_used=iteration - 1,
+                    final_status="read_error",
                 )
-                preflight_suggestions = self._get_preflight_suggestions(current_content)
-
-                return {
-                    "success": False,
-                    "error": "No changes made in refinement iteration",
-                    "iterations_used": iteration - 1,
-                    "final_status": "no_change",
-                    "fix_instructions": preflight_suggestions,
-                    "active_import_path": active_import_path or "",
-                    "preflight_suggestions": preflight_suggestions,
-                    "llm_confidence": None,
-                    "improvement_areas": [],
-                    "iteration": iteration,
-                }
+            except Exception as e:
+                # validation_result might not be initialized in this scope
+                fallback_validation_result: dict[str, Any] = {}
+                return self._handle_unexpected_error(
+                    e, fallback_validation_result, "", "read", iteration
+                )
 
             # Prepare refinement payload
             payload = self._build_refinement_payload(
@@ -178,6 +182,9 @@ class RefineAdapter:
                 iteration=iteration,
                 **kwargs,
             )
+
+            # Initialize validation_result to ensure it's always defined
+            validation_result: dict[str, Any] = {}
 
             # Get refined content from LLM with validation
             try:
@@ -191,7 +198,8 @@ class RefineAdapter:
                             "refine_validation_failed"
                         ) as span:
                             span.set_attribute(
-                                "validation_reason", validation_result["reason"]
+                                "validation_reason",
+                                validation_result.get("reason", "Unknown"),
                             )
                             span.set_attribute(
                                 "validation_status",
@@ -207,7 +215,7 @@ class RefineAdapter:
                     logger.debug(
                         "LLM refinement validation failed for %s: %s (status: %s)\nDiff snippet:\n%s",
                         test_path,
-                        validation_result["reason"],
+                        validation_result.get("reason", "Unknown"),
                         validation_result.get("status", "unknown"),
                         validation_result.get("diff_snippet", "No diff available"),
                     )
@@ -221,31 +229,28 @@ class RefineAdapter:
                         )
 
                         if self.config.report_suspected_prod_bugs:
-                            return {
-                                "success": False,
-                                "error": "Suspected production bug detected",
-                                "iterations_used": iteration,
-                                "final_status": "prod_bug_suspected",
-                                "suspected_prod_bug": validation_result[
+                            return self._build_standard_response(
+                                success=False,
+                                error="Suspected production bug detected",
+                                iterations_used=iteration,
+                                final_status="prod_bug_suspected",
+                                suspected_prod_bug=validation_result[
                                     "suspected_prod_bug"
                                 ],
-                                "fix_instructions": validation_result.get(
+                                fix_instructions=validation_result.get(
                                     "changes_made", ""
                                 ),
-                                "active_import_path": validation_result.get(
+                                active_import_path=validation_result.get(
                                     "active_import_path", ""
                                 ),
-                                "preflight_suggestions": validation_result.get(
+                                preflight_suggestions=validation_result.get(
                                     "preflight_suggestions", ""
                                 ),
-                                "llm_confidence": validation_result.get(
-                                    "llm_confidence"
-                                ),
-                                "improvement_areas": validation_result.get(
+                                llm_confidence=validation_result.get("llm_confidence"),
+                                improvement_areas=validation_result.get(
                                     "improvement_areas", []
                                 ),
-                                "iteration": iteration,
-                            }
+                            )
 
                     # Map validation status to final_status appropriately
                     validation_status = validation_result.get("status", "unknown")
@@ -266,25 +271,13 @@ class RefineAdapter:
                         # Unknown validation failure
                         final_status = "validation_failed"
 
-                    return {
-                        "success": False,
-                        "error": validation_result["reason"],
-                        "iterations_used": iteration,
-                        "final_status": final_status,
-                        "fix_instructions": validation_result.get("changes_made")
-                        or self._get_preflight_suggestions(current_content),
-                        "active_import_path": validation_result.get(
-                            "active_import_path", ""
-                        ),
-                        "preflight_suggestions": validation_result.get(
-                            "preflight_suggestions", ""
-                        ),
-                        "llm_confidence": validation_result.get("llm_confidence"),
-                        "improvement_areas": validation_result.get(
-                            "improvement_areas", []
-                        ),
-                        "iteration": iteration,
-                    }
+                    return self._build_error_response(
+                        validation_result,
+                        current_content,
+                        error=validation_result.get("reason", "Validation failed"),
+                        final_status=final_status,
+                        iterations_used=iteration,
+                    )
 
             except Exception as e:
                 if self.telemetry_port:
@@ -293,25 +286,23 @@ class RefineAdapter:
                     ) as span:
                         span.set_attribute("error", str(e))
 
-                # For LLM errors, we don't have validation_result, so compute context manually
-                active_import_path = self._select_active_import_path(
-                    failure_output=payload.get("pytest_failure_output", ""),
-                    current_content=current_content,
+                return self._handle_unexpected_error(
+                    e, validation_result, current_content, "llm", iteration
                 )
-                preflight_suggestions = self._get_preflight_suggestions(current_content)
 
-                return {
-                    "success": False,
-                    "error": f"LLM refinement failed: {e}",
-                    "iterations_used": iteration,
-                    "final_status": "llm_error",
-                    "fix_instructions": preflight_suggestions,
-                    "active_import_path": active_import_path or "",
-                    "preflight_suggestions": preflight_suggestions,
-                    "llm_confidence": None,
-                    "improvement_areas": [],
-                    "iteration": iteration,
-                }
+            # Check for no-change condition AFTER LLM processing
+            if (
+                not llm_made_changes
+                and previous_content is not None
+                and current_content == previous_content
+            ):
+                return self._build_error_response(
+                    validation_result,
+                    current_content,
+                    error="No changes made in refinement iteration",
+                    final_status="no_change",
+                    iterations_used=iteration - 1,
+                )
 
             # Apply changes safely via WriterPort or fallback
             try:
@@ -327,27 +318,16 @@ class RefineAdapter:
                                 "write_error", write_result.get("error", "Unknown")
                             )
 
-                    return {
-                        "success": False,
-                        "error": f"Failed to apply refinement: {write_result.get('error', 'Unknown')}",
-                        "iterations_used": iteration,
-                        "final_status": "apply_error",
-                        "fix_instructions": validation_result.get("changes_made")
-                        or self._get_preflight_suggestions(current_content),
-                        "active_import_path": validation_result.get(
-                            "active_import_path", ""
-                        ),
-                        "preflight_suggestions": validation_result.get(
-                            "preflight_suggestions", ""
-                        ),
-                        "llm_confidence": validation_result.get("llm_confidence"),
-                        "improvement_areas": validation_result.get(
-                            "improvement_areas", []
-                        ),
-                        "iteration": iteration,
-                    }
+                    return self._build_error_response(
+                        validation_result,
+                        current_content,
+                        error=f"Failed to apply refinement: {write_result.get('error', 'Unknown')}",
+                        final_status="apply_error",
+                        iterations_used=iteration,
+                    )
 
                 previous_content = current_content
+                llm_made_changes = True  # Mark that LLM made changes
 
                 if self.telemetry_port:
                     with self.telemetry_port.create_child_span(
@@ -365,44 +345,38 @@ class RefineAdapter:
                     ) as span:
                         span.set_attribute("exception", str(e))
 
-                # For write exceptions, we may still have validation_result from earlier
-                return {
-                    "success": False,
-                    "error": f"Failed to apply refinement: {e}",
-                    "iterations_used": iteration,
-                    "final_status": "apply_error",
-                    "fix_instructions": validation_result.get("changes_made", "")
-                    if "validation_result" in locals()
-                    else self._get_preflight_suggestions(current_content),
-                    "active_import_path": validation_result.get(
-                        "active_import_path", ""
-                    )
-                    if "validation_result" in locals()
-                    else "",
-                    "preflight_suggestions": validation_result.get(
-                        "preflight_suggestions", ""
-                    )
-                    if "validation_result" in locals()
-                    else self._get_preflight_suggestions(current_content),
-                    "llm_confidence": validation_result.get("llm_confidence")
-                    if "validation_result" in locals()
-                    else None,
-                    "improvement_areas": validation_result.get("improvement_areas", [])
-                    if "validation_result" in locals()
-                    else [],
-                    "iteration": iteration,
-                }
+                return self._handle_unexpected_error(
+                    e, validation_result, current_content, "write", iteration
+                )
+
+            # Check iteration timeout (30 seconds per iteration max)
+            if time.time() - iteration_start_time > 30:
+                logger.warning(
+                    "Iteration %d exceeded 30 second timeout, moving to next iteration",
+                    iteration,
+                )
 
             # Re-run pytest to verify fixes
-            pytest_result = self._run_pytest_verification(test_path)
+            try:
+                pytest_result = self._run_pytest_verification(test_path)
 
-            if pytest_result["success"]:
-                return {
-                    "success": True,
-                    "refined_content": refined_content,
-                    "iterations_used": iteration,
-                    "final_status": "success",
-                }
+                if pytest_result["success"]:
+                    return self._build_standard_response(
+                        success=True,
+                        refined_content=refined_content,
+                        iterations_used=iteration,
+                        final_status="success",
+                    )
+            except Exception as e:
+                if self.telemetry_port:
+                    with self.telemetry_port.create_child_span(
+                        "refine_pytest_exception"
+                    ) as span:
+                        span.set_attribute("exception", str(e))
+
+                return self._handle_unexpected_error(
+                    e, validation_result, current_content, "pytest", iteration
+                )
             else:
                 # Update failure output for next iteration
                 failure_output = pytest_result.get("output", failure_output)
@@ -416,18 +390,15 @@ class RefineAdapter:
             previous_content if previous_content else ""
         )
 
-        return {
-            "success": False,
-            "error": f"Max iterations ({max_iterations}) reached without success",
-            "iterations_used": max_iterations,
-            "final_status": "max_iterations",
-            "fix_instructions": final_preflight,
-            "active_import_path": final_active_import_path or "",
-            "preflight_suggestions": final_preflight,
-            "llm_confidence": None,
-            "improvement_areas": [],
-            "iteration": max_iterations,
-        }
+        return self._build_standard_response(
+            success=False,
+            error=f"Max iterations ({max_iterations}) reached without success",
+            iterations_used=max_iterations,
+            final_status="max_iterations",
+            fix_instructions=final_preflight,
+            active_import_path=final_active_import_path or "",
+            preflight_suggestions=final_preflight,
+        )
 
     def _build_refinement_payload(
         self,
@@ -1356,7 +1327,7 @@ class RefineAdapter:
             if self.validate_syntax:
                 try:
                     ast.parse(refined_content)
-                except SyntaxError as e:
+                except (SyntaxError, ValueError) as e:
                     return {
                         "success": False,
                         "error": f"Content failed syntax validation before write: {e}",
@@ -1469,10 +1440,17 @@ class RefineAdapter:
                 "output": output,
                 "return_code": return_code,
             }
-        except Exception as e:
+        except (OSError, subprocess.SubprocessError) as e:
             return {
                 "success": False,
                 "output": f"Pytest execution failed: {e}",
+                "return_code": -1,
+            }
+        except Exception as e:
+            logger.error("Unexpected error during pytest execution: %s", e)
+            return {
+                "success": False,
+                "output": f"Unexpected pytest error: {e}",
                 "return_code": -1,
             }
 
@@ -1518,7 +1496,7 @@ class RefineAdapter:
             if src_path.exists() and src_path.is_dir():
                 python_paths.append(str(src_path))
 
-        except Exception as e:
+        except (OSError, ValueError) as e:
             # Log but don't fail - fallback to just test_dir
             logger.debug("Could not detect project root for test PYTHONPATH: %s", e)
 
@@ -1530,6 +1508,116 @@ class RefineAdapter:
         env["PYTHONPATH"] = os.pathsep.join(python_paths)
 
         return env
+
+    def _build_standard_response(self, **kwargs) -> dict[str, Any]:
+        """
+        Build a standardized response dictionary with all required fields.
+
+        Args:
+            **kwargs: Response fields to set
+
+        Returns:
+            Dictionary with all standard fields populated
+        """
+        # Define the complete set of fields with defaults
+        standard_fields = {
+            "success": False,
+            "error": "",
+            "iterations_used": 0,
+            "final_status": "unknown",
+            "refined_content": None,
+            "fix_instructions": "",
+            "active_import_path": "",
+            "preflight_suggestions": "",
+            "llm_confidence": None,
+            "improvement_areas": [],
+            "iteration": 0,
+            "suspected_prod_bug": None,
+        }
+
+        # Update with provided values
+        standard_fields.update(kwargs)
+
+        return standard_fields
+
+    def _build_error_response(
+        self,
+        validation_result: dict[str, Any],
+        current_content: str,
+        error: str,
+        final_status: str,
+        iterations_used: int,
+    ) -> dict[str, Any]:
+        """
+        Build an error response with safe fallbacks for all validation_result fields.
+
+        Args:
+            validation_result: Validation result dictionary (may be incomplete)
+            current_content: Current test file content
+            error: Error message
+            final_status: Final status string
+            iterations_used: Number of iterations used
+
+        Returns:
+            Standardized error response dictionary
+        """
+        return self._build_standard_response(
+            success=False,
+            error=error,
+            iterations_used=iterations_used,
+            final_status=final_status,
+            fix_instructions=validation_result.get("changes_made")
+            or self._get_preflight_suggestions(current_content),
+            active_import_path=validation_result.get("active_import_path", ""),
+            preflight_suggestions=validation_result.get("preflight_suggestions", ""),
+            llm_confidence=validation_result.get("llm_confidence"),
+            improvement_areas=validation_result.get("improvement_areas", []),
+        )
+
+    def _handle_unexpected_error(
+        self,
+        error: Exception,
+        validation_result: dict[str, Any],
+        current_content: str,
+        operation: str,
+        iteration: int,
+    ) -> dict[str, Any]:
+        """
+        Handle unexpected errors with proper context and safe fallbacks.
+
+        Args:
+            error: The exception that occurred
+            validation_result: Validation result dictionary (may be incomplete)
+            current_content: Current test file content
+            operation: Which operation failed (llm, write, pytest, etc.)
+            iteration: Current iteration number
+
+        Returns:
+            Standardized error response dictionary
+        """
+        logger.error(
+            "Unexpected error during %s operation in iteration %d: %s",
+            operation,
+            iteration,
+            error,
+        )
+
+        if self.telemetry_port:
+            with self.telemetry_port.create_child_span(
+                f"refine_{operation}_unexpected_error"
+            ) as span:
+                span.set_attribute("error_type", type(error).__name__)
+                span.set_attribute("error_message", str(error))
+                span.set_attribute("operation", operation)
+                span.set_attribute("iteration", iteration)
+
+        return self._build_error_response(
+            validation_result,
+            current_content,
+            error=f"Unexpected error during {operation}: {error}",
+            final_status=f"{operation}_error",
+            iterations_used=iteration,
+        )
 
     # Implement other required methods from RefinePort
     def refine(

@@ -49,9 +49,14 @@ class BootstrapRunner:
 
         conftest_path = tests_dir / "conftest.py"
 
-        # If conftest already exists and we prefer conftest, use it
+        # If conftest already exists and we prefer conftest, check if it needs bootstrap content
         if conftest_path.exists() and self._prefer_conftest:
-            return BootstrapStrategy.PYTHONPATH_ENV
+            if self._update_existing_conftest_if_needed(
+                conftest_path, import_map.bootstrap_conftest
+            ):
+                return BootstrapStrategy.CONFTEST_FILE
+            else:
+                return BootstrapStrategy.PYTHONPATH_ENV
 
         # If we prefer conftest and no conftest exists, create one
         if self._prefer_conftest and import_map.bootstrap_conftest:
@@ -67,10 +72,72 @@ class BootstrapRunner:
         Args:
             tests_dir: Directory to write conftest.py to
             conftest_content: Content to write to conftest.py
+
+        Raises:
+            ValueError: If conftest_content is empty or tests_dir is not writable
         """
+        if not conftest_content or not conftest_content.strip():
+            raise ValueError("conftest_content cannot be empty")
+
+        if not os.access(tests_dir, os.W_OK):
+            raise ValueError(f"Directory {tests_dir} is not writable")
+
         conftest_path = tests_dir / "conftest.py"
         conftest_path.parent.mkdir(parents=True, exist_ok=True)
-        conftest_path.write_text(conftest_content)
+
+        # Add a marker comment to identify bootstrap-generated content
+        bootstrap_marker = "# TestCraft bootstrap - DO NOT EDIT MANUALLY\n"
+        marked_content = bootstrap_marker + conftest_content
+
+        conftest_path.write_text(marked_content)
+
+    def _update_existing_conftest_if_needed(
+        self, conftest_path: Path, bootstrap_content: str
+    ) -> bool:
+        """Check if existing conftest needs bootstrap content and update if necessary.
+
+        Args:
+            conftest_path: Path to the existing conftest.py file
+            bootstrap_content: Bootstrap content to potentially add
+
+        Returns:
+            True if conftest was updated with bootstrap content, False otherwise
+        """
+        if not bootstrap_content or not bootstrap_content.strip():
+            return False
+
+        try:
+            existing_content = conftest_path.read_text()
+        except (OSError, UnicodeDecodeError):
+            # If we can't read the file, assume it needs bootstrap content
+            return False
+
+        # Check if bootstrap content is already present
+        bootstrap_marker = "# TestCraft bootstrap - DO NOT EDIT MANUALLY"
+        if bootstrap_marker in existing_content:
+            return True  # Already has bootstrap content
+
+        # Check if it has sys.path modifications (broader detection)
+        if any(
+            pattern in existing_content
+            for pattern in ["sys.path.insert", "sys.path.append", "sys.path.prepend"]
+        ):
+            return True  # Already has sys.path modifications
+
+        # Add bootstrap content to existing conftest
+        try:
+            bootstrap_marker = "# TestCraft bootstrap - DO NOT EDIT MANUALLY\n"
+            updated_content = (
+                existing_content.rstrip()
+                + "\n\n"
+                + bootstrap_marker
+                + bootstrap_content
+            )
+            conftest_path.write_text(updated_content)
+            return True
+        except OSError:
+            # If we can't write, fall back to not using bootstrap
+            return False
 
     def set_pythonpath_env(self, sys_path_roots: list[str]) -> dict[str, str]:
         """Set PYTHONPATH environment variable for bootstrap.
@@ -118,8 +185,28 @@ class BootstrapRunner:
         conftest_path = tests_dir / "conftest.py"
 
         if conftest_path.exists():
-            content = conftest_path.read_text()
+            try:
+                content = conftest_path.read_text()
+            except (OSError, UnicodeDecodeError):
+                # If we can't read the file, don't try to clean it up
+                return
 
-            # Check if this looks like a bootstrap-generated conftest
-            if "sys.path.insert" in content or "sys.path.append" in content:
-                conftest_path.unlink()
+            # Check for bootstrap-generated content markers
+            bootstrap_markers = [
+                "# TestCraft bootstrap - DO NOT EDIT MANUALLY",
+                "sys.path.insert",
+                "sys.path.append",
+                "sys.path.prepend",
+            ]
+
+            # Only clean up if we find bootstrap markers
+            has_bootstrap_content = any(
+                marker in content for marker in bootstrap_markers
+            )
+
+            if has_bootstrap_content:
+                try:
+                    conftest_path.unlink()
+                except OSError:
+                    # If we can't delete, silently ignore
+                    pass

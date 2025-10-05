@@ -141,7 +141,6 @@ class GenerateUseCase:
         # Initialize without status tracker initially - will be set per operation
         self._batch_executor = BatchExecutor(
             telemetry_port=telemetry_port,
-            executor=self._executor,
         )
 
         self._pytest_refiner = PytestRefiner(
@@ -389,6 +388,21 @@ class GenerateUseCase:
             # Get source path for this plan
             source_path = self._plan_builder.get_source_path_for_plan(plan)
 
+            # ✅ FIX: Extract project_root at function scope using existing utility
+            # This ensures project_root is available throughout the method
+            project_root = None
+            if source_path:
+                try:
+                    project_root = self._context_pack_builder._find_project_root(
+                        source_path
+                    )
+                except Exception as e:
+                    logger.warning(
+                        "Failed to detect project root for %s: %s", source_path, e
+                    )
+                    # Fallback: use source file's parent
+                    project_root = source_path.parent
+
             # Build code content from plan elements
             code_content = self._content_builder.build_code_content(plan, source_path)
 
@@ -420,21 +434,6 @@ class GenerateUseCase:
             module_path_info = {}
             if source_path:
                 try:
-                    # Get project root from context_data or detect automatically
-                    project_root = None
-                    if context_data.get("project_structure"):
-                        # Try to extract project root from context structure
-                        project_structure = context_data["project_structure"]
-                        if isinstance(
-                            project_structure, dict
-                        ) and project_structure.get("name"):
-                            # This is a simplified approach - in practice you might need more logic
-                            project_root = source_path.parent
-                            while project_root != project_root.parent:
-                                if (project_root / "pyproject.toml").exists():
-                                    break
-                                project_root = project_root.parent
-
                     module_path_info = ModulePathDeriver.derive_module_path(
                         source_path, project_root
                     )
@@ -500,35 +499,8 @@ class GenerateUseCase:
             # Use LLMOrchestrator for PLAN/GENERATE/REFINE with symbol resolution
             # Check if context is available - if so, use ContextPackBuilder
             if enhanced_context is not None:
-                # First, build a ContextPack for this target
-
-                # Create target information
-                # target = Target(
-                #     module_file=str(source_path),
-                #     object=plan.elements_to_test[0].name
-                #     if plan.elements_to_test
-                #     else "unknown",
-                # )
-
-                # Import map will be created in the context pack builder
-
-                # Create focal information
-                # focal = Focal(
-                #     source=code_content,
-                #     signature="def "
-                #     + (
-                #         plan.elements_to_test[0].name.split(".")[-1]
-                #         if plan.elements_to_test
-                #         else "unknown"
-                #     )
-                #     + "(...):",
-                #     docstring=plan.elements_to_test[0].docstring
-                #     if plan.elements_to_test
-                #     else None,
-                # )
-
-                # Build complete ContextPack using ContextPackBuilder
-                # ✅ DO: Use ContextPackBuilder.build_context_pack() for all ContextPack creation
+                # ✅ Build complete ContextPack using ContextPackBuilder
+                # ContextPackBuilder handles Target, Focal, and ImportMap creation internally
                 context_pack = self._context_pack_builder.build_context_pack(
                     target_file=Path(source_path),
                     target_object=plan.elements_to_test[0].name
@@ -537,8 +509,18 @@ class GenerateUseCase:
                     project_root=Path(project_root) if project_root else None,
                 )
 
-                # ✅ DO: Use context_pack.import_map exclusively (no duplicate resolution)
-                # The ContextPackBuilder handles all import resolution internally
+                # Import Resolution Flow (Authoritative):
+                # 1. ContextPackBuilder calls ImportResolver.resolve(target_file)
+                # 2. ImportResolver produces canonical ImportMap with:
+                #    - target_import: canonical import statement
+                #    - sys_path_roots: PYTHONPATH directories
+                #    - needs_bootstrap: whether conftest.py needed
+                #    - bootstrap_conftest: conftest.py content if needed
+                # 3. ImportMap embedded in ContextPack.import_map
+                # 4. LLMOrchestrator extracts import_map from ContextPack for prompts
+                #
+                # Note: ModulePathDeriver provides supplementary import suggestions
+                #       but ContextPack.import_map is the authoritative source.
 
                 # Use LLMOrchestrator for PLAN/GENERATE workflow
                 orchestrator_result = self._llm_orchestrator.plan_and_generate(
@@ -981,8 +963,9 @@ class GenerateUseCase:
 
         bootstrap_runner = BootstrapRunner(prefer_conftest=True)
 
-        # Create coverage evaluator (stub for now)
-        coverage_evaluator = None  # This would need proper initialization
+        # ✅ FIX: Use existing coverage evaluator instance
+        # The coverage evaluator is already initialized in __init__ (lines 121-124)
+        coverage_evaluator = self._coverage_evaluator
 
         # Create quality gates service
         quality_gates_service = QualityGatesService(

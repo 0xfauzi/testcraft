@@ -146,7 +146,7 @@ class SymbolResolver:
                 return parts[0], parts[1], parts[2]
             else:
                 # More than 3 parts - treat last part as name, middle parts as class
-                return ".".join(parts[:-2]), ".".join(parts[-2:-1]), parts[-1]
+                return ".".join(parts[:-2]), parts[-2], parts[-1]
         else:
             # Just a name - assume it's in the current module
             return "", None, symbol
@@ -169,18 +169,21 @@ class SymbolResolver:
             # For now, assume we're in the project root
             project_root = Path.cwd()
 
+        # Convert dotted module name to path (e.g., "testcraft.domain.models" -> "testcraft/domain/models")
+        module_path_parts = module_name.replace(".", "/")
+
         # Try common module locations
         candidate_paths = [
-            project_root / f"{module_name}.py",
-            project_root / f"{module_name}/__init__.py",
+            project_root / f"{module_path_parts}.py",
+            project_root / f"{module_path_parts}/__init__.py",
         ]
 
         # Try src/ layout
         if (project_root / "src").exists():
             candidate_paths.extend(
                 [
-                    project_root / "src" / f"{module_name}.py",
-                    project_root / "src" / f"{module_name}/__init__.py",
+                    project_root / "src" / f"{module_path_parts}.py",
+                    project_root / "src" / f"{module_path_parts}/__init__.py",
                 ]
             )
 
@@ -188,11 +191,24 @@ class SymbolResolver:
             if path.exists():
                 return path
 
-        # Try to resolve using import resolver
+        # Try to resolve using import resolver as a fallback
         try:
-            # The import resolver might give us hints about where the module is located
-            # For now, this is a simplified implementation
-            self._import_resolver.resolve_import(module_name, project_root)
+            # The import resolver can help locate the module file
+            # Note: ImportResolver.resolve() expects a file path, so we need to
+            # construct a potential path first
+            potential_path = project_root / f"{module_path_parts}.py"
+            import_map = self._import_resolver.resolve(potential_path)
+            # Extract the actual module file path from sys_path_roots if available
+            if import_map and import_map.get("sys_path_roots"):
+                # Try to find the module in the resolved sys.path roots
+                for sys_path_root in import_map["sys_path_roots"]:
+                    root = Path(sys_path_root)
+                    for candidate in [
+                        root / f"{module_path_parts}.py",
+                        root / f"{module_path_parts}/__init__.py",
+                    ]:
+                        if candidate.exists():
+                            return candidate
         except Exception as e:
             logger.debug("Import resolver failed for %s: %s", module_name, e)
 
@@ -249,17 +265,34 @@ class SymbolResolver:
         Returns:
             True if the element matches
         """
-        # Get element name and type
+        # Get element name and type with defensive checks
         element_name = getattr(element, "name", "")
         element_type = getattr(element, "type", "")
+
+        # Validate that element has required attributes
+        if not element_name or not element_type:
+            logger.debug("Element missing name or type attributes")
+            return False
 
         # Check if this is the symbol we're looking for
         if class_name:
             # Looking for a method: element_name should be "Class.method"
             expected_name = f"{class_name}.{symbol_name}"
-            return element_name == expected_name and (
+
+            # Try exact match first (handles cases where ParserPort includes class prefix)
+            if element_name == expected_name and (
                 element_type == TestElementType.METHOD or element_type == "method"
-            )
+            ):
+                return True
+
+            # Fallback: check if element_name matches just the symbol_name
+            # (handles cases where ParserPort doesn't include class prefix)
+            if element_name == symbol_name and (
+                element_type == TestElementType.METHOD or element_type == "method"
+            ):
+                return True
+
+            return False
         else:
             # Looking for a function: element_name should be "function"
             return element_name == symbol_name and (

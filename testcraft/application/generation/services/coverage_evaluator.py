@@ -62,7 +62,11 @@ class CoverageEvaluator:
                 return summary
 
             except Exception as e:
-                logger.warning("Failed to measure initial coverage: %s", e)
+                logger.warning(
+                    "Failed to measure initial coverage: %s (type: %s)",
+                    e,
+                    type(e).__name__,
+                )
                 # Return empty coverage data rather than failing
                 return {
                     "overall_line_coverage": 0.0,
@@ -70,6 +74,7 @@ class CoverageEvaluator:
                     "files_covered": 0,
                     "total_lines": 0,
                     "missing_coverage": {},
+                    "error": str(e),
                 }
 
     def measure_final(self, source_files: list[Path]) -> dict[str, Any]:
@@ -96,7 +101,11 @@ class CoverageEvaluator:
                 return summary
 
             except Exception as e:
-                logger.warning("Failed to measure final coverage: %s", e)
+                logger.warning(
+                    "Failed to measure final coverage: %s (type: %s)",
+                    e,
+                    type(e).__name__,
+                )
                 # Return empty coverage data rather than failing
                 return {
                     "overall_line_coverage": 0.0,
@@ -104,6 +113,7 @@ class CoverageEvaluator:
                     "files_covered": 0,
                     "total_lines": 0,
                     "missing_coverage": {},
+                    "error": str(e),
                 }
 
     def calculate_delta(
@@ -132,6 +142,13 @@ class CoverageEvaluator:
             final_lines = final_coverage.get("total_lines", 0)
             lines_delta = final_lines - initial_lines
 
+            # Calculate improvement percentage correctly
+            improvement_percentage = 0.0
+            if line_delta > 0 and initial_line > 0:
+                improvement_percentage = (line_delta / initial_line) * 100
+                # Clamp to reasonable bounds (max 1000% improvement)
+                improvement_percentage = min(improvement_percentage, 1000.0)
+
             return {
                 "line_coverage_delta": line_delta,
                 "branch_coverage_delta": branch_delta,
@@ -140,11 +157,13 @@ class CoverageEvaluator:
                 "final_line_coverage": final_line,
                 "initial_branch_coverage": initial_branch,
                 "final_branch_coverage": final_branch,
-                "improvement_percentage": (line_delta * 100) if line_delta > 0 else 0.0,
+                "improvement_percentage": improvement_percentage,
             }
 
         except Exception as e:
-            logger.warning("Failed to calculate coverage delta: %s", e)
+            logger.warning(
+                "Failed to calculate coverage delta: %s (type: %s)", e, type(e).__name__
+            )
             return {
                 "line_coverage_delta": 0.0,
                 "branch_coverage_delta": 0.0,

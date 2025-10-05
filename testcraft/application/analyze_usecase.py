@@ -8,11 +8,13 @@ actually generating tests.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from pathlib import Path
 from typing import Any
 
-from ..adapters.io.file_discovery import FileDiscoveryService
+from ..adapters.io.file_discovery import FileDiscoveryError, FileDiscoveryService
+from ..adapters.parsing.codebase_parser import CodebaseParser, ParseError
 from ..adapters.parsing.test_mapper import TestMapper
 from ..domain.models import AnalysisReport
 from ..ports.coverage_port import CoveragePort
@@ -74,6 +76,7 @@ class AnalyzeUseCase:
         self._current_project_path: Path | None = None
         self._cached_test_files: list[str] | None = None
         self._test_mapper = TestMapper()
+        self._codebase_parser = CodebaseParser()
 
     async def analyze_generation_needs(
         self,
@@ -112,7 +115,20 @@ class AnalyzeUseCase:
                     self._cached_test_files = self._file_discovery.discover_test_files(
                         project_path
                     )
-                except Exception:
+                except FileDiscoveryError as e:
+                    logger.warning(
+                        "Test file discovery failed for %s: %s. Assuming no tests exist.",
+                        project_path,
+                        e,
+                    )
+                    self._cached_test_files = []
+                except Exception as e:
+                    logger.error(
+                        "Unexpected error during test file discovery for %s: %s",
+                        project_path,
+                        e,
+                        exc_info=True,
+                    )
                     self._cached_test_files = []
 
                 # Step 1: Sync state and discover files
@@ -249,7 +265,9 @@ class AnalyzeUseCase:
                     file_paths = [str(f) for f in target_files]
                     files = [
                         Path(f)
-                        for f in self._file_discovery.filter_existing_files(file_paths)
+                        for f in self._file_discovery.filter_existing_files(
+                            file_paths, project_path
+                        )
                     ]
                     span.set_attribute("discovery_method", "target_files")
                 else:
@@ -292,7 +310,11 @@ class AnalyzeUseCase:
         with self._telemetry.create_child_span("measure_initial_coverage") as span:
             try:
                 file_paths = [str(f) for f in source_files]
-                coverage_data = self._coverage.measure_coverage(file_paths)
+
+                # Run synchronous coverage measurement in thread pool to avoid blocking
+                coverage_data = await asyncio.to_thread(
+                    self._coverage.measure_coverage, file_paths
+                )
                 summary = self._coverage.get_coverage_summary(coverage_data)
 
                 span.set_attribute("files_measured", len(coverage_data))
@@ -407,23 +429,65 @@ class AnalyzeUseCase:
             if not test_files:
                 return False
 
-            # Parse source elements
-            parse_result = self._coverage  # placeholder to keep linter context
-            del parse_result
-            from ..adapters.parsing.codebase_parser import CodebaseParser
+            # Parse source elements using reusable parser instance
+            parse_result = self._codebase_parser.parse_file(file_path)
 
-            parser = CodebaseParser()
-            parse_result = parser.parse_file(file_path)
+            # Validate parse result structure
+            if not isinstance(parse_result, dict):
+                logger.warning(
+                    "Invalid parse result type for %s: expected dict, got %s",
+                    file_path,
+                    type(parse_result),
+                )
+                return False
+
             elements = parse_result.get("elements", [])
             if not elements:
                 return False
 
+            # Validate elements have required attributes
+            if not all(
+                hasattr(elem, "name") and hasattr(elem, "type") for elem in elements
+            ):
+                logger.warning(
+                    "Invalid elements structure in parse result for %s", file_path
+                )
+                return False
+
             # Map tests to source elements
             mapping = self._test_mapper.map_tests(elements, existing_tests=test_files)
-            coverage_pct = float(mapping.get("coverage_percentage", 0.0))
+
+            # Validate mapping structure
+            if not isinstance(mapping, dict) or "coverage_percentage" not in mapping:
+                logger.warning(
+                    "Invalid test mapping result for %s: missing coverage_percentage",
+                    file_path,
+                )
+                return False
+
+            coverage_pct = float(mapping["coverage_percentage"])
             return coverage_pct > 0.0
 
-        except Exception:
+        except ParseError as e:
+            logger.debug(
+                "Failed to parse %s for test detection: %s. Using filename heuristics.",
+                file_path,
+                e,
+            )
+            # Fallback: simple filename-based heuristics
+            potential_test_files = [
+                file_path.parent / f"test_{file_path.name}",
+                file_path.parent / f"{file_path.stem}_test.py",
+                file_path.parent.parent / "tests" / f"test_{file_path.name}",
+            ]
+            return any(test_file.exists() for test_file in potential_test_files)
+        except Exception as e:
+            logger.warning(
+                "Unexpected error checking tests for %s: %s. Using filename heuristics.",
+                file_path,
+                e,
+                exc_info=True,
+            )
             # Fallback: simple filename-based heuristics
             potential_test_files = [
                 file_path.parent / f"test_{file_path.name}",

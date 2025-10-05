@@ -586,6 +586,48 @@ class TestEdgeCases:
                 # Symlinks should be handled gracefully
                 assert len(layout_info.src_roots) >= 1
 
+    def test_package_detection_across_multiple_source_roots_bug_fix(self):
+        """Test the fix for package detection when package exists in second source root but not first.
+
+        This test specifically verifies the control flow bug fix in _convert_to_repo_layout_info().
+        The bug was that the break statement was outside the try block, causing the loop to exit
+        prematurely when a ValueError occurred (package_dir not under first source_root).
+        """
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            project_root = Path(tmp_dir)
+
+            # Create multiple source roots
+            (project_root / "src").mkdir()
+            (project_root / "lib").mkdir()
+
+            # Create a package that exists under the second source root (lib) but not the first (src)
+            (project_root / "lib" / "mypackage").mkdir()
+            (project_root / "lib" / "mypackage" / "__init__.py").write_text("")
+            (project_root / "lib" / "mypackage" / "module.py").write_text(
+                "# Module in lib"
+            )
+
+            # Importantly: do NOT create mypackage in src/
+
+            layout_info = PackagingDetector.detect_repo_layout(project_root)
+
+            # Verify that lib source root is detected (contains the package)
+            src_root_names = {root.name for root in layout_info.src_roots}
+            assert "lib" in src_root_names
+
+            # The critical test: verify that mypackage is correctly detected
+            # from the lib/ source root, even though src/ is empty
+            assert "mypackage" in layout_info.packages, (
+                "Package 'mypackage' should be detected from lib/ source root. "
+                "This test fails if the control flow bug is present (would exit early)."
+            )
+
+            # Verify the import mapping is correct
+            module_py_path = str(
+                (project_root / "lib" / "mypackage" / "module.py").resolve()
+            )
+            assert layout_info.mapping.get(module_py_path) == "mypackage.module"
+
 
 if __name__ == "__main__":
     pytest.main([__file__])

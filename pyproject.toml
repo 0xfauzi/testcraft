@@ -24,6 +24,8 @@ dependencies = [
     "textual>=6.1.0",
     "textual-dev>=1.7.0",
     "textual-web>=0.4.2",
+    # Coverage measurement
+    "coverage>=7.4.0", # Code coverage measurement
 ]
 
 [project.scripts]
@@ -58,7 +60,7 @@ dev = [
 [tool.ruff]
 target-version = "py311"
 line-length = 88
-lint.select = [
+select = [
     "E",  # pycodestyle errors
     "W",  # pycodestyle warnings
     "F",  # pyflakes
@@ -67,12 +69,12 @@ lint.select = [
     "C4", # flake8-comprehensions
     "UP", # pyupgrade
 ]
-lint.ignore = [
+ignore = [
     "E501",  # line too long, handled by formatter
     "B008",  # do not perform function calls in argument defaults
 ]
 
-[tool.ruff.lint.per-file-ignores]
+[tool.ruff.per-file-ignores]
 "__init__.py" = ["F401"]
 
 

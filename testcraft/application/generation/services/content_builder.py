@@ -8,6 +8,7 @@ and test file path determination with per-run caching.
 from __future__ import annotations
 
 import logging
+from collections import OrderedDict
 from pathlib import Path
 from typing import Any
 
@@ -33,8 +34,9 @@ class ContentBuilder:
             parser_port: Port for code parsing operations
         """
         self._parser = parser_port
-        # Lightweight per-run cache to avoid re-parsing files
-        self._parse_cache: dict[Path, dict[str, Any]] = {}
+        # Lightweight per-run cache to avoid re-parsing files with LRU eviction
+        self._parse_cache: OrderedDict[Path, dict[str, Any]] = OrderedDict()
+        self._max_cache_size = 100  # Maximum number of files to cache
 
     def build_code_content(
         self, plan: TestGenerationPlan, source_path: Path | None = None
@@ -76,7 +78,9 @@ class ContentBuilder:
                     code_parts.extend(import_lines[:100])  # cap number of import lines
                     code_parts.append("")
             except Exception as e:
-                logger.debug("Failed to parse source file for plan: %s", e)
+                logger.warning(
+                    "Failed to parse source file %s for plan: %s", source_path, e
+                )
 
         # Cap sizes to keep prompt manageable
         PER_ELEMENT_CHAR_LIMIT = 4000
@@ -101,13 +105,59 @@ class ContentBuilder:
             if element.name in source_content_map:
                 element_source = source_content_map.get(element.name, "")
             # Fallback: slice from source_lines using recorded line_range
-            elif source_lines is not None:
+            elif (
+                source_lines is not None
+                and hasattr(element, "line_range")
+                and element.line_range
+            ):
                 try:
                     start, end = element.line_range
-                    # line_range is inclusive
-                    snippet = "\n".join(source_lines[start - 1 : end])
-                    element_source = snippet
-                except Exception:
+                    # Validate line_range format and values
+                    if (
+                        not isinstance(element.line_range, tuple | list)
+                        or len(element.line_range) != 2
+                    ):
+                        logger.warning(
+                            "Invalid line_range format for element %s: %s",
+                            element.name,
+                            element.line_range,
+                        )
+                        element_source = ""
+                    elif not isinstance(start, int) or not isinstance(end, int):
+                        logger.warning(
+                            "Invalid line_range types for element %s: start=%s (%s), end=%s (%s)",
+                            element.name,
+                            start,
+                            type(start).__name__,
+                            end,
+                            type(end).__name__,
+                        )
+                        element_source = ""
+                    elif start < 1 or end < start:
+                        logger.warning(
+                            "Invalid line_range values for element %s: start=%d, end=%d",
+                            element.name,
+                            start,
+                            end,
+                        )
+                        element_source = ""
+                    elif start > len(source_lines) or end > len(source_lines):
+                        logger.warning(
+                            "line_range out of bounds for element %s: (%d, %d), source_lines length: %d",
+                            element.name,
+                            start,
+                            end,
+                            len(source_lines),
+                        )
+                        element_source = ""
+                    else:
+                        # line_range is inclusive
+                        snippet = "\n".join(source_lines[start - 1 : end])
+                        element_source = snippet
+                except Exception as e:
+                    logger.warning(
+                        "Error extracting source for element %s: %s", element.name, e
+                    )
                     element_source = ""
 
             # Final fallback to prior minimal stub if we couldn't recover source
@@ -156,8 +206,23 @@ class ContentBuilder:
         Returns:
             Parse result dictionary
         """
-        if file_path not in self._parse_cache:
+        # Move to end to mark as recently used (LRU)
+        if file_path in self._parse_cache:
+            self._parse_cache.move_to_end(file_path)
+            return self._parse_cache[file_path]
+
+        # Evict oldest entries if cache is at max size
+        if len(self._parse_cache) >= self._max_cache_size:
+            evicted_path = self._parse_cache.popitem(last=False)  # Remove oldest
+            logger.debug("Cache limit reached, evicted %s", evicted_path)
+
+        try:
             self._parse_cache[file_path] = self._parser.parse_file(file_path)
+        except Exception as e:
+            logger.warning("Failed to parse file %s: %s", file_path, e)
+            # Return empty dict to avoid breaking the calling code
+            self._parse_cache[file_path] = {}
+
         return self._parse_cache[file_path]
 
     def clear_cache(self):

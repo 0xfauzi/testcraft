@@ -213,7 +213,9 @@ class TestFileDiscoveryService:
             sample_project / "__pycache__" / "module1.pyc",  # Excluded dir
         ]
 
-        filtered_files = file_discovery_service.filter_existing_files(file_paths)
+        filtered_files = file_discovery_service.filter_existing_files(
+            file_paths, sample_project
+        )
         filtered_names = [Path(f).name for f in filtered_files]
 
         assert "module1.py" in filtered_names
@@ -370,10 +372,8 @@ class TestFileDiscoveryService:
         """Test error handling in statistics generation."""
         nonexistent_path = Path("/nonexistent")
 
-        stats = file_discovery_service.get_discovery_stats(nonexistent_path)
-
-        assert "error" in stats
-        assert "project_path" in stats
+        with pytest.raises(FileDiscoveryError, match="Project path does not exist"):
+            file_discovery_service.get_discovery_stats(nonexistent_path)
 
     def test_file_discovery_error_attributes(self):
         """Test FileDiscoveryError attributes."""

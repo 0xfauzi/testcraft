@@ -7,7 +7,6 @@ centralizes file discovery logic that was previously duplicated across
 multiple use cases.
 """
 
-import fnmatch
 import logging
 import os
 from pathlib import Path
@@ -41,8 +40,14 @@ class FileDiscoveryService:
         Args:
             config: Test pattern configuration for exclusions and patterns.
                    If None, uses default configuration.
+
+        Raises:
+            FileDiscoveryError: If configuration contains invalid patterns.
         """
         self.config = config or TestPatternConfig()
+
+        # Validate patterns in configuration
+        self._validate_patterns()
 
         # Cache for performance optimization
         self._exclude_dirs_set: set[str] | None = None
@@ -62,6 +67,34 @@ class FileDiscoveryService:
             self._exclude_patterns_set = set(self.config.exclude)
         return self._exclude_patterns_set
 
+    def _validate_patterns(self) -> None:
+        """
+        Validate patterns in the configuration to catch invalid patterns early.
+
+        Raises:
+            FileDiscoveryError: If any pattern is invalid.
+        """
+        all_patterns = list(self.config.exclude) + list(self.config.test_patterns)
+
+        for pattern in all_patterns:
+            if not isinstance(pattern, str):
+                raise FileDiscoveryError(
+                    f"Pattern must be a string, got {type(pattern)}: {pattern}"
+                )
+
+            if not pattern.strip():
+                raise FileDiscoveryError(
+                    f"Pattern cannot be empty or whitespace: {pattern}"
+                )
+
+            # Test pattern with a sample path to catch syntax errors early
+            try:
+                test_path = Path("/test/path.py")
+                # Use our _matches_pattern method to test the pattern
+                self._matches_pattern(str(test_path), pattern)
+            except Exception as e:
+                raise FileDiscoveryError(f"Invalid pattern '{pattern}': {e}") from e
+
     def discover_source_files(
         self,
         project_path: str | Path,
@@ -80,18 +113,47 @@ class FileDiscoveryService:
             List of discovered source file paths (absolute paths)
 
         Raises:
-            FileDiscoveryError: If discovery fails
+            FileDiscoveryError: If discovery fails or input validation fails
         """
+        # Input validation
+        if not project_path:
+            raise FileDiscoveryError("Project path cannot be empty")
+
         try:
             project_path = Path(project_path)
+        except (TypeError, ValueError) as e:
+            raise FileDiscoveryError(
+                f"Invalid project path format: {project_path} - {e}"
+            ) from e
+
+        if file_patterns is not None:
+            if not isinstance(file_patterns, list):
+                raise FileDiscoveryError(
+                    f"file_patterns must be a list, got {type(file_patterns)}"
+                )
+            for pattern in file_patterns:
+                if not isinstance(pattern, str):
+                    raise FileDiscoveryError(
+                        f"All file patterns must be strings, got {type(pattern)}: {pattern}"
+                    )
+
+        try:
             if not project_path.exists():
                 raise FileDiscoveryError(f"Project path does not exist: {project_path}")
+
+            if not project_path.is_dir():
+                raise FileDiscoveryError(
+                    f"Project path must be a directory: {project_path}"
+                )
+
+            # Cache resolved project path for performance
+            resolved_project_path = project_path.resolve()
 
             patterns = file_patterns or ["*.py"]
             source_files = []
 
             logger.debug(
-                f"Discovering source files in {project_path} with patterns: {patterns}"
+                f"Discovering source files in {resolved_project_path} with patterns: {patterns}"
             )
 
             # Use os.walk for efficient directory traversal with exclusion
@@ -113,14 +175,27 @@ class FileDiscoveryService:
                     rel_path = None
                     try:
                         rel_path = str(
-                            file_path.resolve().relative_to(project_path.resolve())
+                            file_path.resolve().relative_to(resolved_project_path)
                         )
-                    except Exception:
+                    except ValueError:
+                        # File is not under project path - use filename only
                         rel_path = str(file_path.name)
+                        logger.debug(
+                            f"File {file_path} is not under project path {resolved_project_path}"
+                        )
+                    except (OSError, PermissionError) as e:
+                        # Critical filesystem errors should be re-raised
+                        logger.error(f"Filesystem error accessing {file_path}: {e}")
+                        raise FileDiscoveryError(
+                            f"Failed to access file {file_path}: {e}", cause=e
+                        ) from e
 
                     matches_pattern = any(
-                        fnmatch.fnmatch(filename, pattern)
-                        or fnmatch.fnmatch(rel_path, pattern)
+                        self._matches_pattern(filename, pattern)
+                        or (
+                            rel_path is not None
+                            and self._matches_pattern(rel_path, pattern)
+                        )
                         for pattern in patterns
                     )
                     if not matches_pattern:
@@ -128,7 +203,9 @@ class FileDiscoveryService:
 
                     total_found += 1
                     should_include = self._should_include_file(
-                        file_path, project_path, include_test_files=include_test_files
+                        file_path,
+                        resolved_project_path,
+                        include_test_files=include_test_files,
                     )
 
                     logger.debug(f"File {filename}: should_include={should_include}")
@@ -142,16 +219,28 @@ class FileDiscoveryService:
                 f"Total files scanned: {total_found}, included: {len(source_files)}"
             )
             logger.info(
-                f"Discovered {len(source_files)} source files in {project_path} (patterns: {patterns})"
+                f"Discovered {len(source_files)} source files in {resolved_project_path} (patterns: {patterns})"
             )
             return source_files
 
-        except Exception as e:
-            if isinstance(e, FileDiscoveryError):
-                raise
-            logger.exception(f"Failed to discover source files: {e}")
+        except FileDiscoveryError:
+            # Re-raise our own exceptions
+            raise
+        except (OSError, PermissionError) as e:
+            # Critical filesystem errors should be re-raised
+            logger.error(
+                f"Filesystem error during source file discovery in {project_path}: {e}"
+            )
             raise FileDiscoveryError(
-                f"Source file discovery failed: {e}", cause=e
+                f"Source file discovery failed due to filesystem error: {e}", cause=e
+            ) from e
+        except Exception as e:
+            # Log unexpected errors for debugging but wrap them
+            logger.exception(
+                f"Unexpected error during source file discovery in {project_path}: {e}"
+            )
+            raise FileDiscoveryError(
+                f"Source file discovery failed due to unexpected error: {e}", cause=e
             ) from e
 
     def discover_test_files(
@@ -172,18 +261,47 @@ class FileDiscoveryService:
             List of discovered test file paths (absolute paths)
 
         Raises:
-            FileDiscoveryError: If discovery fails
+            FileDiscoveryError: If discovery fails or input validation fails
         """
+        # Input validation
+        if not project_path:
+            raise FileDiscoveryError("Project path cannot be empty")
+
         try:
             project_path = Path(project_path)
+        except (TypeError, ValueError) as e:
+            raise FileDiscoveryError(
+                f"Invalid project path format: {project_path} - {e}"
+            ) from e
+
+        if test_patterns is not None:
+            if not isinstance(test_patterns, list):
+                raise FileDiscoveryError(
+                    f"test_patterns must be a list, got {type(test_patterns)}"
+                )
+            for pattern in test_patterns:
+                if not isinstance(pattern, str):
+                    raise FileDiscoveryError(
+                        f"All test patterns must be strings, got {type(pattern)}: {pattern}"
+                    )
+
+        try:
             if not project_path.exists():
                 raise FileDiscoveryError(f"Project path does not exist: {project_path}")
+
+            if not project_path.is_dir():
+                raise FileDiscoveryError(
+                    f"Project path must be a directory: {project_path}"
+                )
+
+            # Cache resolved project path for performance
+            resolved_project_path = project_path.resolve()
 
             patterns = test_patterns or self.config.test_patterns
             test_files = []
 
             logger.debug(
-                f"Discovering test files in {project_path} with patterns: {patterns}"
+                f"Discovering test files in {resolved_project_path} with patterns: {patterns}"
             )
 
             # Use os.walk for efficient directory traversal with exclusion
@@ -204,7 +322,7 @@ class FileDiscoveryService:
 
                     # Quick check: must match at least one pattern
                     matches_pattern = any(
-                        fnmatch.fnmatch(filename, pattern) for pattern in patterns
+                        self._matches_pattern(filename, pattern) for pattern in patterns
                     )
                     if not matches_pattern:
                         continue
@@ -218,19 +336,33 @@ class FileDiscoveryService:
             )
             if quiet:
                 logger.debug(
-                    f"Discovered {len(test_files)} test files in {project_path} (patterns: {patterns})"
+                    f"Discovered {len(test_files)} test files in {resolved_project_path} (patterns: {patterns})"
                 )
             else:
                 logger.info(
-                    f"Discovered {len(test_files)} test files in {project_path} (patterns: {patterns})"
+                    f"Discovered {len(test_files)} test files in {resolved_project_path} (patterns: {patterns})"
                 )
             return test_files
 
+        except FileDiscoveryError:
+            # Re-raise our own exceptions
+            raise
+        except (OSError, PermissionError) as e:
+            # Critical filesystem errors should be re-raised
+            logger.error(
+                f"Filesystem error during test file discovery in {project_path}: {e}"
+            )
+            raise FileDiscoveryError(
+                f"Test file discovery failed due to filesystem error: {e}", cause=e
+            ) from e
         except Exception as e:
-            if isinstance(e, FileDiscoveryError):
-                raise
-            logger.exception(f"Failed to discover test files: {e}")
-            raise FileDiscoveryError(f"Test file discovery failed: {e}", cause=e) from e
+            # Log unexpected errors for debugging but wrap them
+            logger.exception(
+                f"Unexpected error during test file discovery in {project_path}: {e}"
+            )
+            raise FileDiscoveryError(
+                f"Test file discovery failed due to unexpected error: {e}", cause=e
+            ) from e
 
     def discover_all_python_files(
         self, project_path: str | Path, separate_tests: bool = True
@@ -247,14 +379,41 @@ class FileDiscoveryService:
             otherwise 'all_files' key with combined list
 
         Raises:
-            FileDiscoveryError: If discovery fails
+            FileDiscoveryError: If discovery fails or input validation fails
         """
+        # Input validation
+        if not project_path:
+            raise FileDiscoveryError("Project path cannot be empty")
+
         try:
+            project_path = Path(project_path)
+        except (TypeError, ValueError) as e:
+            raise FileDiscoveryError(
+                f"Invalid project path format: {project_path} - {e}"
+            ) from e
+
+        if not isinstance(separate_tests, bool):
+            raise FileDiscoveryError(
+                f"separate_tests must be a boolean, got {type(separate_tests)}"
+            )
+
+        try:
+            if not project_path.exists():
+                raise FileDiscoveryError(f"Project path does not exist: {project_path}")
+
+            if not project_path.is_dir():
+                raise FileDiscoveryError(
+                    f"Project path must be a directory: {project_path}"
+                )
+
+            # Cache resolved project path for performance
+            resolved_project_path = project_path.resolve()
+
             if separate_tests:
                 source_files = self.discover_source_files(
-                    project_path, include_test_files=False
+                    resolved_project_path, include_test_files=False
                 )
-                test_files = self.discover_test_files(project_path)
+                test_files = self.discover_test_files(resolved_project_path)
 
                 return {
                     "source_files": source_files,
@@ -263,35 +422,106 @@ class FileDiscoveryService:
                 }
             else:
                 all_files = self.discover_source_files(
-                    project_path, include_test_files=True
+                    resolved_project_path, include_test_files=True
                 )
                 return {"all_files": all_files, "total_files": len(all_files)}
 
-        except Exception as e:
-            if isinstance(e, FileDiscoveryError):
-                raise
-            logger.exception(f"Failed to discover Python files: {e}")
+        except FileDiscoveryError:
+            # Re-raise our own exceptions
+            raise
+        except (OSError, PermissionError) as e:
+            # Critical filesystem errors should be re-raised
+            logger.error(
+                f"Filesystem error during Python file discovery in {project_path}: {e}"
+            )
             raise FileDiscoveryError(
-                f"Python file discovery failed: {e}", cause=e
+                f"Python file discovery failed due to filesystem error: {e}", cause=e
+            ) from e
+        except Exception as e:
+            # Log unexpected errors for debugging but wrap them
+            logger.exception(
+                f"Unexpected error during Python file discovery in {project_path}: {e}"
+            )
+            raise FileDiscoveryError(
+                f"Python file discovery failed due to unexpected error: {e}", cause=e
             ) from e
 
-    def filter_existing_files(self, file_paths: list[str | Path]) -> list[str]:
+    def filter_existing_files(
+        self, file_paths: list[str | Path], project_path: str | Path | None = None
+    ) -> list[str]:
         """
         Filter a list of file paths to only include existing, valid Python files.
 
         Args:
             file_paths: List of file paths to filter
+            project_path: Root path of the project for relative path checking.
+                         If None, only basic file extension and pattern checks are performed.
 
         Returns:
             List of existing, valid Python file paths (absolute paths)
+
+        Raises:
+            FileDiscoveryError: If input validation fails
         """
+        # Input validation
+        if not isinstance(file_paths, list):
+            raise FileDiscoveryError(
+                f"file_paths must be a list, got {type(file_paths)}"
+            )
+
+        if project_path is not None:
+            if not project_path:
+                raise FileDiscoveryError("Project path cannot be empty when provided")
+
+            try:
+                project_path = Path(project_path)
+            except (TypeError, ValueError) as e:
+                raise FileDiscoveryError(
+                    f"Invalid project path format: {project_path} - {e}"
+                ) from e
+
+            try:
+                if not project_path.exists():
+                    raise FileDiscoveryError(
+                        f"Project path does not exist: {project_path}"
+                    )
+
+                if not project_path.is_dir():
+                    raise FileDiscoveryError(
+                        f"Project path must be a directory: {project_path}"
+                    )
+            except (OSError, PermissionError) as e:
+                raise FileDiscoveryError(
+                    f"Cannot access project path {project_path}: {e}"
+                ) from e
+
         filtered_files = []
+        resolved_project_path = None
+
+        # Cache resolved project path if provided
+        if project_path is not None:
+            try:
+                resolved_project_path = Path(project_path).resolve()
+            except (OSError, PermissionError) as e:
+                # Critical filesystem errors should be re-raised
+                logger.error(
+                    f"Filesystem error resolving project path {project_path}: {e}"
+                )
+                raise FileDiscoveryError(
+                    f"Failed to resolve project path {project_path}: {e}", cause=e
+                ) from e
+            except Exception as e:
+                # Log unexpected errors for debugging but continue without project path context
+                logger.warning(
+                    f"Unexpected error resolving project path {project_path}: {e}"
+                )
+                # Continue without project path context
 
         for file_path in file_paths:
             path = Path(file_path)
 
             if path.exists() and self._should_include_file(
-                path, include_test_files=True
+                path, resolved_project_path, include_test_files=True
             ):
                 filtered_files.append(str(path.resolve()))
 
@@ -329,6 +559,7 @@ class FileDiscoveryService:
         file_str = str(file_path)
         for pattern in self.exclude_patterns_set:
             if self._matches_pattern(file_str, pattern):
+                logger.debug(f"File {file_path} excluded by pattern '{pattern}'")
                 return False
 
         # Check exclude directories (from config.exclude_dirs)
@@ -378,6 +609,7 @@ class FileDiscoveryService:
         dir_str = str(dir_path)
         for pattern in self.exclude_patterns_set:
             if self._matches_pattern(dir_str, pattern):
+                logger.debug(f"Directory {dir_path} excluded by pattern '{pattern}'")
                 return True
 
         # Specific checks for common virtual environment patterns
@@ -432,6 +664,7 @@ class FileDiscoveryService:
             ):
                 continue
             if self._matches_pattern(file_str, pattern):
+                logger.debug(f"Test file {file_path} excluded by pattern '{pattern}'")
                 return False
 
         return True
@@ -481,13 +714,22 @@ class FileDiscoveryService:
         """
         try:
             # Convert glob pattern to Path.match format
-            if "*" in pattern:
+            if "*" in pattern or "?" in pattern or "[" in pattern:
                 return Path(file_path).match(pattern)
             else:
-                # Simple substring match
+                # Simple substring match for non-glob patterns
                 return pattern in file_path
-        except Exception:
-            # Fallback to simple substring match if Path.match fails
+        except (ValueError, TypeError) as e:
+            # Pattern syntax errors - log and fallback to substring match
+            logger.debug(
+                f"Pattern '{pattern}' syntax error for path '{file_path}': {e}"
+            )
+            return pattern in file_path
+        except Exception as e:
+            # Unexpected errors - log and fallback to substring match
+            logger.warning(
+                f"Unexpected error matching pattern '{pattern}' against '{file_path}': {e}"
+            )
             return pattern in file_path
 
     def get_discovery_stats(self, project_path: str | Path) -> dict:
@@ -499,14 +741,39 @@ class FileDiscoveryService:
 
         Returns:
             Dictionary with discovery statistics
+
+        Raises:
+            FileDiscoveryError: If input validation fails
         """
+        # Input validation
+        if not project_path:
+            raise FileDiscoveryError("Project path cannot be empty")
+
         try:
+            project_path = Path(project_path)
+        except (TypeError, ValueError) as e:
+            raise FileDiscoveryError(
+                f"Invalid project path format: {project_path} - {e}"
+            ) from e
+
+        try:
+            if not project_path.exists():
+                raise FileDiscoveryError(f"Project path does not exist: {project_path}")
+
+            if not project_path.is_dir():
+                raise FileDiscoveryError(
+                    f"Project path must be a directory: {project_path}"
+                )
+
+            # Cache resolved project path for performance
+            resolved_project_path = project_path.resolve()
+
             discovery_result = self.discover_all_python_files(
-                project_path, separate_tests=True
+                resolved_project_path, separate_tests=True
             )
 
             return {
-                "project_path": str(Path(project_path).resolve()),
+                "project_path": str(resolved_project_path),
                 "source_files_count": len(discovery_result["source_files"]),
                 "test_files_count": len(discovery_result["test_files"]),
                 "total_files": discovery_result["total_files"],
@@ -517,6 +784,24 @@ class FileDiscoveryService:
                 },
             }
 
+        except FileDiscoveryError:
+            # Re-raise our own exceptions
+            raise
+        except (OSError, PermissionError) as e:
+            # Critical filesystem errors should be logged and included in error response
+            logger.error(
+                f"Filesystem error getting discovery stats for {project_path}: {e}"
+            )
+            return {
+                "project_path": str(project_path),
+                "error": f"Filesystem error: {e}",
+            }
         except Exception as e:
-            logger.warning(f"Failed to get discovery stats: {e}")
-            return {"project_path": str(project_path), "error": str(e)}
+            # Log unexpected errors for debugging
+            logger.exception(
+                f"Unexpected error getting discovery stats for {project_path}: {e}"
+            )
+            return {
+                "project_path": str(project_path),
+                "error": f"Unexpected error: {e}",
+            }

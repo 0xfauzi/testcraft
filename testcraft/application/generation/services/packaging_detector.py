@@ -186,7 +186,7 @@ class PackagingDetector:
                         package_name = ""
                     if package_name and package_name != ".":
                         packages.add(package_name)
-                    break  # Found the source root, no need to check others
+                        break  # Found the source root, no need to check others
                 except ValueError:
                     continue  # package_dir is not under this source root
 

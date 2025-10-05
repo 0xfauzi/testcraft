@@ -121,7 +121,7 @@ def app(
     ctx.obj.ui_style = detect_ui_style(ui_flag)
 
     # Initialize UI components with selected theme
-    console = Console(theme=get_theme(ctx.obj.ui_style))
+    console = Console(theme=get_theme(ctx.obj.ui_style.value))
 
     # Set up enhanced logging system first (configure root once)
     logger = setup_enhanced_logging(console)

@@ -516,11 +516,9 @@ class ContextPack(BaseModel):
     def __getitem__(self, key: str) -> Any:
         """Get item by key for backward compatibility."""
         if hasattr(self, key):
-            value = getattr(self, key)
-            # Return the actual object for nested models, not their dict representation
-            if hasattr(value, "__dict__") and not key == "context":
-                return value
-            return value
+            # Delegate to model_dump() to get dict representation for backward compatibility
+            data = self.model_dump()
+            return data[key]
         raise KeyError(f"Key '{key}' not found in ContextPack")
 
     def __len__(self) -> int:

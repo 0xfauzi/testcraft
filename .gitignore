@@ -30,7 +30,6 @@ lerna-debug.log*
 node_modules/
 .pnp/
 .pnp.js
-coverage/
 build/
 dist/
 .cache/
@@ -94,3 +93,4 @@ dev-debug.log
 # Task files
 # tasks.json
 # tasks/
+docs/refactor

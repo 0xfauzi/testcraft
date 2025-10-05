@@ -8,6 +8,7 @@ extracting the logic from GenerateUseCase._sync_state_and_discover_files.
 from __future__ import annotations
 
 import logging
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -63,7 +64,12 @@ class StateSyncDiscovery:
             target_files: Optional list of specific files to target
 
         Returns:
-            Dictionary with discovered files and metadata
+            Dictionary with discovered files and metadata:
+                - files (list[Path]): Discovered source files
+                - previous_state (dict): Current generation state
+                - timestamp (str): ISO 8601 timestamp of discovery
+                - trace_id (str | None): Telemetry trace ID if available
+                - project_path (Path): Root path of the project
 
         Raises:
             GenerateUseCaseError: If file discovery fails
@@ -80,7 +86,9 @@ class StateSyncDiscovery:
                     file_paths = [str(f) for f in target_files]
                     files = [
                         Path(f)
-                        for f in self._file_discovery.filter_existing_files(file_paths)
+                        for f in self._file_discovery.filter_existing_files(
+                            file_paths, project_path
+                        )
                     ]
                     span.set_attribute("discovery_method", "target_files")
                 else:
@@ -93,14 +101,14 @@ class StateSyncDiscovery:
 
                 span.set_attribute("files_found", len(files))
 
+                # Get trace context once to avoid multiple calls
+                trace_context = span.get_trace_context()
+
                 return {
                     "files": files,
                     "previous_state": current_state,
-                    "timestamp": (
-                        span.get_trace_context().trace_id
-                        if span.get_trace_context()
-                        else None
-                    ),
+                    "timestamp": datetime.now(UTC).isoformat(),
+                    "trace_id": trace_context.trace_id if trace_context else None,
                     "project_path": project_path,
                 }
 

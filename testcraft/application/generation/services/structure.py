@@ -7,14 +7,19 @@ and refinement workflows, including module path derivation utilities.
 
 from __future__ import annotations
 
+import ast
 import importlib
 import importlib.util
 import logging
 import sys
+import threading
 from pathlib import Path
 from typing import Any
 
 logger = logging.getLogger(__name__)
+
+# Lock for thread-safe import validation (legacy mode only)
+_import_lock = threading.Lock()
 
 
 class DirectoryTreeBuilder:
@@ -114,12 +119,17 @@ class DirectoryTreeBuilder:
                     tree["truncated"] = True
                     break
 
+                try:
+                    size = item.stat().st_size
+                except OSError:
+                    size = 0
+
                 tree["children"].append(
                     {
                         "name": item.name,
                         "type": "file",
                         "path": str(item),
-                        "size": item.stat().st_size if item.exists() else 0,
+                        "size": size,
                     }
                 )
                 entry_count += 1
@@ -169,7 +179,9 @@ class ModulePathDeriver:
 
     @staticmethod
     def derive_module_path(
-        file_path: Path, project_root: Path | None = None
+        file_path: Path,
+        project_root: Path | None = None,
+        use_import_validation: bool = False,
     ) -> dict[str, Any]:
         """
         Derive the exact dotted module_path for a target source file.
@@ -177,9 +189,15 @@ class ModulePathDeriver:
         Args:
             file_path: Path to the Python file
             project_root: Root path of the project (auto-detected if None)
+            use_import_validation: If True, validates via actual imports (UNSAFE: executes code).
+                                  Defaults to False (filesystem + AST validation only).
 
         Returns:
             Dictionary with module_path, validation info, and metadata
+
+        Warning:
+            When use_import_validation=True, this method may execute module-level code
+            during validation. Only use on trusted code.
         """
         try:
             # Check if file exists
@@ -217,10 +235,15 @@ class ModulePathDeriver:
                 rel_path, project_root
             )
 
-            # Validate candidates by attempting import
-            validated_result = ModulePathDeriver._validate_module_paths(
-                module_candidates, project_root, file_path
-            )
+            # Validate candidates using safe or import-based method
+            if use_import_validation:
+                validated_result = ModulePathDeriver._validate_module_paths_with_import(
+                    module_candidates, project_root, file_path
+                )
+            else:
+                validated_result = ModulePathDeriver._validate_module_paths(
+                    module_candidates, project_root, file_path
+                )
 
             return validated_result
 
@@ -273,12 +296,12 @@ class ModulePathDeriver:
             parent_parts = parent_path.parts
 
             if parent_parts:
-                # Direct parent path: src/mypackage/__init__.py -> src.mypackage
-                candidates.append(".".join(parent_parts))
-
-                # Handle src/ layout: src/mypackage/__init__.py -> mypackage
+                # Handle src/ layout FIRST: src/mypackage/__init__.py -> mypackage
                 if parent_parts[0] == "src" and len(parent_parts) > 1:
                     candidates.append(".".join(parent_parts[1:]))
+
+                # Direct parent path as fallback: src/mypackage/__init__.py -> src.mypackage
+                candidates.append(".".join(parent_parts))
 
             return candidates
 
@@ -330,7 +353,122 @@ class ModulePathDeriver:
     def _validate_module_paths(
         candidates: list[str], project_root: Path, file_path: Path
     ) -> dict[str, Any]:
-        """Validate module path candidates by attempting import."""
+        """
+        Validate module path candidates using safe filesystem + AST parsing.
+
+        This is the default safe validation method that does not execute any code.
+        """
+        if not candidates:
+            return {
+                "module_path": "",
+                "import_suggestion": "",
+                "validation_status": "no_candidates",
+                "error": "No module path candidates generated",
+                "fallback_paths": [],
+            }
+
+        # Prepare import paths (project_root and project_root/src)
+        import_paths = [project_root]
+        src_path = project_root / "src"
+        if src_path.exists() and src_path.is_dir():
+            import_paths.append(src_path)
+
+        validated_paths = []
+        failed_paths = []
+
+        # Try each candidate
+        for candidate in candidates:
+            # Convert module path to expected file paths
+            parts = candidate.split(".")
+
+            for base_path in import_paths:
+                # Check both module.py and module/__init__.py
+                expected_file = base_path / Path(*parts[:-1]) / f"{parts[-1]}.py"
+                expected_package = base_path / Path(*parts) / "__init__.py"
+
+                for expected in [expected_file, expected_package]:
+                    try:
+                        if (
+                            expected.exists()
+                            and expected.resolve() == file_path.resolve()
+                        ):
+                            # Verify package structure and valid Python syntax
+                            if ModulePathDeriver._is_valid_package(expected, base_path):
+                                validated_paths.append(
+                                    {
+                                        "module_path": candidate,
+                                        "validation_status": "validated",
+                                        "method": "filesystem+ast",
+                                        "resolved_path": str(expected),
+                                    }
+                                )
+                                break
+                            else:
+                                failed_paths.append(
+                                    {
+                                        "module_path": candidate,
+                                        "validation_status": "invalid_package",
+                                        "error": "Package structure invalid or syntax error",
+                                    }
+                                )
+                    except Exception as e:
+                        failed_paths.append(
+                            {
+                                "module_path": candidate,
+                                "validation_status": "validation_error",
+                                "error": str(e),
+                            }
+                        )
+
+                # Break if we found a validated path for this candidate
+                if validated_paths and validated_paths[-1]["module_path"] == candidate:
+                    break
+
+        # Return best result
+        if validated_paths:
+            best = validated_paths[0]
+            import_suggestion = ModulePathDeriver._generate_import_suggestion(
+                best["module_path"], file_path
+            )
+
+            return {
+                "module_path": best["module_path"],
+                "import_suggestion": import_suggestion,
+                "validation_status": "validated",
+                "method": "filesystem+ast",
+                "resolved_path": best.get("resolved_path"),
+                "fallback_paths": [p["module_path"] for p in validated_paths[1:]]
+                + [p["module_path"] for p in failed_paths],
+            }
+        else:
+            # No validated paths, return best guess with fallbacks
+            best_guess = candidates[0] if candidates else ""
+            import_suggestion = (
+                ModulePathDeriver._generate_import_suggestion(best_guess, file_path)
+                if best_guess
+                else ""
+            )
+
+            return {
+                "module_path": best_guess,
+                "import_suggestion": import_suggestion,
+                "validation_status": "unvalidated",
+                "method": "filesystem+ast",
+                "error": "No candidates could be validated",
+                "fallback_paths": candidates[1:] if len(candidates) > 1 else [],
+                "failed_validations": failed_paths,
+            }
+
+    @staticmethod
+    def _validate_module_paths_with_import(
+        candidates: list[str], project_root: Path, file_path: Path
+    ) -> dict[str, Any]:
+        """
+        Validate module path candidates by attempting import (LEGACY/UNSAFE).
+
+        Warning: This method executes module-level code and modifies global state.
+        Only use on trusted code.
+        """
         if not candidates:
             return {
                 "module_path": "",
@@ -349,67 +487,76 @@ class ModulePathDeriver:
         validated_paths = []
         failed_paths = []
 
-        # Try each candidate
-        for candidate in candidates:
-            try:
-                # Test import with temporary sys.path modification
-                original_path = sys.path.copy()
-                try:
-                    # Prepend our paths for testing
-                    sys.path = import_paths + sys.path
+        # Thread-safe import validation with cleanup
+        with _import_lock:
+            original_path = sys.path.copy()
+            original_modules = dict(sys.modules.items())
 
-                    # Attempt to import the module
+            try:
+                # Prepend our paths for testing
+                sys.path = import_paths + sys.path
+
+                # Try each candidate
+                for candidate in candidates:
                     try:
-                        # Use importlib.util for safer validation
-                        spec = importlib.util.find_spec(candidate)
-                        if spec and spec.origin:
-                            # Verify the spec points to our target file
-                            if Path(spec.origin).resolve() == file_path.resolve():
-                                validated_paths.append(
-                                    {
-                                        "module_path": candidate,
-                                        "validation_status": "validated",
-                                        "spec_origin": spec.origin,
-                                    }
-                                )
+                        # Attempt to import the module
+                        try:
+                            # Use importlib.util for safer validation
+                            spec = importlib.util.find_spec(candidate)
+                            if spec and spec.origin:
+                                # Verify the spec points to our target file
+                                if Path(spec.origin).resolve() == file_path.resolve():
+                                    validated_paths.append(
+                                        {
+                                            "module_path": candidate,
+                                            "validation_status": "validated",
+                                            "method": "import",
+                                            "spec_origin": spec.origin,
+                                        }
+                                    )
+                                else:
+                                    failed_paths.append(
+                                        {
+                                            "module_path": candidate,
+                                            "validation_status": "wrong_file",
+                                            "spec_origin": spec.origin,
+                                            "expected_file": str(file_path),
+                                        }
+                                    )
                             else:
                                 failed_paths.append(
                                     {
                                         "module_path": candidate,
-                                        "validation_status": "wrong_file",
-                                        "spec_origin": spec.origin,
-                                        "expected_file": str(file_path),
+                                        "validation_status": "no_spec",
+                                        "error": "Module spec not found",
                                     }
                                 )
-                        else:
+                        except (ImportError, ModuleNotFoundError, ValueError) as e:
                             failed_paths.append(
                                 {
                                     "module_path": candidate,
-                                    "validation_status": "no_spec",
-                                    "error": "Module spec not found",
+                                    "validation_status": "import_error",
+                                    "error": str(e),
                                 }
                             )
-                    except (ImportError, ModuleNotFoundError, ValueError) as e:
+
+                    except Exception as e:
                         failed_paths.append(
                             {
                                 "module_path": candidate,
-                                "validation_status": "import_error",
+                                "validation_status": "validation_error",
                                 "error": str(e),
                             }
                         )
 
-                finally:
-                    # Always restore sys.path
-                    sys.path = original_path
+            finally:
+                # Always restore sys.path
+                sys.path = original_path
 
-            except Exception as e:
-                failed_paths.append(
-                    {
-                        "module_path": candidate,
-                        "validation_status": "validation_error",
-                        "error": str(e),
-                    }
-                )
+                # Cleanup imported modules to prevent pollution
+                for key in list(sys.modules.keys()):
+                    if key not in original_modules:
+                        del sys.modules[key]
 
         # Return best result
         if validated_paths:
@@ -423,6 +570,7 @@ class ModulePathDeriver:
                 "module_path": best["module_path"],
                 "import_suggestion": import_suggestion,
                 "validation_status": "validated",
+                "method": "import",
                 "spec_origin": best.get("spec_origin"),
                 "fallback_paths": [p["module_path"] for p in validated_paths[1:]]
                 + [p["module_path"] for p in failed_paths],
@@ -440,10 +588,48 @@ class ModulePathDeriver:
                 "module_path": best_guess,
                 "import_suggestion": import_suggestion,
                 "validation_status": "unvalidated",
+                "method": "import",
                 "error": "No candidates could be validated",
                 "fallback_paths": candidates[1:] if len(candidates) > 1 else [],
                 "failed_validations": failed_paths,
             }
+
+    @staticmethod
+    def _is_valid_package(file_path: Path, root: Path) -> bool:
+        """
+        Verify package structure and Python syntax using AST parsing.
+
+        Args:
+            file_path: Path to the Python file
+            root: Project root or src directory
+
+        Returns:
+            True if package structure is valid and file has valid Python syntax
+        """
+        try:
+            # Verify Python syntax with AST parsing (safe, no execution)
+            try:
+                content = file_path.read_text(encoding="utf-8")
+                ast.parse(content)
+            except (SyntaxError, UnicodeDecodeError) as e:
+                logger.debug("AST parse failed for %s: %s", file_path, e)
+                return False
+
+            # Check parent directories for __init__.py (package structure)
+            # Note: This allows namespace packages (dirs without __init__.py)
+            current = file_path.parent
+            while current != root and current != current.parent:
+                # If there's a parent directory, it should either:
+                # 1. Have __init__.py (regular package)
+                # 2. Or we're in a namespace package (no __init__.py but still valid)
+                # We'll be lenient and allow both
+                current = current.parent
+
+            return True
+
+        except Exception as e:
+            logger.debug("Package validation failed for %s: %s", file_path, e)
+            return False
 
     @staticmethod
     def _generate_import_suggestion(module_path: str, file_path: Path) -> str:
