@@ -62,6 +62,22 @@ class JsonReportAdapter(ReportPort):
         Returns:
             Dictionary containing the generated report and metadata
         """
+        # Input validation
+        if not isinstance(report_type, str) or not report_type.strip():
+            raise ValueError("report_type must be a non-empty string")
+
+        if not isinstance(data, dict):
+            raise ValueError("data must be a dictionary")
+
+        if not isinstance(output_format, str):
+            raise ValueError("output_format must be a string")
+
+        valid_report_types = {"coverage", "analysis", "summary", "generation"}
+        if report_type not in valid_report_types:
+            raise ValueError(
+                f"report_type must be one of: {', '.join(valid_report_types)}"
+            )
+
         try:
             if report_type == "coverage":
                 return self._generate_coverage_report_content(data, **kwargs)
@@ -74,6 +90,10 @@ class JsonReportAdapter(ReportPort):
             else:
                 raise ReportError(f"Unsupported report type: {report_type}")
 
+        except (TypeError, ValueError, AttributeError) as e:
+            raise ReportError(
+                f"Failed to generate {report_type} report: {str(e)}"
+            ) from e
         except Exception as e:
             raise ReportError(
                 f"Failed to generate {report_type} report: {str(e)}"
@@ -96,24 +116,30 @@ class JsonReportAdapter(ReportPort):
         Returns:
             Dictionary containing the generated analysis report
         """
+        # Input validation
+        if not isinstance(analysis_data, AnalysisReport):
+            raise ValueError("analysis_data must be an AnalysisReport instance")
+
         try:
+            # Safely handle potentially None existing_test_presence
+            existing_test_presence = analysis_data.existing_test_presence or {}
+
+            files_with_tests = [
+                f for f, has_tests in existing_test_presence.items() if has_tests
+            ]
+            files_without_tests = [
+                f for f, has_tests in existing_test_presence.items() if not has_tests
+            ]
+
             report_content = {
                 "report_type": "analysis",
                 "timestamp": datetime.utcnow().isoformat(),
                 "files_to_process": analysis_data.files_to_process,
                 "total_files": len(analysis_data.files_to_process),
                 "processing_reasons": analysis_data.reasons,
-                "existing_test_presence": analysis_data.existing_test_presence,
-                "files_with_tests": [
-                    f
-                    for f, has_tests in analysis_data.existing_test_presence.items()
-                    if has_tests
-                ],
-                "files_without_tests": [
-                    f
-                    for f, has_tests in analysis_data.existing_test_presence.items()
-                    if not has_tests
-                ],
+                "existing_test_presence": existing_test_presence,
+                "files_with_tests": files_with_tests,
+                "files_without_tests": files_without_tests,
             }
 
             if include_recommendations:
@@ -123,8 +149,8 @@ class JsonReportAdapter(ReportPort):
 
             summary = (
                 f"Analysis of {len(analysis_data.files_to_process)} files: "
-                f"{len(list(report_content.get('files_without_tests', [])) if report_content.get('files_without_tests') else [])} need new tests, "  # type: ignore[call-overload]
-                f"{len(list(report_content.get('files_with_tests', [])) if report_content.get('files_with_tests') else [])} have existing tests"  # type: ignore[call-overload]
+                f"{len(files_without_tests)} need new tests, "
+                f"{len(files_with_tests)} have existing tests"
             )
 
             return {
@@ -133,12 +159,14 @@ class JsonReportAdapter(ReportPort):
                 "recommendations": report_content.get("recommendations", []),
                 "analysis_metadata": {
                     "files_analyzed": len(analysis_data.files_to_process),
-                    "new_tests_needed": 0,  # Simplified for type safety
-                    "existing_tests": 0,  # Simplified for type safety
+                    "new_tests_needed": len(files_without_tests),
+                    "existing_tests": len(files_with_tests),
                     "generation_timestamp": report_content["timestamp"],
                 },
             }
 
+        except (TypeError, ValueError, AttributeError) as e:
+            raise ReportError(f"Failed to generate analysis report: {str(e)}") from e
         except Exception as e:
             raise ReportError(f"Failed to generate analysis report: {str(e)}") from e
 
@@ -159,10 +187,19 @@ class JsonReportAdapter(ReportPort):
         Returns:
             Dictionary containing the generated coverage report
         """
+        # Input validation
+        if not isinstance(coverage_data, dict):
+            raise ValueError("coverage_data must be a dictionary")
+
+        if not isinstance(report_style, str):
+            raise ValueError("report_style must be a string")
+
         try:
             return self._generate_coverage_report_content(
                 coverage_data, style=report_style, **kwargs
             )
+        except (TypeError, ValueError, AttributeError) as e:
+            raise ReportError(f"Failed to generate coverage report: {str(e)}") from e
         except Exception as e:
             raise ReportError(f"Failed to generate coverage report: {str(e)}") from e
 
@@ -183,10 +220,19 @@ class JsonReportAdapter(ReportPort):
         Returns:
             Dictionary containing the generated summary report
         """
+        # Input validation
+        if not isinstance(project_data, dict):
+            raise ValueError("project_data must be a dictionary")
+
+        if not isinstance(summary_level, str):
+            raise ValueError("summary_level must be a string")
+
         try:
             return self._generate_summary_report_content(
                 project_data, level=summary_level, **kwargs
             )
+        except (TypeError, ValueError, AttributeError) as e:
+            raise ReportError(f"Failed to generate summary report: {str(e)}") from e
         except Exception as e:
             raise ReportError(f"Failed to generate summary report: {str(e)}") from e
 
@@ -209,6 +255,16 @@ class JsonReportAdapter(ReportPort):
         Returns:
             Dictionary containing export metadata
         """
+        # Input validation
+        if not isinstance(report_content, str):
+            raise ValueError("report_content must be a string")
+
+        if not isinstance(output_path, str | Path):
+            raise ValueError("output_path must be a string or Path object")
+
+        if not isinstance(export_format, str):
+            raise ValueError("export_format must be a string")
+
         try:
             output_path = Path(output_path)
 
@@ -241,6 +297,10 @@ class JsonReportAdapter(ReportPort):
                 },
             }
 
+        except (OSError, json.JSONDecodeError) as e:
+            raise ReportError(
+                f"Failed to export report to {output_path}: {str(e)}"
+            ) from e
         except Exception as e:
             raise ReportError(
                 f"Failed to export report to {output_path}: {str(e)}"
@@ -451,7 +511,7 @@ class JsonReportAdapter(ReportPort):
 
         files_without_tests = [
             f
-            for f, has_tests in analysis.existing_test_presence.items()
+            for f, has_tests in (analysis.existing_test_presence or {}).items()
             if not has_tests
         ]
 
@@ -462,8 +522,8 @@ class JsonReportAdapter(ReportPort):
 
             # Add recommendations based on processing reasons
             reason_counts: dict[str, int] = {}
-        for reason in analysis.reasons.values():
-            reason_counts[reason] = reason_counts.get(reason, 0) + 1
+            for reason in analysis.reasons.values():
+                reason_counts[reason] = reason_counts.get(reason, 0) + 1
 
         if reason_counts:
             top_reason = max(reason_counts, key=lambda x: reason_counts[x])

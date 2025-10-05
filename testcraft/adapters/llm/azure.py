@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from typing import Any, Literal
+from typing import Any, Literal, Protocol
 
 import openai
 from openai import AzureOpenAI
@@ -26,6 +26,65 @@ class AzureOpenAIError(Exception):
     pass
 
 
+class AzureOpenAIClientProtocol(Protocol):
+    """Protocol defining the interface for Azure OpenAI clients."""
+
+    @property
+    def chat(self) -> Any:
+        """Get the chat completions interface."""
+        ...
+
+    def chat_completions_create(self, **kwargs: Any) -> ChatCompletion:
+        """Create a chat completion."""
+        ...
+
+
+class AzureOpenAIStubClient:
+    """Stub client that implements the same interface as AzureOpenAI for testing."""
+
+    def __init__(self) -> None:
+        self.chat = AzureOpenAIStubChat()
+
+    def chat_completions_create(self, **kwargs: Any) -> ChatCompletion:
+        """Create a stub chat completion response."""
+        return self.chat.completions.create(**kwargs)
+
+
+class AzureOpenAIStubChat:
+    """Stub chat interface."""
+
+    def __init__(self) -> None:
+        self.completions = AzureOpenAIStubCompletions()
+
+
+class AzureOpenAIStubCompletions:
+    """Stub completions interface."""
+
+    def create(self, **kwargs: Any) -> Any:
+        """Create a stub completion response."""
+
+        class _Choice:
+            def __init__(self, text: str) -> None:
+                class _Message:
+                    def __init__(self, content: str) -> None:
+                        self.content = content
+
+                self.message = _Message(text)
+                self.finish_reason = "stop"
+
+        class _Response:
+            def __init__(self) -> None:
+                self.choices = [
+                    _Choice(
+                        '{"tests": "# stub", "coverage_focus": [], "confidence": 0.0}'
+                    )
+                ]
+                self.usage = None
+                self.model = "stub-deployment"
+
+        return _Response()
+
+
 class AzureOpenAIAdapter(LLMPort):
     """
     Production Azure OpenAI adapter using the latest v1.2.0 SDK.
@@ -37,6 +96,12 @@ class AzureOpenAIAdapter(LLMPort):
     - Support for Azure OpenAI deployments
     - Configurable timeouts and token limits
     - Structured JSON response parsing
+    - Resource management with context manager support
+    - Circuit breaker pattern for API failures
+
+    Usage as context manager (recommended):
+        with AzureOpenAIAdapter() as adapter:
+            result = adapter.generate_tests(code_content)
     """
 
     def __init__(
@@ -67,19 +132,20 @@ class AzureOpenAIAdapter(LLMPort):
             cost_port: Optional cost tracking port (optional)
             **kwargs: Additional Azure OpenAI client parameters
         """
+        # Input validation
+        self._validate_inputs(
+            deployment, api_version, timeout, temperature, max_retries
+        )
+
         self.deployment = deployment
         self.api_version = api_version
         self.timeout = timeout
         self.temperature = temperature
         self.max_retries = max_retries
 
-        # Initialize credential manager
+        # Initialize managers
         self.credential_manager = credential_manager or CredentialManager()
-
-        # Initialize prompt registry
         self.prompt_registry = prompt_registry or PromptRegistry()
-
-        # Initialize cost tracking
         self.cost_port = cost_port
         self.beta = beta or {}
 
@@ -94,9 +160,56 @@ class AzureOpenAIAdapter(LLMPort):
             "test_generation"
         )
 
+        # Circuit breaker for API failures
+        self._consecutive_failures = 0
+        self._max_consecutive_failures = 5
+        self._circuit_breaker_timeout = 300  # 5 minutes
+
+        # Initialize client state
+        self._client: AzureOpenAIClientProtocol | None = None
+        self._is_stub_mode = False
+        self._cost_tracking_enabled = cost_port is not None
+        self._closed = False
+
         # Initialize Azure OpenAI client
-        self._client: AzureOpenAI | None = None
         self._initialize_client(**kwargs)
+
+    def _validate_inputs(
+        self,
+        deployment: str,
+        api_version: str,
+        timeout: float,
+        temperature: float,
+        max_retries: int,
+    ) -> None:
+        """Validate input parameters."""
+        if not deployment or not isinstance(deployment, str):
+            raise ValueError("deployment must be a non-empty string")
+
+        if not api_version or not isinstance(api_version, str):
+            raise ValueError("api_version must be a non-empty string")
+
+        if timeout <= 0:
+            raise ValueError("timeout must be positive")
+
+        if not 0.0 <= temperature <= 2.0:
+            raise ValueError("temperature must be between 0.0 and 2.0")
+
+        if max_retries < 0:
+            raise ValueError("max_retries must be non-negative")
+
+    def is_available(self) -> bool:
+        """Check if real Azure OpenAI is available (not in stub mode)."""
+        return not self._is_stub_mode and self._client is not None
+
+    def _create_stub_client(self) -> AzureOpenAIClientProtocol:
+        """Create and return a stub client."""
+        logger.warning(
+            "Azure OpenAI credentials not available, using stub client. "
+            "Set AZURE_OPENAI_API_KEY and AZURE_OPENAI_ENDPOINT environment variables "
+            "to use real Azure OpenAI."
+        )
+        return AzureOpenAIStubClient()
 
     def _initialize_client(self, **kwargs: Any) -> None:
         """Initialize the Azure OpenAI client with credentials."""
@@ -115,84 +228,20 @@ class AzureOpenAIAdapter(LLMPort):
             }
 
             self._client = AzureOpenAI(**client_kwargs)
+            self._is_stub_mode = False
 
             logger.info(
                 f"Azure OpenAI client initialized with deployment: {self.deployment}"
             )
 
-        except CredentialError as e:
-            logger.warning(
-                f"Azure OpenAI credentials not available, using stub client: {e}"
-            )
-
-            class _StubChatCompletions:
-                def create(self, **_kwargs):
-                    class _Choice:
-                        def __init__(self, text: str) -> None:
-                            class _Msg:
-                                def __init__(self, content: str) -> None:
-                                    self.content = content
-
-                            self.message = _Msg(text)
-                            self.finish_reason = "stop"
-
-                    class _Resp:
-                        def __init__(self) -> None:
-                            self.choices = [
-                                _Choice(
-                                    '{"tests": "# stub", "coverage_focus": [], "confidence": 0.0}'
-                                )
-                            ]
-                            self.usage = None
-                            self.model = "stub-deployment"
-
-                    return _Resp()
-
-            class _StubChat:
-                def __init__(self) -> None:
-                    self.completions = _StubChatCompletions()
-
-            class _StubClient:
-                def __init__(self) -> None:
-                    self.chat = _StubChat()
-
-            self._client = _StubClient()  # type: ignore[assignment]
+        except CredentialError:
+            self._client = self._create_stub_client()
+            self._is_stub_mode = True
 
         except Exception as e:
             logger.warning(f"Azure client init failed, using stub client: {e}")
-
-            class _StubChatCompletions:
-                def create(self, **_kwargs):
-                    class _Choice:
-                        def __init__(self, text: str) -> None:
-                            class _Msg:
-                                def __init__(self, content: str) -> None:
-                                    self.content = content
-
-                            self.message = _Msg(text)
-                            self.finish_reason = "stop"
-
-                    class _Resp:
-                        def __init__(self) -> None:
-                            self.choices = [
-                                _Choice(
-                                    '{"tests": "# stub", "coverage_focus": [], "confidence": 0.0}'
-                                )
-                            ]
-                            self.usage = None
-                            self.model = "stub-deployment"
-
-                    return _Resp()
-
-            class _StubChat:
-                def __init__(self) -> None:
-                    self.completions = _StubChatCompletions()
-
-            class _StubClient:
-                def __init__(self) -> None:
-                    self.chat = _StubChat()
-
-            self._client = _StubClient()  # type: ignore[assignment]
+            self._client = self._create_stub_client()
+            self._is_stub_mode = True
 
     def _calculate_api_cost(self, usage_info: dict[str, Any], deployment: str) -> float:
         # Delegate to centralized pricing with normalized model for azure-openai
@@ -230,11 +279,87 @@ class AzureOpenAIAdapter(LLMPort):
             return deployment
 
     @property
-    def client(self) -> AzureOpenAI:
+    def client(self) -> AzureOpenAIClientProtocol:
         """Get the Azure OpenAI client, initializing if needed."""
         if self._client is None:
             self._initialize_client()
+        if self._client is None:
+            raise AzureOpenAIError("Failed to initialize client")
         return self._client
+
+    def __enter__(self) -> AzureOpenAIAdapter:
+        """Enter context manager."""
+        if self._closed:
+            raise AzureOpenAIError("Cannot reuse closed AzureOpenAIAdapter")
+        return self
+
+    def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
+        """Exit context manager and cleanup resources."""
+        self.close()
+
+    def close(self) -> None:
+        """Close the adapter and cleanup resources."""
+        if self._closed:
+            return
+
+        self._closed = True
+
+        # Close the real client if it exists
+        if self._client is not None and not self._is_stub_mode:
+            try:
+                # Azure OpenAI client doesn't have an explicit close method
+                # but we can help garbage collection
+                if hasattr(self._client, "close"):
+                    self._client.close()
+            except Exception as e:
+                logger.warning(f"Error closing Azure OpenAI client: {e}")
+
+        self._client = None
+        logger.info("Azure OpenAI adapter closed")
+
+    def _track_usage_safe(
+        self, service: str, operation: str, cost_data: dict[str, Any], **kwargs: Any
+    ) -> None:
+        """Safely track usage with structured error handling."""
+        if not self._cost_tracking_enabled or self._closed:
+            return
+
+        try:
+            if self.cost_port:
+                self.cost_port.track_usage(
+                    service=service, operation=operation, cost_data=cost_data, **kwargs
+                )
+        except Exception as e:
+            logger.warning(f"Cost tracking failed: {e}")
+            # Don't re-raise - cost tracking shouldn't break the main flow
+
+    def _check_circuit_breaker(self) -> None:
+        """Check if circuit breaker should prevent API calls."""
+        if self._consecutive_failures >= self._max_consecutive_failures:
+            raise AzureOpenAIError(
+                f"Circuit breaker open: {self._consecutive_failures} consecutive failures. "
+                f"Will retry after {self._circuit_breaker_timeout} seconds."
+            )
+
+    def _record_success(self) -> None:
+        """Record a successful API call."""
+        self._consecutive_failures = 0
+
+    def _record_failure(self) -> None:
+        """Record a failed API call."""
+        self._consecutive_failures += 1
+        logger.warning(f"Consecutive failures: {self._consecutive_failures}")
+
+    def _validate_request_inputs(self, **kwargs: Any) -> None:
+        """Validate common request inputs."""
+        if not kwargs.get("messages"):
+            raise ValueError("messages parameter is required")
+
+        if kwargs.get("max_tokens", 0) < 1:
+            raise ValueError("max_tokens must be positive")
+
+        if not 0.0 <= kwargs.get("temperature", self.temperature) <= 2.0:
+            raise ValueError("temperature must be between 0.0 and 2.0")
 
     def generate_tests(
         self,
@@ -244,6 +369,20 @@ class AzureOpenAIAdapter(LLMPort):
         **kwargs: Any,
     ) -> dict[str, Any]:
         """Generate test cases for the provided code content."""
+        if self._closed:
+            raise AzureOpenAIError("Cannot use closed AzureOpenAIAdapter")
+
+        if not code_content or not isinstance(code_content, str):
+            raise ValueError("code_content must be a non-empty string")
+
+        if context is not None and not isinstance(context, str):
+            raise ValueError("context must be a string or None")
+
+        if not test_framework or not isinstance(test_framework, str):
+            raise ValueError("test_framework must be a non-empty string")
+
+        # Check circuit breaker
+        self._check_circuit_breaker()
 
         # Calculate optimal max_tokens for this specific request
         input_length = self.token_calculator.estimate_input_tokens(
@@ -277,6 +416,7 @@ class AzureOpenAIAdapter(LLMPort):
         try:
             result = with_retries(call, retries=self.max_retries)
             content = result.get("content", "")
+            self._record_success()  # Record successful API call
 
             # Parse JSON response
             parsed = parse_json_response(content)
@@ -328,6 +468,7 @@ class AzureOpenAIAdapter(LLMPort):
                 }
 
         except Exception as e:
+            self._record_failure()  # Record failed API call
             logger.error(f"Azure OpenAI test generation failed: {e}")
             raise AzureOpenAIError(f"Test generation failed: {e}") from e
 
@@ -335,6 +476,17 @@ class AzureOpenAIAdapter(LLMPort):
         self, code_content: str, analysis_type: str = "comprehensive", **kwargs: Any
     ) -> dict[str, Any]:
         """Analyze code for testability, complexity, and potential issues."""
+        if self._closed:
+            raise AzureOpenAIError("Cannot use closed AzureOpenAIAdapter")
+
+        if not code_content or not isinstance(code_content, str):
+            raise ValueError("code_content must be a non-empty string")
+
+        if not analysis_type or not isinstance(analysis_type, str):
+            raise ValueError("analysis_type must be a non-empty string")
+
+        # Check circuit breaker
+        self._check_circuit_breaker()
 
         # Calculate optimal max_tokens for this specific request
         input_length = self.token_calculator.estimate_input_tokens(code_content)
@@ -364,6 +516,7 @@ class AzureOpenAIAdapter(LLMPort):
         try:
             result = with_retries(call, retries=self.max_retries)
             content = result.get("content", "")
+            self._record_success()  # Record successful API call
 
             # Parse JSON response
             parsed = parse_json_response(content)
@@ -418,6 +571,7 @@ class AzureOpenAIAdapter(LLMPort):
                 }
 
         except Exception as e:
+            self._record_failure()  # Record failed API call
             logger.error(f"Azure OpenAI code analysis failed: {e}")
             raise AzureOpenAIError(f"Code analysis failed: {e}") from e
 
@@ -755,28 +909,37 @@ class AzureOpenAIAdapter(LLMPort):
         **kwargs: Any,
     ) -> dict[str, Any]:
         """Make a chat completion request to Azure OpenAI."""
+        if self._closed:
+            raise AzureOpenAIError("Cannot use closed AzureOpenAIAdapter")
+
+        if not system_prompt or not isinstance(system_prompt, str):
+            raise ValueError("system_prompt must be a non-empty string")
+
+        if not user_prompt or not isinstance(user_prompt, str):
+            raise ValueError("user_prompt must be a non-empty string")
+
+        # Validate request inputs
+        request_kwargs = {
+            "model": self.deployment,  # Use deployment name as model for Azure
+            "messages": [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ],
+            "max_tokens": max_tokens or self.max_tokens,
+            "temperature": self.temperature,
+            **kwargs,
+        }
+        self._validate_request_inputs(**request_kwargs)
 
         # Use provided max_tokens or fallback to instance default
-        tokens_to_use = max_tokens if max_tokens is not None else self.max_tokens
+        tokens_to_use = request_kwargs["max_tokens"]
         # Clamp to catalog cap
         try:
             cap = self.token_calculator.limits.max_output
             tokens_to_use = min(int(tokens_to_use or cap), int(cap))
+            request_kwargs["max_tokens"] = tokens_to_use
         except Exception:
             pass
-
-        messages = [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_prompt},
-        ]
-
-        request_kwargs = {
-            "model": self.deployment,  # Use deployment name as model for Azure
-            "messages": messages,
-            "max_tokens": tokens_to_use,
-            "temperature": self.temperature,
-            **kwargs,
-        }
 
         try:
             response: ChatCompletion = self.client.chat.completions.create(
@@ -799,27 +962,21 @@ class AzureOpenAIAdapter(LLMPort):
                 }
 
                 # Track costs if cost_port is available
-                if self.cost_port and usage_info:
-                    try:
-                        # Calculate cost based on deployment
-                        cost = self._calculate_api_cost(usage_info, self.deployment)
-
-                        # Track usage
-                        self.cost_port.track_usage(
-                            service="azure-openai",
-                            operation="chat_completion",
-                            cost_data={
-                                "cost": cost,
-                                "tokens_used": usage_info["total_tokens"],
-                                "api_calls": 1,
-                            },
-                            deployment=self.deployment,
-                            api_version=self.api_version,
-                            prompt_tokens=usage_info["prompt_tokens"],
-                            completion_tokens=usage_info["completion_tokens"],
-                        )
-                    except Exception as e:
-                        logger.warning(f"Failed to track cost: {e}")
+                if usage_info:
+                    cost = self._calculate_api_cost(usage_info, self.deployment)
+                    self._track_usage_safe(
+                        service="azure-openai",
+                        operation="chat_completion",
+                        cost_data={
+                            "cost": cost,
+                            "tokens_used": usage_info["total_tokens"],
+                            "api_calls": 1,
+                        },
+                        deployment=self.deployment,
+                        api_version=self.api_version,
+                        prompt_tokens=usage_info["prompt_tokens"],
+                        completion_tokens=usage_info["completion_tokens"],
+                    )
 
             return {
                 "content": content,

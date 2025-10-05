@@ -224,6 +224,36 @@ def get_flags(provider: str, model: str) -> ModelFlags:
     return get_metadata(provider, model).flags
 
 
+def get_all_providers() -> list[str]:
+    """Get list of all providers that have models in the catalog.
+
+    Returns:
+        List of unique provider names
+    """
+    data = load_catalog()
+    providers = set()
+    for model in data.models:
+        providers.add(model.provider)
+    return sorted(providers)
+
+
+def get_all_models_for_provider(provider: str) -> list[str]:
+    """Get list of all model IDs for a specific provider.
+
+    Args:
+        provider: Provider name to get models for
+
+    Returns:
+        List of model IDs for the provider
+    """
+    data = load_catalog()
+    models = []
+    for model in data.models:
+        if model.provider.lower() == provider.lower():
+            models.append(model.model_id)
+    return sorted(models)
+
+
 def verify_catalog() -> dict[str, Any]:
     """Lightweight verification: duplicates, missing fields counts."""
     results: dict[str, Any] = {

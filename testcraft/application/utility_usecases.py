@@ -75,6 +75,7 @@ class UtilityUseCase:
             "cost_summary_days": 30,  # Days for cost summaries
             "env_info_detail_level": "standard",  # Detail level for env info
             "state_backup_on_reset": True,  # Backup state before reset operations
+            "sync_fail_fast": True,  # Stop sync on first critical error
             **(config or {}),
         }
 
@@ -185,77 +186,126 @@ class UtilityUseCase:
             try:
                 logger.info("Starting state synchronization")
 
+                fail_fast = self._config.get("sync_fail_fast", True)
                 sync_results = {
                     "operations_performed": [],
                     "state_changes": {},
                     "errors": [],
+                    "critical_errors": [],  # Track critical errors separately
                 }
 
                 # Step 1: Load state from storage if requested
                 if force_reload:
                     try:
                         load_result = self._state.load_state()
-                        sync_results["operations_performed"].append("load_from_storage")
-                        sync_results["state_changes"]["loaded_keys"] = load_result.get(
-                            "loaded_keys", []
-                        )
-                        span.set_attribute(
-                            "keys_loaded", len(load_result.get("loaded_keys", []))
-                        )
+
+                        # Validate return type
+                        if not isinstance(load_result, dict):
+                            error_msg = f"load_state() returned unexpected type: {type(load_result).__name__}"
+                            sync_results["critical_errors"].append(error_msg)
+                            logger.error(error_msg)
+
+                            if fail_fast:
+                                raise UtilityUseCaseError(error_msg)
+                        else:
+                            sync_results["operations_performed"].append(
+                                "load_from_storage"
+                            )
+                            loaded_keys = load_result.get("loaded_keys", [])
+                            sync_results["state_changes"]["loaded_keys"] = loaded_keys
+                            span.set_attribute("keys_loaded", len(loaded_keys))
+
+                    except UtilityUseCaseError:
+                        # Re-raise UtilityUseCaseError as-is (fail-fast)
+                        raise
                     except Exception as e:
                         error_msg = f"Failed to load state from storage: {e}"
-                        sync_results["errors"].append(error_msg)
-                        logger.warning(error_msg)
+                        sync_results["critical_errors"].append(error_msg)
+                        logger.error(error_msg)
 
-                # Step 2: Validate state consistency
-                try:
-                    validation_result = await self._validate_state_consistency()
-                    sync_results["operations_performed"].append("validate_consistency")
-                    sync_results["state_changes"]["validation"] = validation_result
-                    span.set_attribute(
-                        "validation_issues", len(validation_result.get("issues", []))
-                    )
-                except Exception as e:
-                    error_msg = f"State validation failed: {e}"
-                    sync_results["errors"].append(error_msg)
-                    logger.warning(error_msg)
+                        if fail_fast:
+                            raise UtilityUseCaseError(
+                                f"State sync failed on load: {e}", cause=e
+                            ) from e
 
-                # Step 3: Persist state if requested
-                if persist_after_sync:
+                # Only continue if no critical errors or fail_fast is disabled
+                if not sync_results["critical_errors"] or not fail_fast:
+                    # Step 2: Validate state consistency
                     try:
-                        persist_result = self._state.persist_state()
+                        validation_result = await self._validate_state_consistency()
                         sync_results["operations_performed"].append(
-                            "persist_to_storage"
+                            "validate_consistency"
                         )
-                        sync_results["state_changes"]["persisted_keys"] = (
-                            persist_result.get("persisted_keys", [])
-                        )
+                        sync_results["state_changes"]["validation"] = validation_result
                         span.set_attribute(
-                            "keys_persisted",
-                            len(persist_result.get("persisted_keys", [])),
+                            "validation_issues",
+                            len(validation_result.get("issues", [])),
                         )
                     except Exception as e:
-                        error_msg = f"Failed to persist state to storage: {e}"
+                        error_msg = f"State validation failed: {e}"
                         sync_results["errors"].append(error_msg)
                         logger.warning(error_msg)
+
+                    # Step 3: Persist state if requested
+                    if persist_after_sync:
+                        try:
+                            persist_result = self._state.persist_state()
+
+                            # Validate return type
+                            if not isinstance(persist_result, dict):
+                                error_msg = f"persist_state() returned unexpected type: {type(persist_result).__name__}"
+                                sync_results["critical_errors"].append(error_msg)
+                                logger.error(error_msg)
+
+                                if fail_fast:
+                                    raise UtilityUseCaseError(error_msg)
+                            else:
+                                sync_results["operations_performed"].append(
+                                    "persist_to_storage"
+                                )
+                                persisted_keys = persist_result.get(
+                                    "persisted_keys", []
+                                )
+                                sync_results["state_changes"]["persisted_keys"] = (
+                                    persisted_keys
+                                )
+                                span.set_attribute(
+                                    "keys_persisted", len(persisted_keys)
+                                )
+
+                        except UtilityUseCaseError:
+                            # Re-raise UtilityUseCaseError as-is (fail-fast)
+                            raise
+                        except Exception as e:
+                            error_msg = f"Failed to persist state to storage: {e}"
+                            sync_results["critical_errors"].append(error_msg)
+                            logger.error(error_msg)
+
+                            if fail_fast:
+                                raise UtilityUseCaseError(
+                                    f"State sync failed on persist: {e}", cause=e
+                                ) from e
 
                 # Compile results
                 results = {
-                    "success": len(sync_results["errors"]) == 0,
+                    "success": len(sync_results["critical_errors"]) == 0,
                     "timestamp": datetime.now().isoformat(),
                     "sync_results": sync_results,
                     "total_operations": len(sync_results["operations_performed"]),
                     "total_errors": len(sync_results["errors"]),
+                    "critical_errors": len(sync_results["critical_errors"]),
                     "metadata": {
                         "force_reload": force_reload,
                         "persist_after_sync": persist_after_sync,
+                        "fail_fast": fail_fast,
                     },
                 }
 
                 logger.info(
-                    "State synchronization completed. Operations: %d, Errors: %d",
+                    "State synchronization completed. Operations: %d, Errors: %d, Critical: %d",
                     len(sync_results["operations_performed"]),
                     len(sync_results["errors"]),
+                    len(sync_results["critical_errors"]),
                 )
 
                 return results
@@ -564,10 +614,10 @@ class UtilityUseCase:
         debug_state = {}
 
         try:
-            # Get all state categories
-            generation_state = self._state.get_all_state("generation")
-            coverage_state = self._state.get_all_state("coverage")
-            telemetry_state = self._state.get_all_state("telemetry")
+            # Get all state categories using correct state_prefix parameter
+            generation_state = self._state.get_all_state(state_prefix="generation")
+            coverage_state = self._state.get_all_state(state_prefix="coverage")
+            telemetry_state = self._state.get_all_state(state_prefix="telemetry")
 
             debug_state["generation"] = generation_state
             debug_state["coverage"] = coverage_state
@@ -785,22 +835,36 @@ class UtilityUseCase:
         return validation_result
 
     async def _create_state_backup(self) -> dict[str, Any]:
-        """Create a backup of current state."""
+        """
+        Create a backup of current state to disk.
+
+        Backups are stored in .testcraft/backups/ directory with timestamp-based filenames.
+        """
+        import json
+
         backup_timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        backup_location = f"state_backup_{backup_timestamp}.json"
+
+        # Use .testcraft directory for backups
+        backup_dir = Path.cwd() / ".testcraft" / "backups"
+        backup_dir.mkdir(parents=True, exist_ok=True)
+
+        backup_file = backup_dir / f"state_backup_{backup_timestamp}.json"
 
         try:
             all_state = self._state.get_all_state()
 
-            # In a real implementation, this would write to a file
-            # For now, we'll just return the backup information
+            # Write the backup file
+            with open(backup_file, "w", encoding="utf-8") as f:
+                json.dump(all_state, f, indent=2, default=str)
+
             backup_data = {
                 "timestamp": backup_timestamp,
-                "backup_location": backup_location,
-                "state_entries": len(all_state),
-                "backup_size_estimate": len(str(all_state)),
+                "backup_location": str(backup_file),
+                "state_entries": len(all_state) if isinstance(all_state, dict) else 0,
+                "backup_size_bytes": backup_file.stat().st_size,
             }
 
+            logger.info(f"State backup created: {backup_file}")
             return backup_data
 
         except Exception as e:

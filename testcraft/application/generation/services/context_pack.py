@@ -8,7 +8,6 @@ and other existing services.
 
 from __future__ import annotations
 
-import ast
 import logging
 from pathlib import Path
 from typing import Any
@@ -24,6 +23,7 @@ from ....domain.models import (
     Target,
 )
 from ....ports.parser_port import ParserPort
+from .context_assembler import ContextAssembler
 from .enhanced_context_builder import EnrichedContextBuilder
 from .import_resolver import ImportResolver
 
@@ -44,6 +44,7 @@ class ContextPackBuilder:
         import_resolver: ImportResolver | None = None,
         enriched_context_builder: EnrichedContextBuilder | None = None,
         parser: ParserPort | None = None,
+        context_assembler: ContextAssembler | None = None,
     ) -> None:
         """
         Initialize the ContextPack builder.
@@ -52,12 +53,19 @@ class ContextPackBuilder:
             import_resolver: Service for resolving canonical imports and bootstrap
             enriched_context_builder: Service for enriched context with safety rules
             parser: Parser service for extracting focal code information
+            context_assembler: Service for context assembly and AST analysis
         """
         self._import_resolver = import_resolver or ImportResolver()
         self._enriched_context_builder = (
             enriched_context_builder or EnrichedContextBuilder()
         )
         self._parser = parser
+        self._context_assembler = context_assembler or ContextAssembler(
+            context_port=None,  # Will be injected by caller if needed
+            parser_port=parser or ParserPort(),  # Use provided parser or default
+            config={},  # Will be injected by caller if needed
+            import_resolver=self._import_resolver,
+        )
         self._cache: dict[str, Any] = {}
 
     def build_context_pack(
@@ -98,30 +106,73 @@ class ContextPackBuilder:
                 object=target_object,
             )
 
-            # Build import_map component using ImportResolver
+            # Build import_map component using ImportResolver with enhanced fallback
+            import_map = None
             try:
                 import_map = self._import_resolver.resolve(target_file)
             except ValueError as e:
-                # Fallback for files without proper package structure (e.g., test files)
+                # Enhanced fallback using context_assembler's import analysis
                 logger.warning(
-                    "Import resolution failed for %s: %s. Using fallback import.",
+                    "Import resolution failed for %s: %s. Using enhanced fallback.",
                     target_file,
                     e,
                 )
-                module_name = target_file.stem
-                import_map = ImportMap(
-                    target_import=f"import {module_name} as _under_test",
-                    sys_path_roots=[str(target_file.parent.resolve())],
-                    needs_bootstrap=True,
-                    bootstrap_conftest=f"""import sys
+
+                # Use context_assembler's import analysis for better fallback
+                try:
+                    # Try to get project root using context_assembler's method
+                    project_root = self._context_assembler._find_project_root(
+                        target_file
+                    )
+
+                    # Use context_assembler's import resolver as fallback
+                    fallback_import_map = (
+                        self._context_assembler._import_resolver.resolve(target_file)
+                    )
+
+                    # If context_assembler's resolver also fails, create enhanced fallback
+                    if fallback_import_map is None:
+                        raise ValueError(
+                            "Context assembler import resolution also failed"
+                        )
+
+                    import_map = fallback_import_map
+
+                except Exception as fallback_error:
+                    logger.debug(
+                        "Context assembler fallback also failed: %s", fallback_error
+                    )
+
+                    # Create enhanced fallback with better bootstrap logic
+                    module_name = target_file.stem
+
+                    # Use context_assembler's project root detection for better sys.path setup
+                    try:
+                        project_root = self._context_assembler._find_project_root(
+                            target_file
+                        )
+                        sys_path_root = str(project_root)
+                    except Exception:
+                        sys_path_root = str(target_file.parent.resolve())
+
+                    import_map = ImportMap(
+                        target_import=f"import {module_name} as _under_test",
+                        sys_path_roots=[sys_path_root],
+                        needs_bootstrap=True,
+                        bootstrap_conftest=f"""import sys
 import pathlib
 
-# Fallback bootstrap for standalone file
-p = pathlib.Path(r"{target_file.parent.resolve()}").resolve()
+# Enhanced fallback bootstrap using context_assembler patterns
+p = pathlib.Path(r"{sys_path_root}").resolve()
 if str(p) not in sys.path:
     sys.path.insert(0, str(p))
+
+# Add current directory as fallback
+current_dir = pathlib.Path(r"{target_file.parent.resolve()}").resolve()
+if str(current_dir) not in sys.path:
+    sys.path.insert(0, str(current_dir))
 """,
-                )
+                    )
 
             # Build focal code component
             focal = self._build_focal_component(target_file, target_object)
@@ -147,19 +198,37 @@ if str(p) not in sys.path:
                 property_context=property_context,
                 conventions=final_conventions,
                 budget=final_budget,
+                context="",  # Will be set later by context assembler if needed
             )
 
             logger.debug("Built ContextPack successfully for %s", target_object)
             return context_pack
 
-        except Exception as e:
+        except ValueError as e:
             logger.error(
-                "Failed to build ContextPack for %s in %s: %s",
+                "Invalid input for ContextPack building - %s in %s: %s",
                 target_object,
                 target_file,
                 e,
             )
             raise
+        except OSError as e:
+            logger.error(
+                "File system error building ContextPack for %s in %s: %s",
+                target_object,
+                target_file,
+                e,
+            )
+            raise
+        except Exception as e:
+            logger.error(
+                "Unexpected error building ContextPack for %s in %s: %s",
+                target_object,
+                target_file,
+                e,
+            )
+            # Don't re-raise unexpected errors, return None instead
+            return None
 
     def _find_project_root(self, file_path: Path) -> Path:
         """Find project root by looking for common project markers."""
@@ -196,35 +265,44 @@ if str(p) not in sys.path:
             Focal component with source code information
         """
         try:
-            # Read and parse the file
-            content = file_path.read_text(encoding="utf-8")
-            tree = ast.parse(content)
+            # Use context_assembler to extract focal information
+            # Create a minimal plan for the context assembler
+            from ....domain.models import TestElement, TestGenerationPlan
 
-            # Extract the target object
-            if "." in target_object:
-                # Handle class.method case
-                class_name, method_name = target_object.split(".", 1)
-                node_info = self._extract_class_method(tree, class_name, method_name)
-            else:
-                # Handle function case
-                node_info = self._extract_function(tree, target_object)
-
-            if not node_info:
-                # Fallback: return the entire file as focal
-                return Focal(
-                    source=content,
-                    signature=f"# Target: {target_object}",
-                    docstring=None,
-                )
-
-            return Focal(
-                source=node_info["source"],
-                signature=node_info["signature"],
-                docstring=node_info["docstring"],
+            element = TestElement(
+                name=target_object,
+                type="function",  # Default type, will be determined by context assembler
+                line_range=(0, 0),  # Will be determined by context assembler
             )
 
-        except Exception as e:
-            logger.warning("Failed to parse focal code for %s: %s", target_object, e)
+            plan = TestGenerationPlan(
+                elements_to_test=[element],
+                test_file_path=str(file_path),
+                source_file_path=str(file_path),
+            )
+
+            # Use context_assembler's focal building logic
+            focal = self._context_assembler._build_focal_object(
+                source_path=file_path,
+                plan=plan,
+                target=Target(
+                    module_file=str(file_path),
+                    object=target_object,
+                ),
+            )
+
+            if focal:
+                return focal
+
+            # Fallback: return basic focal information
+            return Focal(
+                source=f"# Target: {target_object}",
+                signature=f"# Target: {target_object}",
+                docstring=None,
+            )
+
+        except (ValueError, TypeError) as e:
+            logger.warning("Invalid input for focal component %s: %s", target_object, e)
             # Fallback to basic information
             try:
                 content = file_path.read_text(encoding="utf-8")
@@ -233,191 +311,95 @@ if str(p) not in sys.path:
                     signature=f"# Target: {target_object}",
                     docstring=None,
                 )
-            except Exception:
-                # Final fallback
+            except OSError:
+                # File read error fallback
                 return Focal(
                     source=f"# Could not read {file_path}",
                     signature=f"# Target: {target_object}",
                     docstring=None,
                 )
-
-    def _extract_function(self, tree: ast.AST, func_name: str) -> dict[str, Any] | None:
-        """Extract function information from AST."""
-        for node in ast.walk(tree):
-            if isinstance(node, ast.FunctionDef) and node.name == func_name:
-                source = ast.get_source_segment(
-                    # We need the original source for get_source_segment
-                    "",  # This will not work without original source
-                    node,
-                ) or self._reconstruct_function_source(node)
-
-                signature = self._build_signature(node)
-                docstring = ast.get_docstring(node)
-
-                return {
-                    "source": source,
-                    "signature": signature,
-                    "docstring": docstring,
-                }
-        return None
-
-    def _extract_class_method(
-        self, tree: ast.AST, class_name: str, method_name: str
-    ) -> dict[str, Any] | None:
-        """Extract class method information from AST."""
-        for node in ast.walk(tree):
-            if isinstance(node, ast.ClassDef) and node.name == class_name:
-                for item in node.body:
-                    if isinstance(item, ast.FunctionDef) and item.name == method_name:
-                        source = self._reconstruct_function_source(item)
-                        signature = self._build_signature(item)
-                        docstring = ast.get_docstring(item)
-
-                        return {
-                            "source": source,
-                            "signature": signature,
-                            "docstring": docstring,
-                        }
-        return None
-
-    def _build_signature(self, func_node: ast.FunctionDef) -> str:
-        """Build function signature from AST node."""
-        try:
-            args = []
-
-            # Handle positional arguments
-            for arg in func_node.args.args:
-                arg_str = arg.arg
-                if arg.annotation:
-                    try:
-                        arg_str += f": {ast.unparse(arg.annotation)}"
-                    except Exception:
-                        # Skip annotation if unparsing fails
-                        pass
-                args.append(arg_str)
-
-            # Handle default arguments
-            defaults = func_node.args.defaults
-            if defaults:
-                # Apply defaults to the last N arguments where N = len(defaults)
-                num_defaults = len(defaults)
-                for i, default in enumerate(defaults):
-                    arg_index = len(args) - num_defaults + i
-                    if 0 <= arg_index < len(args):
-                        try:
-                            default_str = ast.unparse(default)
-                            args[arg_index] += f" = {default_str}"
-                        except Exception:
-                            # Skip default if unparsing fails
-                            pass
-
-            # Handle varargs
-            if func_node.args.vararg:
-                vararg_str = f"*{func_node.args.vararg.arg}"
-                if func_node.args.vararg.annotation:
-                    try:
-                        vararg_str += (
-                            f": {ast.unparse(func_node.args.vararg.annotation)}"
-                        )
-                    except Exception:
-                        pass
-                args.append(vararg_str)
-
-            # Handle keyword arguments
-            for kwarg in func_node.args.kwonlyargs:
-                kwarg_str = kwarg.arg
-                if kwarg.annotation:
-                    try:
-                        kwarg_str += f": {ast.unparse(kwarg.annotation)}"
-                    except Exception:
-                        pass
-                args.append(kwarg_str)
-
-            # Handle kwargs
-            if func_node.args.kwarg:
-                kwarg_str = f"**{func_node.args.kwarg.arg}"
-                if func_node.args.kwarg.annotation:
-                    try:
-                        kwarg_str += f": {ast.unparse(func_node.args.kwarg.annotation)}"
-                    except Exception:
-                        pass
-                args.append(kwarg_str)
-
-            # Build return annotation
-            return_annotation = ""
-            if func_node.returns:
-                try:
-                    return_annotation = f" -> {ast.unparse(func_node.returns)}"
-                except Exception:
-                    pass
-
-            return f"def {func_node.name}({', '.join(args)}){return_annotation}:"
-
+            except Exception as e:
+                logger.debug("Unexpected error in focal fallback: %s", e)
+                # Final fallback
+                return Focal(
+                    source=f"# Error reading {file_path}",
+                    signature=f"# Target: {target_object}",
+                    docstring=None,
+                )
+        except OSError as e:
+            logger.warning(
+                "File error building focal component for %s: %s", target_object, e
+            )
+            # File system error fallback
+            return Focal(
+                source=f"# File system error: {file_path}",
+                signature=f"# Target: {target_object}",
+                docstring=None,
+            )
         except Exception as e:
-            logger.debug("Failed to build signature for %s: %s", func_node.name, e)
-            # Fallback to simple signature
-            return f"def {func_node.name}(...):"
-
-    def _reconstruct_function_source(self, func_node: ast.FunctionDef) -> str:
-        """Reconstruct function source from AST node."""
-        try:
-            # Use ast.unparse if available (Python 3.9+)
-            return ast.unparse(func_node)
-        except AttributeError:
-            # Fallback for older Python versions
-            lines = [self._build_signature(func_node)]
-            if ast.get_docstring(func_node):
-                lines.append(f'    """{ast.get_docstring(func_node)}"""')
-            lines.append("    # Implementation details...")
-            return "\n".join(lines)
+            logger.warning(
+                "Unexpected error building focal component for %s: %s", target_object, e
+            )
+            # Unexpected error fallback
+            return Focal(
+                source=f"# Error processing {file_path}",
+                signature=f"# Target: {target_object}",
+                docstring=None,
+            )
 
     def _build_resolved_defs_component(self, file_path: Path) -> list[ResolvedDef]:
         """
         Build resolved_defs component for on-demand symbol definitions.
 
-        TODO: This is a placeholder implementation. Full implementation should:
-        1. Analyze the focal code for symbols that might be called
-        2. Resolve their definitions using Jedi or similar
-        3. Include minimal bodies only when essential
-        4. Support on-demand resolution during planning/generation
+        Delegates to context_assembler for robust symbol extraction and resolution.
         """
-        # Placeholder implementation
-        resolved_defs = []
-
         try:
-            # Basic implementation: extract imports and classes from the file
-            content = file_path.read_text(encoding="utf-8")
-            tree = ast.parse(content)
+            # Use context_assembler's resolved definitions logic
+            from ....domain.models import TestElement, TestGenerationPlan
 
-            # Extract some basic symbols
-            for node in ast.walk(tree):
-                if isinstance(node, ast.ClassDef):
+            # Create a minimal plan for symbol extraction
+            element = TestElement(
+                name="module_symbols",  # Generic name for symbol extraction
+                type="module",
+                line_range=(0, 0),
+            )
+
+            plan = TestGenerationPlan(
+                elements_to_test=[element],
+                test_file_path=str(file_path),
+                source_file_path=str(file_path),
+            )
+
+            # Use context_assembler's resolved definitions population
+            resolved_def_dicts = self._context_assembler._populate_resolved_definitions(
+                source_path=file_path,
+                plan=plan,
+                context_data={},
+            )
+
+            # Transform context_assembler results to ResolvedDef objects
+            resolved_defs = []
+            for def_dict in resolved_def_dicts:
+                try:
                     resolved_defs.append(
                         ResolvedDef(
-                            name=node.name,
-                            kind="class",
-                            signature=f"class {node.name}:",
-                            doc=ast.get_docstring(node),
-                            body="omitted",
+                            name=def_dict.get("name", "unknown"),
+                            kind=def_dict.get("type", "unknown"),
+                            signature=def_dict.get("signature", ""),
+                            doc=def_dict.get("doc"),
+                            body=def_dict.get("source", "omitted"),
                         )
                     )
-                elif isinstance(node, ast.FunctionDef) and not node.name.startswith(
-                    "_"
-                ):
-                    resolved_defs.append(
-                        ResolvedDef(
-                            name=node.name,
-                            kind="func",
-                            signature=self._build_signature(node),
-                            doc=ast.get_docstring(node),
-                            body="omitted",
-                        )
-                    )
+                except Exception as e:
+                    logger.debug("Failed to transform resolved def: %s", e)
+                    continue
+
+            return resolved_defs[:10]  # Limit to avoid bloat
 
         except Exception as e:
             logger.debug("Failed to build resolved_defs for %s: %s", file_path, e)
-
-        return resolved_defs[:10]  # Limit to avoid bloat
+            # Return empty list as fallback
+            return []
 
     def _build_property_context_component(
         self, file_path: Path, target_object: str
@@ -425,14 +407,39 @@ if str(p) not in sys.path:
         """
         Build property_context component with ranked methods and G/W/T snippets.
 
-        TODO: This is a placeholder implementation. Full implementation should:
-        1. Use PropertyAnalyzer (APT-style) to identify GIVEN/WHEN/THEN relationships
-        2. Rank methods by intra-class complete > intra-class G/W/T > repo-level complete
-        3. Extract minimal G/W/T snippets from related code
-        4. Build test bundles from existing tests
+        Delegates to context_assembler for comprehensive property analysis.
         """
-        # Placeholder implementation - returns empty context
-        return PropertyContext()
+        try:
+            # Use context_assembler's property context building logic
+            from ....domain.models import TestElement, TestGenerationPlan
+
+            # Create a minimal plan for property context analysis
+            element = TestElement(
+                name=target_object,
+                type="function",  # Will be refined by context assembler
+                line_range=(0, 0),
+            )
+
+            plan = TestGenerationPlan(
+                elements_to_test=[element],
+                test_file_path=str(file_path),
+                source_file_path=str(file_path),
+            )
+
+            # Use context_assembler's property context building
+            property_context = self._context_assembler._build_property_context(
+                plan=plan,
+                context_data={},
+            )
+
+            return property_context
+
+        except Exception as e:
+            logger.debug(
+                "Failed to build property context for %s: %s", target_object, e
+            )
+            # Return empty context as fallback
+            return PropertyContext()
 
     def build_enriched_context(
         self,
@@ -441,13 +448,41 @@ if str(p) not in sys.path:
         existing_context: str | None = None,
     ) -> dict[str, Any]:
         """
-        Build enriched context using EnrichedContextBuilder.
+        Build enriched context using context_assembler's enhanced context building.
 
-        This method delegates to the existing EnrichedContextBuilder for
-        contracts, dependencies, fixtures, and side-effects detection.
+        Delegates to context_assembler for comprehensive context enrichment
+        including contracts, dependencies, fixtures, and side-effects detection.
         """
-        return self._enriched_context_builder.build_enriched_context(
-            source_file=source_file,
-            project_root=project_root,
-            existing_context=existing_context,
-        )
+        try:
+            # Use context_assembler's enhanced context building
+            enriched_context = (
+                self._context_assembler._build_enriched_context_for_generation(
+                    source_path=source_file,
+                    base_context=existing_context,
+                    import_map=None,  # Will be resolved by context assembler if needed
+                )
+            )
+
+            # Convert string result to dict format expected by callers
+            if isinstance(enriched_context, str):
+                return {"context": enriched_context}
+            elif isinstance(enriched_context, dict):
+                return enriched_context
+            else:
+                # Fallback to EnrichedContextBuilder if context_assembler fails
+                return self._enriched_context_builder.build_enriched_context(
+                    source_file=source_file,
+                    project_root=project_root,
+                    existing_context=existing_context,
+                )
+
+        except Exception as e:
+            logger.debug(
+                "Failed to build enriched context via context_assembler: %s", e
+            )
+            # Fallback to original EnrichedContextBuilder
+            return self._enriched_context_builder.build_enriched_context(
+                source_file=source_file,
+                project_root=project_root,
+                existing_context=existing_context,
+            )

@@ -9,6 +9,7 @@ for different project layouts.
 from __future__ import annotations
 
 import logging
+import threading
 from pathlib import Path
 from typing import TypedDict
 
@@ -36,6 +37,7 @@ class ImportResolver:
 
     def __init__(self) -> None:
         self._packaging_cache: dict[str, PackagingInfo] = {}
+        self._cache_lock = threading.Lock()
 
     def resolve(self, file_path: Path) -> ImportMap:
         """
@@ -50,46 +52,86 @@ class ImportResolver:
         """
         try:
             # Find project root
-            project_root = self._find_project_root(file_path)
-            logger.debug(
-                "Resolving imports for %s in project %s", file_path, project_root
-            )
+            try:
+                project_root = self._find_project_root(file_path)
+                logger.debug(
+                    "Resolving imports for %s in project %s", file_path, project_root
+                )
+            except Exception as e:
+                raise ValueError(
+                    f"Failed to find project root for {file_path}: {e}"
+                ) from e
 
             # Get packaging information
-            packaging_info = self._get_packaging_info(project_root)
+            try:
+                packaging_info = self._get_packaging_info(project_root)
+            except Exception as e:
+                raise ValueError(
+                    f"Failed to get packaging info for project {project_root}: {e}"
+                ) from e
 
             # Get canonical import path - try enhanced resolution first
-            canonical_import = self._resolve_canonical_import(
-                file_path, packaging_info, project_root
-            )
-            if not canonical_import:
-                raise ValueError(
-                    f"Cannot determine canonical import for {file_path} - no package structure found"
+            try:
+                canonical_import = self._resolve_canonical_import(
+                    file_path, packaging_info, project_root
                 )
+                if not canonical_import:
+                    raise ValueError(
+                        f"Cannot determine canonical import for {file_path} - no package structure found"
+                    )
+            except Exception as e:
+                raise ValueError(
+                    f"Failed to resolve canonical import for {file_path}: {e}"
+                ) from e
 
             # Validate that we have a proper package structure, not just a standalone file
-            if not self._has_valid_package_structure(file_path, packaging_info):
+            try:
+                if not self._has_valid_package_structure(file_path, packaging_info):
+                    raise ValueError(
+                        f"Cannot determine canonical import for {file_path} - no package structure found"
+                    )
+            except Exception as e:
                 raise ValueError(
-                    f"Cannot determine canonical import for {file_path} - no package structure found"
-                )
+                    f"Failed to validate package structure for {file_path}: {e}"
+                ) from e
 
             # Build target import statement
-            target_import = self._build_target_import(canonical_import)
+            try:
+                target_import = self._build_target_import(canonical_import)
+            except Exception as e:
+                raise ValueError(
+                    f"Failed to build target import for {canonical_import}: {e}"
+                ) from e
 
             # Determine sys.path roots (convert to strings)
-            sys_path_roots = [
-                str(root.resolve()) for root in packaging_info.source_roots
-            ]
+            try:
+                sys_path_roots = [
+                    str(root.resolve()) for root in packaging_info.source_roots
+                ]
+            except Exception as e:
+                raise ValueError(
+                    f"Failed to determine sys.path roots for {file_path}: {e}"
+                ) from e
 
             # Determine if bootstrap is needed
-            needs_bootstrap = self._needs_bootstrap(packaging_info, project_root)
+            try:
+                needs_bootstrap = self._needs_bootstrap(packaging_info, project_root)
+            except Exception as e:
+                raise ValueError(
+                    f"Failed to determine bootstrap requirements for {file_path}: {e}"
+                ) from e
 
             # Generate bootstrap conftest content
-            bootstrap_conftest = (
-                self._generate_bootstrap_conftest(sys_path_roots)
-                if needs_bootstrap
-                else ""
-            )
+            try:
+                bootstrap_conftest = (
+                    self._generate_bootstrap_conftest(sys_path_roots)
+                    if needs_bootstrap
+                    else ""
+                )
+            except Exception as e:
+                raise ValueError(
+                    f"Failed to generate bootstrap conftest for {file_path}: {e}"
+                ) from e
 
             return ImportMap(
                 target_import=target_import,
@@ -106,8 +148,18 @@ class ImportResolver:
         """Find project root by looking for common project markers."""
         current = file_path.parent if file_path.is_file() else file_path
         original_start = current
+        visited_dirs: set[Path] = set()
 
         while current != current.parent:
+            # Prevent infinite loops from circular symlinks
+            current_resolved = current.resolve()
+            if current_resolved in visited_dirs:
+                logger.debug(
+                    "Detected circular symlink at %s, stopping traversal", current
+                )
+                break
+            visited_dirs.add(current_resolved)
+
             # Check for strong project markers
             if any(
                 (current / marker).exists()
@@ -136,12 +188,18 @@ class ImportResolver:
         while current != current.parent:
             # If current directory doesn't have __init__.py but contains Python packages,
             # it's likely the project root
-            if not (current / "__init__.py").exists() and any(
-                (child / "__init__.py").exists()
-                for child in current.iterdir()
-                if child.is_dir() and not child.name.startswith(".")
-            ):
-                return current
+            try:
+                if not (current / "__init__.py").exists() and any(
+                    (child / "__init__.py").exists()
+                    for child in current.iterdir()
+                    if child.is_dir() and not child.name.startswith(".")
+                ):
+                    return current
+            except (PermissionError, OSError) as e:
+                # Log permission errors but don't fail completely
+                logger.debug("Permission denied accessing %s: %s", current, e)
+                # Skip this directory and continue searching
+                pass
 
             # Stop if we've gone too far
             if self._is_beyond_project_boundary(current, original_start):
@@ -161,36 +219,75 @@ class ImportResolver:
         try:
             # If we can't make the path relative, we've gone too far
             original_start.relative_to(current)
-
-            # Stop at system directories or very deep nesting
-            parts = list(current.parts)
-            if len(parts) <= 3:  # e.g., ['/', 'var', 'folders'] - system level
-                return True
-
-            # Stop if we're in temp directories but have gone above them
-            if any(part.startswith("tmp") for part in parts):
-                # If original_start was in a temp dir, don't go above temp dirs
-                orig_parts = list(original_start.parts)
-                if any(part.startswith("tmp") for part in orig_parts) and not any(
-                    part.startswith("tmp") for part in parts[-3:]
-                ):
-                    return True
-
-            return False
         except ValueError:
             # current is not a parent of original_start
             return True
+
+        # Stop at system directories or very deep nesting
+        parts = list(current.parts)
+        if len(parts) <= 3:  # e.g., ['/', 'var', 'folders'] - system level
+            return True
+
+        # Prevent access to system directories
+        system_dirs = {
+            "/",
+            "/etc",
+            "/usr",
+            "/System",
+            "/Library",
+            "/Applications",
+            "/private",
+            "/var",
+        }
+        current_str = str(current.resolve())
+
+        # Check if we're in any system directory
+        for system_dir in system_dirs:
+            if current_str.startswith(system_dir):
+                return True
+
+        # Prevent access to user home directories
+        if "/Users/" in current_str or "/home/" in current_str:
+            # Only allow access to the specific user directory that contains the original file
+            try:
+                # Check if current is within the user's home directory that contains the original file
+                home_parts = [p for p in parts if "Users" in p or "home" in p]
+                if len(home_parts) > 1:  # More than one home directory level
+                    return True
+            except (IndexError, ValueError):
+                return True
+
+        # Stop if we're in temp directories but have gone above them
+        if any(part.startswith("tmp") for part in parts):
+            # If original_start was in a temp dir, don't go above temp dirs
+            orig_parts = list(original_start.parts)
+            if any(part.startswith("tmp") for part in orig_parts) and not any(
+                part.startswith("tmp") for part in parts[-3:]
+            ):
+                return True
+
+        # Prevent excessive directory traversal (more than 10 levels up from original)
+        try:
+            relative_path = original_start.relative_to(current)
+            if len(relative_path.parts) > 10:
+                return True
+        except ValueError:
+            return True
+
+        return False
 
     def _get_packaging_info(self, project_root: Path) -> PackagingInfo:
         """Get or cache packaging information for a project."""
         cache_key = str(project_root.resolve())
 
-        if cache_key not in self._packaging_cache:
-            self._packaging_cache[cache_key] = PackagingDetector.detect_packaging(
-                project_root
-            )
+        # Thread-safe cache access
+        with self._cache_lock:
+            if cache_key not in self._packaging_cache:
+                self._packaging_cache[cache_key] = PackagingDetector.detect_packaging(
+                    project_root
+                )
 
-        return self._packaging_cache[cache_key]
+            return self._packaging_cache[cache_key]
 
     def _has_valid_package_structure(
         self, file_path: Path, packaging_info: PackagingInfo
@@ -214,8 +311,16 @@ class ImportResolver:
                     continue
 
         # Also check if the file's directory has __init__.py (direct check)
-        if (file_abs.parent / "__init__.py").exists():
-            return True
+        try:
+            if (file_abs.parent / "__init__.py").exists():
+                return True
+        except (PermissionError, OSError) as e:
+            # Log permission errors when checking for __init__.py
+            logger.debug(
+                "Permission denied checking __init__.py at %s: %s", file_abs.parent, e
+            )
+            # If we can't check, assume no package structure
+            pass
 
         # If no package structure found, this is likely a standalone file
         # But be lenient - if PackagingDetector found a valid import, allow it
@@ -363,19 +468,35 @@ class ImportResolver:
             # Walk up from file to find the package boundary
             package_parts = []
             current_dir = file_abs.parent
+            visited_dirs_in_resolution: set[Path] = set()
 
             while current_dir != root_abs and current_dir != current_dir.parent:
-                # Check if current directory is a Python package
-                if (current_dir / "__init__.py").exists():
-                    package_parts.insert(0, current_dir.name)
-                    current_dir = current_dir.parent
-                else:
-                    # If we hit a non-package directory, treat it as a package root
-                    # This handles cases like "libs/pkg_a" where "libs" is not a package
-                    # but "pkg_a" is the actual package we want to import
-                    if package_parts:  # We found at least one package level
-                        break
-                    current_dir = current_dir.parent
+                # Prevent infinite loops from circular symlinks
+                current_dir_resolved = current_dir.resolve()
+                if current_dir_resolved in visited_dirs_in_resolution:
+                    logger.debug(
+                        "Detected circular symlink at %s in import resolution, stopping",
+                        current_dir,
+                    )
+                    break
+                visited_dirs_in_resolution.add(current_dir_resolved)
+                try:
+                    # Check if current directory is a Python package
+                    if (current_dir / "__init__.py").exists():
+                        package_parts.insert(0, current_dir.name)
+                        current_dir = current_dir.parent
+                    else:
+                        # If we hit a non-package directory, treat it as a package root
+                        # This handles cases like "libs/pkg_a" where "libs" is not a package
+                        # but "pkg_a" is the actual package we want to import
+                        if package_parts:  # We found at least one package level
+                            break
+                        current_dir = current_dir.parent
+                except (PermissionError, OSError) as e:
+                    # Log permission errors when checking directories
+                    logger.debug("Permission denied accessing %s: %s", current_dir, e)
+                    # Stop traversal if we can't access a directory
+                    break
 
             if package_parts:
                 # Add the module name (file without .py extension)
@@ -401,7 +522,56 @@ class ImportResolver:
         - "my_pkg.sub.module" -> "import my_pkg.sub.module as _under_test"
         - "my_pkg.utils" -> "import my_pkg.utils as _under_test"
         """
+        # Validate canonical_import to prevent injection attacks
+        if not self._is_valid_import_path(canonical_import):
+            raise ValueError(
+                f"Invalid import path for injection prevention: {canonical_import!r}"
+            )
+
         return f"import {canonical_import} as _under_test"
+
+    def _is_valid_import_path(self, import_path: str) -> bool:
+        """
+        Validate that an import path is safe for injection into import statements.
+
+        This prevents code injection attacks via malicious import paths.
+        """
+        if not import_path or not isinstance(import_path, str):
+            return False
+
+        # Check for injection patterns
+        dangerous_patterns = [
+            "\n",  # Newlines
+            "\r",  # Carriage returns
+            ";",  # Semicolons (statement separators)
+            "\\",  # Backslashes (path traversal)
+            "\x00",  # Null bytes
+            "..",  # Path traversal attempts
+        ]
+
+        for pattern in dangerous_patterns:
+            if pattern in import_path:
+                return False
+
+        # Must start and end with valid identifier characters
+        if (
+            not import_path[0].isidentifier()
+            or not import_path[-1].replace(".", "").isalnum()
+        ):
+            return False
+
+        # Split by dots and validate each component
+        parts = import_path.split(".")
+        for part in parts:
+            # Each part must be a valid Python identifier
+            if not part.isidentifier():
+                return False
+
+            # No empty parts allowed
+            if not part:
+                return False
+
+        return True
 
     def _needs_bootstrap(
         self, packaging_info: PackagingInfo, project_root: Path

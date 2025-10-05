@@ -11,7 +11,6 @@ from __future__ import annotations
 import asyncio
 import logging
 from collections.abc import Awaitable, Callable
-from concurrent.futures import ThreadPoolExecutor
 
 from ....adapters.io.file_status_tracker import FileStatus, FileStatusTracker
 from ....domain.models import GenerationResult, TestGenerationPlan
@@ -31,7 +30,6 @@ class BatchExecutor:
     def __init__(
         self,
         telemetry_port: TelemetryPort,
-        executor: ThreadPoolExecutor | None = None,
         status_tracker: FileStatusTracker | None = None,
     ):
         """
@@ -39,12 +37,11 @@ class BatchExecutor:
 
         Args:
             telemetry_port: Port for telemetry operations
-            executor: Optional shared thread pool executor
             status_tracker: Optional file status tracker for live updates
         """
         self._telemetry = telemetry_port
-        self._executor = executor
         self._status_tracker = status_tracker
+        self._lock = asyncio.Lock()
 
     async def run_in_batches(
         self,
@@ -71,12 +68,13 @@ class BatchExecutor:
                 if self._status_tracker:
                     file_paths = [plan.file_path for plan in plans]
                     for file_path in file_paths:
-                        self._status_tracker.update_file_status(
-                            file_path,
-                            FileStatus.WAITING,
-                            operation="Queued for generation",
-                            step="Waiting in batch queue",
-                        )
+                        async with self._lock:
+                            self._status_tracker.update_file_status(
+                                file_path,
+                                FileStatus.WAITING,
+                                operation="Queued for generation",
+                                step="Waiting in batch queue",
+                            )
 
                 # Process plans in batches
                 for i in range(0, len(plans), batch_size):
@@ -86,13 +84,14 @@ class BatchExecutor:
                     # Update status for batch start
                     if self._status_tracker:
                         for plan in batch:
-                            self._status_tracker.update_file_status(
-                                plan.file_path,
-                                FileStatus.ANALYZING,
-                                operation="Starting generation",
-                                step="Preparing for LLM generation",
-                                progress=10.0,
-                            )
+                            async with self._lock:
+                                self._status_tracker.update_file_status(
+                                    plan.file_path,
+                                    FileStatus.ANALYZING,
+                                    operation="Starting generation",
+                                    step="Preparing for LLM generation",
+                                    progress=10.0,
+                                )
 
                     # Process batch concurrently
                     batch_results = await self._process_generation_batch(
@@ -148,12 +147,13 @@ class BatchExecutor:
                 # Update status for any remaining files
                 if self._status_tracker:
                     for plan in plans:
-                        self._status_tracker.update_file_status(
-                            plan.file_path,
-                            FileStatus.FAILED,
-                            operation="Generation failed",
-                            step=f"Batch execution error: {str(e)}",
-                        )
+                        async with self._lock:
+                            self._status_tracker.update_file_status(
+                                plan.file_path,
+                                FileStatus.FAILED,
+                                operation="Generation failed",
+                                step=f"Batch execution error: {str(e)}",
+                            )
 
                 raise
 
@@ -177,13 +177,14 @@ class BatchExecutor:
         for plan in batch:
             # Update status to generating
             if self._status_tracker:
-                self._status_tracker.update_file_status(
-                    plan.file_path,
-                    FileStatus.GENERATING,
-                    operation="LLM Generation",
-                    step="Sending request to language model",
-                    progress=25.0,
-                )
+                async with self._lock:
+                    self._status_tracker.update_file_status(
+                        plan.file_path,
+                        FileStatus.GENERATING,
+                        operation="LLM Generation",
+                        step="Sending request to language model",
+                        progress=25.0,
+                    )
 
             # Create wrapped task with status updates
             task = self._track_generation_task(plan, generation_fn)
@@ -199,7 +200,7 @@ class BatchExecutor:
                 logger.warning("Generation failed for plan %d: %s", i, result)
                 generation_results.append(
                     GenerationResult(
-                        file_path=f"plan_{i}",  # Would use actual file path from plan
+                        file_path=batch[i].file_path,
                         content=None,
                         success=False,
                         error_message=str(result),
@@ -217,7 +218,7 @@ class BatchExecutor:
 
                         generation_results.append(
                             GenerationResult(
-                                file_path=result.get("file_path", f"plan_{i}"),
+                                file_path=batch[i].file_path,
                                 content=result.get("content"),
                                 success=success_flag,
                                 error_message=error_message,
@@ -231,7 +232,7 @@ class BatchExecutor:
                         )
                         generation_results.append(
                             GenerationResult(
-                                file_path=f"plan_{i}",
+                                file_path=batch[i].file_path,
                                 content=None,
                                 success=False,
                                 error_message="Invalid generation result structure",
@@ -259,44 +260,47 @@ class BatchExecutor:
         """
         try:
             if self._status_tracker:
-                self._status_tracker.update_file_status(
-                    plan.file_path,
-                    FileStatus.GENERATING,
-                    operation="LLM Processing",
-                    step="Generating test code with AI",
-                    progress=50.0,
-                )
+                async with self._lock:
+                    self._status_tracker.update_file_status(
+                        plan.file_path,
+                        FileStatus.GENERATING,
+                        operation="LLM Processing",
+                        step="Generating test code with AI",
+                        progress=50.0,
+                    )
 
             # Call original generation function
             result = await generation_fn(plan)
 
             if self._status_tracker:
-                if hasattr(result, "success") and result.success:
-                    self._status_tracker.update_file_status(
-                        plan.file_path,
-                        FileStatus.WRITING,
-                        operation="Writing Tests",
-                        step="Saving generated test file",
-                        progress=75.0,
-                    )
-                else:
-                    self._status_tracker.update_file_status(
-                        plan.file_path,
-                        FileStatus.FAILED,
-                        operation="Generation Failed",
-                        step=getattr(result, "error_message", "Unknown error"),
-                        progress=0.0,
-                    )
+                async with self._lock:
+                    if hasattr(result, "success") and result.success:
+                        self._status_tracker.update_file_status(
+                            plan.file_path,
+                            FileStatus.WRITING,
+                            operation="Writing Tests",
+                            step="Saving generated test file",
+                            progress=75.0,
+                        )
+                    else:
+                        self._status_tracker.update_file_status(
+                            plan.file_path,
+                            FileStatus.FAILED,
+                            operation="Generation Failed",
+                            step=getattr(result, "error_message", "Unknown error"),
+                            progress=0.0,
+                        )
 
             return result
 
         except Exception as e:
             if self._status_tracker:
-                self._status_tracker.update_file_status(
-                    plan.file_path,
-                    FileStatus.FAILED,
-                    operation="Generation Error",
-                    step=f"Exception: {str(e)}",
-                    progress=0.0,
-                )
+                async with self._lock:
+                    self._status_tracker.update_file_status(
+                        plan.file_path,
+                        FileStatus.FAILED,
+                        operation="Generation Error",
+                        step=f"Exception: {str(e)}",
+                        progress=0.0,
+                    )
             raise

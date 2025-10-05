@@ -207,17 +207,40 @@ class EnvironmentValidator:
                 {"name": "isort", "ok": isort_ok},
             ]
         )
+        # Check which formatting tools are missing
+        missing_tools = []
         if not ruff_ok:
+            missing_tools.append("Ruff")
+        if not black_ok:
+            missing_tools.append("Black")
+        if not isort_ok:
+            missing_tools.append("isort")
+
+        if missing_tools:
+            tools_str = ", ".join(missing_tools)
             warnings.append(
-                "Ruff formatter not available; will fall back to Black if present."
+                f"Formatting tools not fully available: {tools_str}. Code formatting may be incomplete."
             )
-            suggestions.append("Install Ruff with uv: 'uv add --dev ruff'")
-        elif not black_ok:
-            # Only warn if Ruff is present but Black fallback is missing
+
+            # Suggest installing the full formatting stack together
+            if len(missing_tools) > 1:
+                suggestions.append(
+                    f"Install missing formatting tools with uv: 'uv add --dev {' '.join(missing_tools)}'"
+                )
+            else:
+                suggestions.append(
+                    f"Install {missing_tools[0]} with uv: 'uv add --dev {missing_tools[0]}'"
+                )
+
+        # Provide specific fallback information
+        if not ruff_ok and black_ok:
+            warnings.append(
+                "Ruff not available; will fall back to Black for formatting."
+            )
+        elif ruff_ok and not black_ok:
             warnings.append(
                 "Black fallback not available; formatting will rely on Ruff only."
             )
-            suggestions.append("Install Black fallback with uv: 'uv add --dev black'")
 
         ok = not errors
         message = (

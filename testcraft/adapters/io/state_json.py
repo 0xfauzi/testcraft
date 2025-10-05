@@ -7,6 +7,7 @@ coverage history, generation logs, and idempotent decisions.
 
 import json
 import logging
+import threading
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -44,6 +45,9 @@ class StateJsonAdapter:
         self.state_file_path = self.project_root / self.state_file_name
         self.logger = logging.getLogger(__name__)
 
+        # Thread safety lock
+        self._state_lock = threading.Lock()
+
         # In-memory state cache
         self._state_cache: dict[str, Any] = {}
         self._cache_dirty = False
@@ -71,30 +75,31 @@ class StateJsonAdapter:
         Raises:
             StateJsonError: If state retrieval fails
         """
-        try:
-            self.logger.debug(f"Getting state for key: {state_key}")
+        with self._state_lock:
+            try:
+                self.logger.debug(f"Getting state for key: {state_key}")
 
-            # Validate cache structure
-            if not isinstance(self._state_cache, dict):
-                raise StateJsonError("State cache is corrupted (not a dictionary)")
+                # Validate cache structure
+                if not isinstance(self._state_cache, dict):
+                    raise StateJsonError("State cache is corrupted (not a dictionary)")
 
-            # Navigate nested keys using dot notation
-            keys = state_key.split(".")
-            current = self._state_cache
+                # Navigate nested keys using dot notation
+                keys = state_key.split(".")
+                current = self._state_cache
 
-            for key in keys:
-                if isinstance(current, dict) and key in current:
-                    current = current[key]
-                else:
-                    self.logger.debug(f"State key not found: {state_key}")
-                    return default_value
+                for key in keys:
+                    if isinstance(current, dict) and key in current:
+                        current = current[key]
+                    else:
+                        self.logger.debug(f"State key not found: {state_key}")
+                        return default_value
 
-            return current
+                return current
 
-        except Exception as e:
-            raise StateJsonError(
-                f"Failed to get state for key '{state_key}': {e}"
-            ) from e
+            except Exception as e:
+                raise StateJsonError(
+                    f"Failed to get state for key '{state_key}': {e}"
+                ) from e
 
     def update_state(
         self,
@@ -123,67 +128,68 @@ class StateJsonAdapter:
         Raises:
             StateJsonError: If state update fails
         """
-        try:
-            self.logger.debug(f"Updating state for key: {state_key}")
+        with self._state_lock:
+            try:
+                self.logger.debug(f"Updating state for key: {state_key}")
 
-            # Get previous value
-            previous_value = self.get_state(state_key)
+                # Get previous value
+                previous_value = self.get_state(state_key)
 
-            # Navigate to parent container and key
-            keys = state_key.split(".")
-            current = self._state_cache
+                # Navigate to parent container and key
+                keys = state_key.split(".")
+                current = self._state_cache
 
-            # Navigate to the parent container
-            for key in keys[:-1]:
-                if key not in current:
-                    current[key] = {}
-                current = current[key]
+                # Navigate to the parent container
+                for key in keys[:-1]:
+                    if key not in current:
+                        current[key] = {}
+                    current = current[key]
 
-            final_key = keys[-1]
+                final_key = keys[-1]
 
-            # Apply merge strategy
-            if merge_strategy == "replace":
-                current[final_key] = new_value
-            elif (
-                merge_strategy == "merge"
-                and isinstance(previous_value, dict)
-                and isinstance(new_value, dict)
-            ):
-                if final_key not in current:
-                    current[final_key] = {}
-                current[final_key].update(new_value)
-            elif merge_strategy == "append" and isinstance(previous_value, list):
-                if final_key not in current:
-                    current[final_key] = []
-                if isinstance(new_value, list):
-                    current[final_key].extend(new_value)
+                # Apply merge strategy
+                if merge_strategy == "replace":
+                    current[final_key] = new_value
+                elif (
+                    merge_strategy == "merge"
+                    and isinstance(previous_value, dict)
+                    and isinstance(new_value, dict)
+                ):
+                    if final_key not in current:
+                        current[final_key] = {}
+                    current[final_key].update(new_value)
+                elif merge_strategy == "append" and isinstance(previous_value, list):
+                    if final_key not in current:
+                        current[final_key] = []
+                    if isinstance(new_value, list):
+                        current[final_key].extend(new_value)
+                    else:
+                        current[final_key].append(new_value)
                 else:
-                    current[final_key].append(new_value)
-            else:
-                # Fallback to replace for unsupported merge strategies
-                current[final_key] = new_value
+                    # Fallback to replace for unsupported merge strategies
+                    current[final_key] = new_value
 
-            # Mark cache as dirty
-            self._cache_dirty = True
+                # Mark cache as dirty
+                self._cache_dirty = True
 
-            # Add timestamp to metadata
-            update_metadata = {
-                "timestamp": datetime.utcnow().isoformat(),
-                "merge_strategy": merge_strategy,
-                "state_key": state_key,
-            }
+                # Add timestamp to metadata
+                update_metadata = {
+                    "timestamp": datetime.utcnow().isoformat(),
+                    "merge_strategy": merge_strategy,
+                    "state_key": state_key,
+                }
 
-            return {
-                "success": True,
-                "previous_value": previous_value,
-                "new_value": current[final_key],
-                "update_metadata": update_metadata,
-            }
+                return {
+                    "success": True,
+                    "previous_value": previous_value,
+                    "new_value": current[final_key],
+                    "update_metadata": update_metadata,
+                }
 
-        except Exception as e:
-            raise StateJsonError(
-                f"Failed to update state for key '{state_key}': {e}"
-            ) from e
+            except Exception as e:
+                raise StateJsonError(
+                    f"Failed to update state for key '{state_key}': {e}"
+                ) from e
 
     def get_all_state(
         self, state_prefix: str | None = None, **kwargs: Any
@@ -201,50 +207,51 @@ class StateJsonAdapter:
         Raises:
             StateJsonError: If state retrieval fails
         """
-        try:
-            if state_prefix is None:
-                self.logger.debug("Getting all state (no prefix filter)")
-            else:
-                self.logger.debug(f"Getting all state with prefix: {state_prefix}")
-
-            if state_prefix is None:
-                return dict(self._state_cache)
-
-            # Filter by prefix
-            filtered_state = {}
-            prefix_parts = state_prefix.split(".")
-            current = self._state_cache
-
-            # Navigate to the prefix location
-            for part in prefix_parts:
-                if isinstance(current, dict) and part in current:
-                    current = current[part]
+        with self._state_lock:
+            try:
+                if state_prefix is None:
+                    self.logger.debug("Getting all state (no prefix filter)")
                 else:
-                    return {}  # Prefix doesn't exist
+                    self.logger.debug(f"Getting all state with prefix: {state_prefix}")
 
-            # If current is a dict, return its contents with full keys
-            if isinstance(current, dict):
+                if state_prefix is None:
+                    return dict(self._state_cache)
 
-                def _build_filtered_dict(
-                    data: dict[str, Any], prefix: str
-                ) -> dict[str, Any]:
-                    result = {}
-                    for key, value in data.items():
-                        full_key = f"{prefix}.{key}" if prefix else key
-                        if isinstance(value, dict):
-                            result.update(_build_filtered_dict(value, full_key))
-                        else:
-                            result[full_key] = value
-                    return result
+                # Filter by prefix
+                filtered_state = {}
+                prefix_parts = state_prefix.split(".")
+                current = self._state_cache
 
-                filtered_state = _build_filtered_dict(current, state_prefix)
+                # Navigate to the prefix location
+                for part in prefix_parts:
+                    if isinstance(current, dict) and part in current:
+                        current = current[part]
+                    else:
+                        return {}  # Prefix doesn't exist
 
-            return filtered_state
+                # If current is a dict, return its contents with full keys
+                if isinstance(current, dict):
 
-        except Exception as e:
-            raise StateJsonError(
-                f"Failed to get all state with prefix '{state_prefix}': {e}"
-            ) from e
+                    def _build_filtered_dict(
+                        data: dict[str, Any], prefix: str
+                    ) -> dict[str, Any]:
+                        result = {}
+                        for key, value in data.items():
+                            full_key = f"{prefix}.{key}" if prefix else key
+                            if isinstance(value, dict):
+                                result.update(_build_filtered_dict(value, full_key))
+                            else:
+                                result[full_key] = value
+                        return result
+
+                    filtered_state = _build_filtered_dict(current, state_prefix)
+
+                return filtered_state
+
+            except Exception as e:
+                raise StateJsonError(
+                    f"Failed to get all state with prefix '{state_prefix}': {e}"
+                ) from e
 
     def clear_state(
         self, state_key: str | None = None, **kwargs: Any
@@ -265,64 +272,65 @@ class StateJsonAdapter:
         Raises:
             StateJsonError: If state clearing fails
         """
-        try:
-            if state_key is None:
-                self.logger.debug("Clearing all state")
-            else:
-                self.logger.debug(f"Clearing state for key: {state_key}")
+        with self._state_lock:
+            try:
+                if state_key is None:
+                    self.logger.debug("Clearing all state")
+                else:
+                    self.logger.debug(f"Clearing state for key: {state_key}")
 
-            cleared_keys = []
+                cleared_keys = []
 
-            if state_key is None:
-                # Clear all state
-                cleared_keys = list(self._state_cache.keys())
-                self._state_cache.clear()
-                self._initialize_default_structure()
-            else:
-                # Clear specific key
-                keys = state_key.split(".")
-                current = self._state_cache
+                if state_key is None:
+                    # Clear all state
+                    cleared_keys = list(self._state_cache.keys())
+                    self._state_cache.clear()
+                    self._initialize_default_structure()
+                else:
+                    # Clear specific key
+                    keys = state_key.split(".")
+                    current = self._state_cache
 
-                # Navigate to parent
-                for key in keys[:-1]:
-                    if isinstance(current, dict) and key in current:
-                        current = current[key]
-                    else:
-                        # Key doesn't exist, nothing to clear
-                        return {
-                            "success": True,
-                            "cleared_keys": [],
-                            "clear_metadata": {
-                                "timestamp": datetime.utcnow().isoformat(),
-                                "reason": "Key not found",
-                            },
-                        }
+                    # Navigate to parent
+                    for key in keys[:-1]:
+                        if isinstance(current, dict) and key in current:
+                            current = current[key]
+                        else:
+                            # Key doesn't exist, nothing to clear
+                            return {
+                                "success": True,
+                                "cleared_keys": [],
+                                "clear_metadata": {
+                                    "timestamp": datetime.utcnow().isoformat(),
+                                    "reason": "Key not found",
+                                },
+                            }
 
-                final_key = keys[-1]
-                if isinstance(current, dict) and final_key in current:
-                    del current[final_key]
-                    cleared_keys.append(state_key)
+                    final_key = keys[-1]
+                    if isinstance(current, dict) and final_key in current:
+                        del current[final_key]
+                        cleared_keys.append(state_key)
 
-            # Mark cache as dirty
-            self._cache_dirty = True
+                # Mark cache as dirty
+                self._cache_dirty = True
 
-            clear_metadata = {
-                "timestamp": datetime.utcnow().isoformat(),
-                "cleared_count": len(cleared_keys),
-            }
-            if state_key is not None and not cleared_keys:
-                clear_metadata["reason"] = "Key not found"
+                clear_metadata = {
+                    "timestamp": datetime.utcnow().isoformat(),
+                    "cleared_count": len(cleared_keys),
+                }
+                if state_key is not None and not cleared_keys:
+                    clear_metadata["reason"] = "Key not found"
 
-            return {
-                "success": True,
-                "cleared_keys": cleared_keys,
-                "clear_metadata": clear_metadata,
-            }
+                return {
+                    "success": True,
+                    "cleared_keys": cleared_keys,
+                    "clear_metadata": clear_metadata,
+                }
 
-        except Exception as e:
-            raise StateJsonError(
-                f"Failed to clear state for key '{state_key}': {e}"
-            ) from e
+            except Exception as e:
+                raise StateJsonError(
+                    f"Failed to clear state for key '{state_key}': {e}"
+                ) from e
 
     def persist_state(
         self, state_key: str | None = None, **kwargs: Any
@@ -344,79 +352,80 @@ class StateJsonAdapter:
         Raises:
             StateJsonError: If state persistence fails
         """
-        try:
-            if state_key is None:
-                self.logger.debug("Persisting all state changes")
-            else:
-                self.logger.debug(f"Persisting state for specific key: {state_key}")
+        with self._state_lock:
+            try:
+                if state_key is None:
+                    self.logger.debug("Persisting all state changes")
+                else:
+                    self.logger.debug(f"Persisting state for specific key: {state_key}")
 
-            if not self._cache_dirty and state_key is None:
-                # No changes to persist
-                return {
-                    "success": True,
-                    "persisted_keys": [],
-                    "persistence_location": str(self.state_file_path),
-                    "persistence_metadata": {
-                        "timestamp": datetime.utcnow().isoformat(),
-                        "reason": "No changes to persist",
-                    },
+                if not self._cache_dirty and state_key is None:
+                    # No changes to persist
+                    return {
+                        "success": True,
+                        "persisted_keys": [],
+                        "persistence_location": str(self.state_file_path),
+                        "persistence_metadata": {
+                            "timestamp": datetime.utcnow().isoformat(),
+                            "reason": "No changes to persist",
+                        },
+                    }
+
+                # Validate file path
+                try:
+                    SafetyPolicies.validate_file_path(
+                        self.state_file_path, self.project_root
+                    )
+                except SafetyError as e:
+                    raise StateJsonError(f"Failed to persist state: {e}") from e
+
+                # Ensure directory exists
+                self.state_file_path.parent.mkdir(parents=True, exist_ok=True)
+
+                # Prepare data to persist
+                data_to_persist = self._state_cache
+                persisted_keys = list(self._state_cache.keys())
+
+                if state_key is not None:
+                    # Only persist specific key
+                    state_value = self.get_state(state_key)
+                    if state_value is not None:
+                        # Create a minimal state structure with just this key
+                        keys = state_key.split(".")
+                        data_to_persist = {}
+                        current = data_to_persist
+
+                        for _i, key in enumerate(keys[:-1]):
+                            current[key] = {}
+                            current = current[key]
+
+                        current[keys[-1]] = state_value
+                        persisted_keys = [state_key]
+                    else:
+                        persisted_keys = []
+
+                # Write to file with proper JSON formatting
+                with open(self.state_file_path, "w", encoding="utf-8") as f:
+                    json.dump(data_to_persist, f, indent=2, sort_keys=True, default=str)
+
+                # Clear dirty flag
+                self._cache_dirty = False
+
+                persistence_metadata = {
+                    "timestamp": datetime.utcnow().isoformat(),
+                    "file_size": self.state_file_path.stat().st_size,
+                    "key_count": len(persisted_keys),
                 }
 
-            # Validate file path
-            try:
-                SafetyPolicies.validate_file_path(
-                    self.state_file_path, self.project_root
-                )
-            except SafetyError as e:
+                return {
+                    "success": True,
+                    "persisted_keys": persisted_keys,
+                    "persistence_location": str(self.state_file_path),
+                    "persistence_metadata": persistence_metadata,
+                }
+
+            except (OSError, SafetyError, json.JSONDecodeError) as e:
                 raise StateJsonError(f"Failed to persist state: {e}") from e
-
-            # Ensure directory exists
-            self.state_file_path.parent.mkdir(parents=True, exist_ok=True)
-
-            # Prepare data to persist
-            data_to_persist = self._state_cache
-            persisted_keys = list(self._state_cache.keys())
-
-            if state_key is not None:
-                # Only persist specific key
-                state_value = self.get_state(state_key)
-                if state_value is not None:
-                    # Create a minimal state structure with just this key
-                    keys = state_key.split(".")
-                    data_to_persist = {}
-                    current = data_to_persist
-
-                    for _i, key in enumerate(keys[:-1]):
-                        current[key] = {}
-                        current = current[key]
-
-                    current[keys[-1]] = state_value
-                    persisted_keys = [state_key]
-                else:
-                    persisted_keys = []
-
-            # Write to file with proper JSON formatting
-            with open(self.state_file_path, "w", encoding="utf-8") as f:
-                json.dump(data_to_persist, f, indent=2, sort_keys=True, default=str)
-
-            # Clear dirty flag
-            self._cache_dirty = False
-
-            persistence_metadata = {
-                "timestamp": datetime.utcnow().isoformat(),
-                "file_size": self.state_file_path.stat().st_size,
-                "key_count": len(persisted_keys),
-            }
-
-            return {
-                "success": True,
-                "persisted_keys": persisted_keys,
-                "persistence_location": str(self.state_file_path),
-                "persistence_metadata": persistence_metadata,
-            }
-
-        except (OSError, SafetyError, json.JSONDecodeError) as e:
-            raise StateJsonError(f"Failed to persist state: {e}") from e
 
     def load_state(self, state_key: str | None = None, **kwargs: Any) -> dict[str, Any]:
         """
@@ -436,67 +445,69 @@ class StateJsonAdapter:
         Raises:
             StateJsonError: If state loading fails
         """
-        try:
-            if state_key is None:
-                self.logger.debug("Loading all state from storage")
-            else:
-                self.logger.debug(f"Loading state for key: {state_key}")
+        with self._state_lock:
+            try:
+                if state_key is None:
+                    self.logger.debug("Loading all state from storage")
+                else:
+                    self.logger.debug(f"Loading state for key: {state_key}")
 
-            if not self.state_file_path.exists():
-                return {
-                    "success": False,
-                    "loaded_keys": [],
-                    "loaded_values": {},
-                    "load_metadata": {
-                        "timestamp": datetime.utcnow().isoformat(),
-                        "reason": "State file does not exist",
-                    },
+                if not self.state_file_path.exists():
+                    return {
+                        "success": False,
+                        "loaded_keys": [],
+                        "loaded_values": {},
+                        "load_metadata": {
+                            "timestamp": datetime.utcnow().isoformat(),
+                            "reason": "State file does not exist",
+                        },
+                    }
+
+                # Load from file
+                loaded_data = self._load_state_from_file()
+
+                if state_key is None:
+                    # Load all state
+                    self._state_cache = loaded_data
+                    loaded_keys = list(loaded_data.keys())
+                    loaded_values = dict(loaded_data)
+                else:
+                    # Load specific key
+                    loaded_value = self.get_state(state_key)
+                    if loaded_value is not None:
+                        loaded_keys = [state_key]
+                        loaded_values = {state_key: loaded_value}
+                    else:
+                        loaded_keys = []
+                        loaded_values = {}
+
+                load_metadata = {
+                    "timestamp": datetime.utcnow().isoformat(),
+                    "file_size": self.state_file_path.stat().st_size,
+                    "key_count": len(loaded_keys),
                 }
 
-            # Load from file
-            loaded_data = self._load_state_from_file()
+                return {
+                    "success": True,
+                    "loaded_keys": loaded_keys,
+                    "loaded_values": loaded_values,
+                    "load_metadata": load_metadata,
+                }
 
-            if state_key is None:
-                # Load all state
-                self._state_cache = loaded_data
-                loaded_keys = list(loaded_data.keys())
-                loaded_values = dict(loaded_data)
-            else:
-                # Load specific key
-                loaded_value = self.get_state(state_key)
-                if loaded_value is not None:
-                    loaded_keys = [state_key]
-                    loaded_values = {state_key: loaded_value}
-                else:
-                    loaded_keys = []
-                    loaded_values = {}
-
-            load_metadata = {
-                "timestamp": datetime.utcnow().isoformat(),
-                "file_size": self.state_file_path.stat().st_size,
-                "key_count": len(loaded_keys),
-            }
-
-            return {
-                "success": True,
-                "loaded_keys": loaded_keys,
-                "loaded_values": loaded_values,
-                "load_metadata": load_metadata,
-            }
-
-        except (OSError, json.JSONDecodeError) as e:
-            raise StateJsonError(f"Failed to load state: {e}") from e
+            except (OSError, json.JSONDecodeError) as e:
+                raise StateJsonError(f"Failed to load state: {e}") from e
 
     def _initialize_state(self) -> None:
         """Initialize default state structure."""
-        self.logger.debug("Initializing default state structure")
+        with self._state_lock:
+            self.logger.debug("Initializing default state structure")
 
-        self._state_cache = {}
-        self._initialize_default_structure()
-        self._cache_dirty = True
+            self._state_cache = {}
+            self._initialize_default_structure()
+            self._cache_dirty = True
 
-        # Persist initial state
-        self.persist_state()
+            # Persist initial state
+            self.persist_state()
 
     def _initialize_default_structure(self) -> None:
         """Initialize the default state structure with required sections."""
@@ -539,76 +550,127 @@ class StateJsonAdapter:
         self, file_path: str, coverage_data: dict[str, Any]
     ) -> dict[str, Any]:
         """Add a coverage entry to the coverage history."""
-        timestamp = datetime.utcnow().isoformat()
-        coverage_entry = {"timestamp": timestamp, "coverage_data": coverage_data}
-
-        result = self.update_state(
-            f"coverage_history.{file_path}", coverage_entry, merge_strategy="append"
-        )
-        # Ensure storage is a list for this file
         try:
-            hist = self.get_state(f"coverage_history.{file_path}")
-            if not isinstance(hist, list):
-                self.update_state(f"coverage_history.{file_path}", [coverage_entry])
-        except Exception:
-            pass
-        return result
+            timestamp = datetime.utcnow().isoformat()
+            coverage_entry = {"timestamp": timestamp, "coverage_data": coverage_data}
+
+            # Check if coverage_history.{file_path} exists and is a list
+            existing_history = self.get_state(f"coverage_history.{file_path}", [])
+
+            # If it doesn't exist or isn't a list, initialize it as an empty list
+            if not isinstance(existing_history, list):
+                self.update_state(f"coverage_history.{file_path}", [])
+
+            # Now append the new entry to the list
+            return self.update_state(
+                f"coverage_history.{file_path}", coverage_entry, merge_strategy="append"
+            )
+        except StateJsonError:
+            # Re-raise StateJsonError as-is
+            raise
+        except Exception as e:
+            # Wrap unexpected errors
+            raise StateJsonError(
+                f"Failed to add coverage entry for {file_path}: {e}"
+            ) from e
 
     def add_generation_log_entry(
         self, operation: str, details: dict[str, Any]
     ) -> dict[str, Any]:
         """Add an entry to the generation log."""
-        log_entry = {
-            "timestamp": datetime.utcnow().isoformat(),
-            "operation": operation,
-            "details": details,
-        }
+        try:
+            log_entry = {
+                "timestamp": datetime.utcnow().isoformat(),
+                "operation": operation,
+                "details": details,
+            }
 
-        return self.update_state("generation_log", log_entry, merge_strategy="append")
+            return self.update_state(
+                "generation_log", log_entry, merge_strategy="append"
+            )
+        except StateJsonError:
+            # Re-raise StateJsonError as-is
+            raise
+        except Exception as e:
+            # Wrap unexpected errors
+            raise StateJsonError(f"Failed to add generation log entry: {e}") from e
 
     def set_idempotent_decision(
         self, decision_key: str, decision_data: dict[str, Any]
     ) -> dict[str, Any]:
         """Set an idempotent decision."""
-        return self.update_state(
-            f"idempotent_decisions.{decision_key}",
-            {"timestamp": datetime.utcnow().isoformat(), **decision_data},
-        )
+        try:
+            return self.update_state(
+                f"idempotent_decisions.{decision_key}",
+                {"timestamp": datetime.utcnow().isoformat(), **decision_data},
+            )
+        except StateJsonError:
+            # Re-raise StateJsonError as-is
+            raise
+        except Exception as e:
+            # Wrap unexpected errors
+            raise StateJsonError(
+                f"Failed to set idempotent decision for {decision_key}: {e}"
+            ) from e
 
     def get_coverage_history(
         self, file_path: str | None = None
     ) -> dict[str, Any] | list[Any]:
         """Get coverage history, optionally for a specific file."""
-        if file_path:
-            # Always return list (history entries) for specific file
-            history = self.get_state(f"coverage_history.{file_path}", [])
-            return history if isinstance(history, list) else []
-        # For all files, return a dict mapping file -> latest entry
-        history_all = self.get_state("coverage_history", {})
-        if isinstance(history_all, dict):
-            result: dict[str, Any] = {}
-            for fname, entries in history_all.items():
-                if isinstance(entries, list) and entries:
-                    result[fname] = entries[-1]
-                elif isinstance(entries, dict) and entries:
-                    result[fname] = entries
-            return result
-        return {}
+        try:
+            if file_path:
+                # Always return list (history entries) for specific file
+                history = self.get_state(f"coverage_history.{file_path}", [])
+                return history if isinstance(history, list) else []
+            # For all files, return a dict mapping file -> entries_list
+            history_all = self.get_state("coverage_history", {})
+            if isinstance(history_all, dict):
+                result: dict[str, Any] = {}
+                for fname, entries in history_all.items():
+                    if isinstance(entries, list):
+                        result[fname] = entries
+                    # Skip non-list entries (shouldn't happen with proper usage)
+                return result
+            return {}
+        except StateJsonError:
+            # Re-raise StateJsonError as-is
+            raise
+        except Exception as e:
+            # Wrap unexpected errors
+            raise StateJsonError(f"Failed to get coverage history: {e}") from e
 
     def get_generation_log(self, limit: int | None = None) -> list[dict[str, Any]]:
         """Get generation log entries, optionally limited to recent entries."""
-        log = self.get_state("generation_log", [])
-        if isinstance(log, list):
-            if limit:
-                return log[-limit:]
-            return log
-        return []
+        try:
+            log = self.get_state("generation_log", [])
+            if isinstance(log, list):
+                if limit:
+                    return log[-limit:]
+                return log
+            return []
+        except StateJsonError:
+            # Re-raise StateJsonError as-is
+            raise
+        except Exception as e:
+            # Wrap unexpected errors
+            raise StateJsonError(f"Failed to get generation log: {e}") from e
 
     def should_regenerate_file(self, file_path: str, current_hash: str) -> bool:
         """Determine if a file should be regenerated based on state."""
-        file_state = self.get_state(f"file_states.{file_path}")
-        if not file_state:
-            return True
+        try:
+            file_state = self.get_state(f"file_states.{file_path}")
+            if not file_state:
+                return True
 
-        stored_hash = file_state.get("hash") if isinstance(file_state, dict) else None
-        return stored_hash != current_hash
+            stored_hash = (
+                file_state.get("hash") if isinstance(file_state, dict) else None
+            )
+            return stored_hash != current_hash
+        except StateJsonError:
+            # Re-raise StateJsonError as-is
+            raise
+        except Exception as e:
+            # Wrap unexpected errors
+            raise StateJsonError(
+                f"Failed to check file regeneration status for {file_path}: {e}"
+            ) from e

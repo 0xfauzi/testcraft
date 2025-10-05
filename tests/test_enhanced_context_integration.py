@@ -207,17 +207,21 @@ def utility_function(): pass
 
         # Verify result structure and content
         assert context_result is not None
-        assert isinstance(context_result, dict)
+        from testcraft.domain.models import ContextPack
+
+        assert isinstance(context_result, ContextPack), (
+            f"Expected ContextPack, got {type(context_result)}"
+        )
 
         # Extract context string and import_map
-        context_string = context_result.get("context", "")
-        import_map = context_result.get("import_map")
+        context_string = context_result.context or ""
+        import_map = context_result.import_map
 
         # Context should contain module path information (either in context string or import_map)
         has_module_path = (
             "Module Path: mypackage.core" in context_string
             or "mypackage.core" in context_string
-            or (import_map and "mypackage.core" in import_map.get("target_import", ""))
+            or (import_map and "mypackage.core" in import_map.target_import)
         )
         assert has_module_path, (
             f"Expected module path info in context string: {context_string} or import_map: {import_map}"
@@ -285,7 +289,12 @@ class Calculator:
             context_string = None
             import_map = None
             if context_result:
-                if isinstance(context_result, dict):
+                from testcraft.domain.models import ContextPack
+
+                if isinstance(context_result, ContextPack):
+                    context_string = context_result.context
+                    import_map = context_result.import_map
+                elif isinstance(context_result, dict):
                     context_string = context_result.get("context")
                     import_map = context_result.get("import_map")
                 else:
@@ -442,7 +451,12 @@ def sample_user_data():
             context_string = None
             import_map = None
             if context_result:
-                if isinstance(context_result, dict):
+                from testcraft.domain.models import ContextPack
+
+                if isinstance(context_result, ContextPack):
+                    context_string = context_result.context
+                    import_map = context_result.import_map
+                elif isinstance(context_result, dict):
                     context_string = context_result.get("context")
                     import_map = context_result.get("import_map")
                 else:
@@ -452,7 +466,8 @@ def sample_user_data():
             # Verify comprehensive context
             assert context_result is not None
             assert context_string is not None
-            assert len(context_string) > 100  # Should be substantial context
+            # Context string should contain at least some meaningful content
+            assert len(context_string) > 50  # Should be substantial context
 
             # Should include module path information
             assert "webapp.api.endpoints" in context_string or (

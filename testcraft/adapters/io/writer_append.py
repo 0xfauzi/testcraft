@@ -6,11 +6,25 @@ with formatting using Black and isort.
 """
 
 import logging
+import platform
+import time
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
 from .python_formatters import format_python_content
 from .safety import SafetyError, SafetyPolicies
+
+# Cross-platform file locking
+try:
+    import fcntl  # Unix/Linux
+except ImportError:
+    fcntl = None  # type: ignore
+
+try:
+    import msvcrt  # Windows
+except ImportError:
+    msvcrt = None  # type: ignore
 
 
 class WriterAppendError(Exception):
@@ -27,17 +41,114 @@ class WriterAppendAdapter:
     using Black and isort. It includes dry-run support and safety validation.
     """
 
-    def __init__(self, project_root: Path | None = None, dry_run: bool = False) -> None:
+    def __init__(
+        self,
+        project_root: Path | None = None,
+        dry_run: bool = False,
+        strict_formatting: bool = False,
+    ) -> None:
         """
         Initialize the writer append adapter.
 
         Args:
             project_root: Optional project root path for validation
             dry_run: Whether to run in dry-run mode (no actual writing)
+            strict_formatting: Whether to raise errors on formatting failures
         """
         self.project_root = project_root
         self.dry_run = dry_run
+        self.strict_formatting = strict_formatting
         self.logger = logging.getLogger(__name__)
+        self._active_locks: dict[Path, Any] = {}  # Track active file locks
+
+    def __del__(self) -> None:
+        """Cleanup method to release any remaining file locks."""
+        for file_path in list(self._active_locks.keys()):
+            try:
+                self._release_file_lock(file_path)
+            except Exception as e:
+                self.logger.warning(f"Failed to cleanup lock for {file_path}: {e}")
+
+    def _acquire_file_lock(self, file_path: Path, timeout: int = 10) -> Any:
+        """
+        Acquire a file lock for the given path with timeout.
+
+        Args:
+            file_path: Path to the file to lock
+            timeout: Maximum time to wait for lock in seconds
+
+        Returns:
+            Lock object/handle that must be passed to _release_file_lock
+
+        Raises:
+            WriterAppendError: If lock cannot be acquired within timeout
+        """
+        try:
+            start_time = time.time()
+
+            while time.time() - start_time < timeout:
+                try:
+                    if platform.system() == "Windows" and msvcrt:
+                        # Windows file locking
+                        with open(file_path) as f:
+                            msvcrt.locking(f.fileno(), 1, 1)  # type: ignore[attr-defined]  # 1 = LK_NBLCK
+                        lock_handle = file_path
+                    elif fcntl:
+                        # Unix/Linux file locking
+                        lock_handle = open(file_path)  # type: ignore[assignment]
+                        if hasattr(lock_handle, "fileno"):
+                            fcntl.flock(
+                                lock_handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB
+                            )
+                    else:
+                        # Fallback: no locking available
+                        self.logger.warning(
+                            f"File locking not available on {platform.system()}"
+                        )
+                        return None
+
+                    self._active_locks[file_path] = lock_handle
+                    return lock_handle
+
+                except OSError:
+                    # Lock not available, wait and retry
+                    time.sleep(0.1)
+                    continue
+
+            raise WriterAppendError(
+                f"Could not acquire lock for {file_path} within {timeout} seconds"
+            )
+
+        except WriterAppendError:
+            raise
+        except Exception as e:
+            raise WriterAppendError(
+                f"Failed to acquire file lock for {file_path}: {e}"
+            ) from e
+
+    def _release_file_lock(self, file_path: Path) -> None:
+        """
+        Release a previously acquired file lock.
+
+        Args:
+            file_path: Path to the file to unlock
+        """
+        lock_handle = self._active_locks.pop(file_path, None)
+        if lock_handle is None:
+            return  # No lock to release
+
+        try:
+            if platform.system() == "Windows" and msvcrt:
+                # Windows file unlocking
+                with open(file_path) as f:
+                    msvcrt.locking(f.fileno(), 2, 1)  # type: ignore[attr-defined]  # 2 = LK_UNLCK
+            elif fcntl and hasattr(lock_handle, "fileno"):
+                # Unix/Linux file unlocking
+                fcntl.flock(lock_handle.fileno(), fcntl.LOCK_UN)
+                if hasattr(lock_handle, "close"):
+                    lock_handle.close()
+        except Exception as e:
+            self.logger.warning(f"Failed to release file lock for {file_path}: {e}")
 
     def write_file(
         self,
@@ -117,19 +228,30 @@ class WriterAppendAdapter:
                 if backup_result["success"]:
                     backup_path = backup_result["backup_path"]
 
-            # Write the formatted content
-            resolved_path.write_text(formatted_content, encoding="utf-8")
+            # Acquire file lock before writing
+            lock_handle = None
+            if not self.dry_run:
+                lock_handle = self._acquire_file_lock(resolved_path)
 
-            return {
-                "success": True,
-                "bytes_written": len(formatted_content.encode("utf-8")),
-                "file_path": str(file_path),
-                "backup_path": backup_path,
-                "file_existed": file_existed,
-                "formatted": True,
-            }
+            try:
+                # Write the formatted content
+                resolved_path.write_text(formatted_content, encoding="utf-8")
+
+                return {
+                    "success": True,
+                    "bytes_written": len(formatted_content.encode("utf-8")),
+                    "file_path": str(file_path),
+                    "backup_path": backup_path,
+                    "file_existed": file_existed,
+                    "formatted": True,
+                }
+            finally:
+                # Always release the lock
+                if lock_handle is not None:
+                    self._release_file_lock(resolved_path)
 
         except (SafetyError, OSError) as e:
+            self.logger.error(f"File write failed for {file_path}: {e}")
             raise WriterAppendError(f"Failed to write file {file_path}: {e}") from e
 
     def write_test_file(
@@ -172,7 +294,8 @@ class WriterAppendAdapter:
                 "test_functions": test_info["functions"],
             }
 
-        except Exception as e:
+        except (OSError, SafetyError, ValueError) as e:
+            self.logger.error(f"Test file write failed for {test_path}: {e}")
             raise WriterAppendError(
                 f"Failed to write test file {test_path}: {e}"
             ) from e
@@ -204,8 +327,11 @@ class WriterAppendAdapter:
                     "backup_path": None,
                 }
 
-            # Create backup path
-            backup_path = file_path.with_suffix(file_path.suffix + backup_suffix)
+            # Create backup path with timestamp to avoid collisions
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            backup_path = file_path.with_suffix(
+                f"{file_path.suffix}.backup.{timestamp}"
+            )
 
             if self.dry_run:
                 return {
@@ -213,6 +339,21 @@ class WriterAppendAdapter:
                     "dry_run": True,
                     "original_path": str(file_path),
                     "backup_path": str(backup_path),
+                }
+
+            # Check file size before loading into memory (limit: 100MB)
+            file_size = file_path.stat().st_size
+            max_size = 100 * 1024 * 1024  # 100MB
+
+            if file_size > max_size:
+                self.logger.error(
+                    f"File too large for backup: {file_path} ({file_size} bytes)"
+                )
+                return {
+                    "success": False,
+                    "error": f"File too large for backup ({file_size} bytes > {max_size} bytes)",
+                    "original_path": str(file_path),
+                    "backup_path": None,
                 }
 
             # Copy file content
@@ -226,6 +367,7 @@ class WriterAppendAdapter:
             }
 
         except OSError as e:
+            self.logger.error(f"Backup failed for {file_path}: {e}")
             raise WriterAppendError(f"Failed to backup file {file_path}: {e}") from e
 
     def ensure_directory(self, directory_path: str | Path) -> dict[str, Any]:
@@ -285,9 +427,16 @@ class WriterAppendAdapter:
             Formatted content
 
         Raises:
-            WriterAppendError: If formatting fails
+            WriterAppendError: If formatting fails and strict_formatting is True
         """
-        return format_python_content(content, timeout=15, disable_ruff=False)
+        try:
+            return format_python_content(content, timeout=15, disable_ruff=False)
+        except Exception as e:
+            if self.strict_formatting:
+                raise WriterAppendError(f"Formatting failed: {e}") from e
+            else:
+                self.logger.warning(f"Formatting failed, using original content: {e}")
+                return content
 
     def _extract_test_info(self, content: str) -> dict[str, Any]:
         """

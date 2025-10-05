@@ -67,10 +67,35 @@ class TestMapper:
             TestMappingError: If test mapping fails
         """
         try:
-            # Parse existing test files if provided
-            test_elements = []
-            if existing_tests:
-                test_elements = self._parse_test_files(existing_tests)
+            # Validate inputs
+            if source_elements is None:
+                raise TestMappingError("source_elements cannot be None")
+            if not source_elements:
+                return {
+                    "test_mapping": {},
+                    "missing_tests": [],
+                    "coverage_gaps": [],
+                    "test_suggestions": [],
+                    "total_source_elements": 0,
+                    "total_test_elements": 0,
+                    "coverage_percentage": 100.0,
+                }
+
+            # Validate and parse existing test files if provided
+            test_elements: list[TestElement] = []
+            if existing_tests is not None:
+                # Validate existing_tests is a list
+                if not isinstance(existing_tests, list):
+                    raise TestMappingError("existing_tests must be a list or None")
+
+                # Filter out invalid entries
+                valid_test_paths = []
+                for test_path in existing_tests:
+                    if isinstance(test_path, str) and test_path.strip():
+                        valid_test_paths.append(test_path.strip())
+
+                if valid_test_paths:
+                    test_elements = self._parse_test_files(valid_test_paths)
 
             # Create mappings
             test_mapping = self._create_test_mapping(source_elements, test_elements)
@@ -108,29 +133,68 @@ class TestMapper:
         Returns:
             Path to the test file if found, None otherwise
         """
-        if not test_directories:
-            # Default test directories relative to source file
-            test_directories = [
-                source_file_path.parent / "tests",
-                source_file_path.parent.parent / "tests",
-                Path("tests"),
-            ]
+        try:
+            # Validate source_file_path
+            if not source_file_path or not isinstance(source_file_path, Path):
+                return None
 
-        source_name = source_file_path.stem
-        possible_test_names = [
-            f"test_{source_name}.py",
-            f"{source_name}_test.py",
-            f"test{source_name}.py",
-        ]
+            # Validate source file exists
+            if not source_file_path.exists() or not source_file_path.is_file():
+                return None
 
-        for test_dir in test_directories:
-            if not test_dir.exists():
-                continue
+            if not test_directories:
+                # Default test directories relative to source file
+                try:
+                    test_directories = [
+                        source_file_path.parent / "tests",
+                        source_file_path.parent.parent / "tests",
+                        Path("tests"),
+                    ]
+                except (OSError, ValueError):
+                    # If path operations fail, return None
+                    return None
+            else:
+                # Validate test_directories is a list
+                if not isinstance(test_directories, list):
+                    return None
 
-            for test_name in possible_test_names:
-                test_file = test_dir / test_name
-                if test_file.exists():
-                    return test_file
+            try:
+                source_name = source_file_path.stem
+                if not source_name:
+                    return None
+
+                possible_test_names = [
+                    f"test_{source_name}.py",
+                    f"{source_name}_test.py",
+                    f"test{source_name}.py",
+                ]
+
+                for test_dir in test_directories:
+                    try:
+                        if not test_dir or not isinstance(test_dir, Path):
+                            continue
+
+                        if not test_dir.exists() or not test_dir.is_dir():
+                            continue
+
+                        for test_name in possible_test_names:
+                            if not test_name or not isinstance(test_name, str):
+                                continue
+
+                            test_file = test_dir / test_name
+                            if test_file.exists() and test_file.is_file():
+                                return test_file
+                    except (OSError, ValueError, TypeError):
+                        # Skip directories that cause path errors
+                        continue
+
+            except (AttributeError, TypeError, ValueError):
+                # Handle cases where path operations fail
+                return None
+
+        except (TypeError, AttributeError, ValueError, OSError):
+            # Handle any other validation errors
+            return None
 
         return None
 
@@ -147,40 +211,86 @@ class TestMapper:
         Returns:
             Suggested test function name
         """
+        if not element or not hasattr(element, "name") or not element.name:
+            return "test_element"
+
         if style == "pytest":
             if element.type == TestElementType.FUNCTION:
                 return f"test_{element.name}"
             elif element.type == TestElementType.METHOD:
                 # For methods like "ClassName.method_name"
-                class_name, method_name = element.name.split(".", 1)
-                return f"test_{method_name}"
+                try:
+                    parts = element.name.split(".", 1)
+                    if len(parts) == 2:
+                        _, method_name = parts
+                        return f"test_{method_name}"
+                    else:
+                        # Fallback if no dot found
+                        return f"test_{element.name}"
+                except (AttributeError, ValueError):
+                    # Fallback if split fails
+                    return f"test_{element.name}"
             elif element.type == TestElementType.CLASS:
                 return f"Test{element.name}"
 
         # Default fallback
-        clean_name = element.name.replace(".", "_")
+        try:
+            clean_name = element.name.replace(".", "_")
+        except (AttributeError, TypeError):
+            clean_name = str(element.name) if element.name else "element"
         return f"test_{clean_name}"
 
     def _parse_test_files(self, test_file_paths: list[str]) -> list[TestElement]:
         """Parse test files and extract test elements."""
-        test_elements = []
+        test_elements: list[TestElement] = []
+        parsed_count = 0
+        failed_count = 0
+
+        if not test_file_paths:
+            return test_elements
 
         for test_path_str in test_file_paths:
-            test_path = Path(test_path_str)
-            if not test_path.exists():
+            # Validate input
+            if not test_path_str or not isinstance(test_path_str, str):
+                failed_count += 1
                 continue
 
             try:
-                parse_result = self._parser.parse_file(test_path)
-                elements = parse_result["elements"]
+                test_path = Path(test_path_str)
 
-                # Filter for test functions/methods/classes
-                for element in elements:
-                    if self._is_test_element(element):
-                        test_elements.append(element)
+                # Validate path exists and is readable
+                if not test_path.exists():
+                    failed_count += 1
+                    continue
 
-            except ParseError:
-                # Continue parsing other files even if one fails
+                if not test_path.is_file():
+                    failed_count += 1
+                    continue
+
+                # Attempt to parse the file
+                try:
+                    parse_result = self._parser.parse_file(test_path)
+                    elements = parse_result.get("elements", [])
+
+                    # Filter for test functions/methods/classes
+                    for element in elements:
+                        if self._is_test_element(element):
+                            test_elements.append(element)
+
+                    parsed_count += 1
+
+                except ParseError:
+                    failed_count += 1
+                    # Could log warning here if logging was available
+                    continue
+                except Exception:
+                    # Catch any other parsing errors
+                    failed_count += 1
+                    continue
+
+            except (OSError, ValueError, TypeError):
+                # Handle path-related errors
+                failed_count += 1
                 continue
 
         return test_elements
@@ -237,8 +347,17 @@ class TestMapper:
         elif source_element.type in [TestElementType.FUNCTION, TestElementType.METHOD]:
             # Extract the actual function/method name (remove class prefix if method)
             if source_element.type == TestElementType.METHOD:
-                _, method_name = source_name.split(".", 1)
-                actual_name = method_name
+                try:
+                    parts = source_name.split(".", 1)
+                    if len(parts) != 2:
+                        # If split doesn't produce exactly 2 parts, treat as simple name
+                        actual_name = source_name
+                    else:
+                        _, method_name = parts
+                        actual_name = method_name
+                except (AttributeError, ValueError):
+                    # Fallback if split fails
+                    actual_name = source_name
             else:
                 actual_name = source_name
 
@@ -347,8 +466,13 @@ class TestMapper:
     def _calculate_test_priority(self, element: TestElement) -> str:
         """Calculate the priority for creating tests for an element."""
         # Public functions/methods get high priority
-        if not element.name.split(".")[-1].startswith("_"):
-            return "high"
+        try:
+            name_parts = element.name.split(".")
+            if name_parts and name_parts[-1] and not name_parts[-1].startswith("_"):
+                return "high"
+        except (AttributeError, TypeError, IndexError):
+            # Fallback if name operations fail
+            pass
 
         # Private methods get medium priority
         if element.type == TestElementType.METHOD:

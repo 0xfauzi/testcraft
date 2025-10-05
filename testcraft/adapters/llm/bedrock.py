@@ -92,58 +92,142 @@ class BedrockAdapter(LLMPort):
             "test_generation"
         )
 
+        # Validate credentials before initializing client
+        self.validate_credentials()
+
         # Initialize ChatBedrock client
         self._client: ChatBedrock | None = None
         self._initialize_client(**kwargs)
 
     def _initialize_client(self, **kwargs: Any) -> None:
         """Initialize the ChatBedrock client with credentials."""
+        credentials = self.credential_manager.get_provider_credentials("bedrock")
+
+        client_kwargs = {
+            "model_id": self.model_id,
+            "model_kwargs": {
+                "max_tokens": self.max_tokens,
+                "temperature": self.temperature,
+            },
+            "region_name": self.region_name or credentials["region_name"],
+            "aws_access_key_id": credentials["aws_access_key_id"],
+            "aws_secret_access_key": credentials["aws_secret_access_key"],
+            **kwargs,
+        }
+
+        self._client = ChatBedrock(**client_kwargs)
+
+        logger.info(f"ChatBedrock client initialized with model: {self.model_id}")
+
+    def validate_credentials(self) -> None:
+        """Validate that Bedrock credentials are available and properly configured.
+
+        Raises:
+            BedrockError: If credentials are not available or invalid
+        """
         try:
-            credentials = self.credential_manager.get_provider_credentials("bedrock")
-
-            client_kwargs = {
-                "model_id": self.model_id,
-                "model_kwargs": {
-                    "max_tokens": self.max_tokens,
-                    "temperature": self.temperature,
-                },
-                "region_name": self.region_name or credentials["region_name"],
-                "aws_access_key_id": credentials["aws_access_key_id"],
-                "aws_secret_access_key": credentials["aws_secret_access_key"],
-                **kwargs,
-            }
-
-            self._client = ChatBedrock(**client_kwargs)
-
-            logger.info(f"ChatBedrock client initialized with model: {self.model_id}")
-
+            self.credential_manager.get_provider_credentials("bedrock")
         except CredentialError as e:
-            # Use a stub client in test environments where credentials are absent
-            logger.warning(f"Bedrock credentials not available, using stub client: {e}")
-
-            class _StubClient:
-                def invoke(self, messages, **_):
-                    class _Resp:
-                        content = '{"tests": "# stub", "coverage_focus": [], "confidence": 0.0}'
-                        response_metadata = {}
-
-                    return _Resp()
-
-            self._client = _StubClient()  # type: ignore[assignment]
-
+            logger.error(f"Bedrock credentials validation failed: {e}")
+            raise BedrockError(f"Bedrock credentials not available: {e}") from e
         except Exception as e:
-            # Fallback to stub client on unexpected init failure
-            logger.warning(f"ChatBedrock init failed, using stub client: {e}")
+            logger.error(f"Unexpected error during Bedrock credentials validation: {e}")
+            raise BedrockError(f"Failed to validate Bedrock credentials: {e}") from e
 
-            class _StubClient:
-                def invoke(self, messages, **_):
-                    class _Resp:
-                        content = '{"tests": "# stub", "coverage_focus": [], "confidence": 0.0}'
-                        response_metadata = {}
+    def _validate_response(self, response: Any) -> None:
+        """Validate API response structure and content.
 
-                    return _Resp()
+        Args:
+            response: Response object from Bedrock API
 
-            self._client = _StubClient()  # type: ignore[assignment]
+        Raises:
+            BedrockError: If response is invalid or malformed
+        """
+        if response is None:
+            raise BedrockError("Response is None")
+
+        # Check if response has expected attributes
+        if not hasattr(response, "content") and not hasattr(response, "__str__"):
+            raise BedrockError("Response missing content attribute")
+
+        # Check if response has metadata for usage tracking
+        if not hasattr(response, "response_metadata"):
+            logger.warning("Response missing response_metadata for usage tracking")
+
+    def _safe_int_conversion(self, value: Any, default: int) -> int:
+        """Safely convert a value to integer with validation.
+
+        Args:
+            value: Value to convert
+            default: Default value if conversion fails
+
+        Returns:
+            Converted integer or default value
+        """
+        if value is None:
+            return default
+
+        try:
+            # Check if it's already an integer
+            if isinstance(value, int):
+                return value
+
+            # Check if it's a numeric string or float
+            if isinstance(value, str | float):
+                converted = int(float(value))
+                if converted < 0:
+                    logger.warning(
+                        f"Negative token value {value}, using default {default}"
+                    )
+                    return default
+                return converted
+
+            # Try to convert other types
+            converted = int(value)
+            if converted < 0:
+                logger.warning(f"Negative token value {value}, using default {default}")
+                return default
+            return converted
+
+        except (ValueError, TypeError, OverflowError) as e:
+            logger.warning(
+                f"Failed to convert {value} to int, using default {default}: {e}"
+            )
+            return default
+
+    def _calculate_safe_tokens(
+        self,
+        requested_tokens: int | None,
+        use_case: str,
+        input_length: int | None = None,
+    ) -> int:
+        """Calculate safe token limits with bounds checking.
+
+        Args:
+            requested_tokens: Requested token limit, or None to use calculator default
+            use_case: The use case for token calculation
+            input_length: Estimated input length in tokens
+
+        Returns:
+            Safe token limit bounded by model capabilities
+        """
+        # Use token calculator for proper calculation
+        calculated_tokens = self.token_calculator.calculate_max_tokens(
+            use_case=use_case,
+            input_length=input_length,
+            safety_margin=0.9,  # More conservative
+        )
+
+        # Use requested tokens if provided, otherwise use calculated
+        target_tokens = (
+            requested_tokens if requested_tokens is not None else calculated_tokens
+        )
+
+        # Apply bounds checking
+        model_max = self.token_calculator.limits.max_output
+        safe_tokens = max(1, min(target_tokens, model_max))
+
+        return safe_tokens
 
     def _map_model_id_to_model(self, model_id: str) -> str:
         """Map Bedrock model ID to normalized model identifier.
@@ -185,14 +269,36 @@ class BedrockAdapter(LLMPort):
         test_framework: str = "pytest",
         **kwargs: Any,
     ) -> dict[str, Any]:
-        """Generate test cases for the provided code content."""
+        """Generate test cases for the provided code content.
+
+        Args:
+            code_content: Source code to generate tests for
+            context: Optional context information
+            test_framework: Testing framework to use
+            **kwargs: Additional parameters
+
+        Returns:
+            Dictionary containing generated tests and metadata
+
+        Raises:
+            BedrockError: If generation fails
+        """
+        # Input validation
+        if not isinstance(code_content, str) or not code_content.strip():
+            raise BedrockError("code_content must be a non-empty string")
+
+        if context is not None and not isinstance(context, str):
+            raise BedrockError("context must be a string or None")
+
+        if not isinstance(test_framework, str) or not test_framework.strip():
+            raise BedrockError("test_framework must be a non-empty string")
 
         # Calculate optimal max_tokens for this specific request
         input_length = self.token_calculator.estimate_input_tokens(
             code_content + (context or "")
         )
-        max_tokens = self.token_calculator.calculate_max_tokens(
-            use_case="test_generation", input_length=input_length
+        max_tokens = self._calculate_safe_tokens(
+            requested_tokens=None, use_case="test_generation", input_length=input_length
         )
 
         # Get prompts from registry
@@ -213,6 +319,7 @@ class BedrockAdapter(LLMPort):
                 system_message=system_message,
                 user_content=user_content,
                 max_tokens=max_tokens,
+                timeout=self.timeout,
                 **kwargs,
             )
 
@@ -260,19 +367,40 @@ class BedrockAdapter(LLMPort):
                     "metadata": metadata,
                 }
 
+        except BedrockError:
+            # Re-raise Bedrock errors as-is
+            raise
         except Exception as e:
-            logger.error(f"Bedrock test generation failed: {e}")
+            logger.error(f"Unexpected error during Bedrock test generation: {e}")
             raise BedrockError(f"Test generation failed: {e}") from e
 
     def analyze_code(
         self, code_content: str, analysis_type: str = "comprehensive", **kwargs: Any
     ) -> dict[str, Any]:
-        """Analyze code for testability, complexity, and potential issues."""
+        """Analyze code for testability, complexity, and potential issues.
+
+        Args:
+            code_content: Source code to analyze
+            analysis_type: Type of analysis to perform
+            **kwargs: Additional analysis parameters
+
+        Returns:
+            Dictionary containing analysis results and metadata
+
+        Raises:
+            BedrockError: If analysis fails
+        """
+        # Input validation
+        if not isinstance(code_content, str) or not code_content.strip():
+            raise BedrockError("code_content must be a non-empty string")
+
+        if not isinstance(analysis_type, str) or not analysis_type.strip():
+            raise BedrockError("analysis_type must be a non-empty string")
 
         # Calculate optimal max_tokens for this specific request
         input_length = self.token_calculator.estimate_input_tokens(code_content)
-        max_tokens = self.token_calculator.calculate_max_tokens(
-            use_case="code_analysis", input_length=input_length
+        max_tokens = self._calculate_safe_tokens(
+            requested_tokens=None, use_case="code_analysis", input_length=input_length
         )
 
         # Get prompts from registry
@@ -291,6 +419,7 @@ class BedrockAdapter(LLMPort):
                 system_message=system_message,
                 user_content=user_content,
                 max_tokens=max_tokens,
+                timeout=self.timeout,
                 **kwargs,
             )
 
@@ -346,8 +475,11 @@ class BedrockAdapter(LLMPort):
                     "metadata": metadata,
                 }
 
+        except BedrockError:
+            # Re-raise Bedrock errors as-is
+            raise
         except Exception as e:
-            logger.error(f"Bedrock code analysis failed: {e}")
+            logger.error(f"Unexpected error during Bedrock code analysis: {e}")
             raise BedrockError(f"Code analysis failed: {e}") from e
 
     def refine_content(
@@ -358,14 +490,39 @@ class BedrockAdapter(LLMPort):
         system_prompt: str | None = None,
         **kwargs: Any,
     ) -> dict[str, Any]:
-        """Refine existing content based on specific instructions."""
+        """Refine existing content based on specific instructions.
+
+        Args:
+            original_content: Content to refine
+            refinement_instructions: Instructions for refinement
+            system_prompt: Optional system prompt override
+            **kwargs: Additional refinement parameters
+
+        Returns:
+            Dictionary containing refined content and metadata
+
+        Raises:
+            BedrockError: If refinement fails
+        """
+        # Input validation
+        if not isinstance(original_content, str) or not original_content.strip():
+            raise BedrockError("original_content must be a non-empty string")
+
+        if (
+            not isinstance(refinement_instructions, str)
+            or not refinement_instructions.strip()
+        ):
+            raise BedrockError("refinement_instructions must be a non-empty string")
+
+        if system_prompt is not None and not isinstance(system_prompt, str):
+            raise BedrockError("system_prompt must be a string or None")
 
         # Calculate optimal max_tokens for this specific request
         input_length = self.token_calculator.estimate_input_tokens(
             original_content + refinement_instructions
         )
-        max_tokens = self.token_calculator.calculate_max_tokens(
-            use_case="refinement", input_length=input_length
+        max_tokens = self._calculate_safe_tokens(
+            requested_tokens=None, use_case="refinement", input_length=input_length
         )
 
         # Use pre-rendered instructions built by the caller (RefineAdapter) or fallback to registry
@@ -383,6 +540,7 @@ class BedrockAdapter(LLMPort):
                 system_message=system_message,
                 user_content=user_content,
                 max_tokens=max_tokens,
+                timeout=self.timeout,
                 **kwargs,
             )
 
@@ -440,7 +598,9 @@ class BedrockAdapter(LLMPort):
                                 )
 
                     except Exception as repair_e:
-                        logger.error(f"Bedrock repair attempt failed: {repair_e}")
+                        logger.error(
+                            f"Bedrock schema repair attempt failed: {repair_e}"
+                        )
 
                 # Return consistent response structure
                 if validation_result.is_valid and validation_result.data:
@@ -513,8 +673,11 @@ class BedrockAdapter(LLMPort):
                     "metadata": metadata,
                 }
 
+        except BedrockError:
+            # Re-raise Bedrock errors as-is
+            raise
         except Exception as e:
-            logger.error(f"Bedrock content refinement failed: {e}")
+            logger.error(f"Unexpected error during Bedrock content refinement: {e}")
             raise BedrockError(f"Content refinement failed: {e}") from e
 
     def generate_test_plan(
@@ -523,14 +686,32 @@ class BedrockAdapter(LLMPort):
         context: str | None = None,
         **kwargs: Any,
     ) -> dict[str, Any]:
-        """Generate a comprehensive test plan for the provided code content."""
+        """Generate a comprehensive test plan for the provided code content.
+
+        Args:
+            code_content: Source code to generate test plan for
+            context: Optional context information
+            **kwargs: Additional parameters
+
+        Returns:
+            Dictionary containing test plan and metadata
+
+        Raises:
+            BedrockError: If test plan generation fails
+        """
+        # Input validation
+        if not isinstance(code_content, str) or not code_content.strip():
+            raise BedrockError("code_content must be a non-empty string")
+
+        if context is not None and not isinstance(context, str):
+            raise BedrockError("context must be a string or None")
 
         # Calculate optimal max_tokens for this specific request
         input_length = self.token_calculator.estimate_input_tokens(
             code_content + (context or "")
         )
-        max_tokens = self.token_calculator.calculate_max_tokens(
-            use_case="test_generation", input_length=input_length
+        max_tokens = self._calculate_safe_tokens(
+            requested_tokens=None, use_case="test_generation", input_length=input_length
         )
 
         # Get prompts from registry
@@ -550,6 +731,7 @@ class BedrockAdapter(LLMPort):
                 system_message=system_message,
                 user_content=user_content,
                 max_tokens=max_tokens,
+                timeout=self.timeout,
                 **kwargs,
             )
 
@@ -607,8 +789,11 @@ class BedrockAdapter(LLMPort):
                     "metadata": metadata,
                 }
 
+        except BedrockError:
+            # Re-raise Bedrock errors as-is
+            raise
         except Exception as e:
-            logger.error(f"Bedrock test plan generation failed: {e}")
+            logger.error(f"Unexpected error during Bedrock test plan generation: {e}")
             raise BedrockError(f"Test plan generation failed: {e}") from e
 
     def _estimate_complexity(
@@ -668,18 +853,31 @@ class BedrockAdapter(LLMPort):
         system_message: str,
         user_content: str,
         max_tokens: int | None = None,
+        timeout: float | None = None,
         **kwargs: Any,
     ) -> dict[str, Any]:
-        """Invoke ChatBedrock with system and user messages."""
+        """Invoke ChatBedrock with system and user messages.
+
+        Args:
+            system_message: System message for the conversation
+            user_content: User content for the conversation
+            max_tokens: Maximum tokens for response
+            timeout: Request timeout in seconds (overrides instance default)
+            **kwargs: Additional parameters
+
+        Returns:
+            Dictionary containing response content and metadata
+        """
 
         # Use provided max_tokens or fallback to instance default
         tokens_to_use = max_tokens if max_tokens is not None else self.max_tokens
-        # Clamp to catalog cap
-        try:
-            cap = self.token_calculator.limits.max_output
-            tokens_to_use = min(int(tokens_to_use or cap), int(cap))
-        except Exception:
-            pass
+        # Apply bounds checking using safe token calculation
+        tokens_to_use = self._calculate_safe_tokens(
+            requested_tokens=tokens_to_use, use_case="test_generation"
+        )
+
+        # Use provided timeout or fallback to instance default
+        request_timeout = timeout if timeout is not None else self.timeout
 
         # Create LangChain messages
         messages = [
@@ -696,8 +894,15 @@ class BedrockAdapter(LLMPort):
         updated_kwargs["model_kwargs"]["max_tokens"] = tokens_to_use
 
         try:
+            # Add timeout to the request
+            invoke_kwargs = updated_kwargs.copy()
+            invoke_kwargs["request_timeout"] = request_timeout
+
             # Invoke the ChatBedrock client
-            response = self.client.invoke(messages, **updated_kwargs)
+            response = self.client.invoke(messages, **invoke_kwargs)
+
+            # Validate response structure
+            self._validate_response(response)
 
             # Extract content from LangChain AIMessage response
             content = (
@@ -752,6 +957,9 @@ class BedrockAdapter(LLMPort):
                 "response_metadata": getattr(response, "response_metadata", {}),
             }
 
+        except BedrockError:
+            # Re-raise Bedrock errors as-is
+            raise
         except Exception as e:
-            logger.error(f"ChatBedrock invocation error: {e}")
+            logger.error(f"Unexpected error during ChatBedrock invocation: {e}")
             raise BedrockError(f"ChatBedrock invocation failed: {e}") from e

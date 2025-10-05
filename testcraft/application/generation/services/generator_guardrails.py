@@ -209,20 +209,16 @@ class GeneratorGuardrails:
             # No canonical import defined, skip this validation
             return issues
 
-        # Find first non-comment import
+        # Find first import using ordered traversal of top-level statements
         first_import = None
-        for node in ast.walk(tree):
-            if isinstance(node, ast.Import | ast.ImportFrom) and getattr(
-                node, "module", None
-            ):
-                # Check if it's a comment by examining the source line
-                lines = content.split("\n")
-                line_num = getattr(node, "lineno", 1) - 1  # 0-based index
-                if 0 <= line_num < len(lines):
-                    line = lines[line_num].strip()
-                    if not line.startswith("#") and line:  # Not a comment and not empty
-                        first_import = node
-                        break
+        for stmt in tree.body:
+            # Check for import statements (ast.Import or ast.ImportFrom)
+            if isinstance(stmt, ast.Import):
+                first_import = stmt
+                break
+            elif isinstance(stmt, ast.ImportFrom):
+                first_import = stmt
+                break
 
         if first_import is None:
             issues.append(

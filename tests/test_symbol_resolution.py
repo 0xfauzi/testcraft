@@ -340,6 +340,86 @@ def func2():
         # Cache should contain the symbol
         assert "nonexistent.symbol" in resolver._cache
 
+    def test_parse_multipart_symbol_name(self, tmp_path):
+        """Test parsing of symbol names with 4+ parts (bug fix verification)."""
+        parser_port = MockParserPort()
+        resolver = SymbolResolver(parser_port)
+
+        # Test 4-part symbol name: "pkg.subpkg.Class.method"
+        module, class_name, symbol = resolver._parse_symbol_name(
+            "pkg.subpkg.Class.method"
+        )
+        assert module == "pkg.subpkg"
+        assert class_name == "Class"
+        assert symbol == "method"
+
+        # Test 5-part symbol name: "a.b.c.Class.method"
+        module, class_name, symbol = resolver._parse_symbol_name("a.b.c.Class.method")
+        assert module == "a.b.c"
+        assert class_name == "Class"
+        assert symbol == "method"
+
+    def test_resolve_dotted_module_path(self, tmp_path):
+        """Test resolving dotted module paths to file paths (bug fix verification)."""
+        # Create nested module structure: testcraft/domain/models.py
+        nested_dir = tmp_path / "testcraft" / "domain"
+        nested_dir.mkdir(parents=True)
+        module_file = nested_dir / "models.py"
+        module_file.write_text("def test_func():\n    pass")
+
+        parser_port = MockParserPort()
+        resolver = SymbolResolver(parser_port)
+
+        # Should correctly convert "testcraft.domain.models" to "testcraft/domain/models.py"
+        result_path = resolver._find_module_file("testcraft.domain.models", tmp_path)
+        assert result_path is not None
+        assert result_path == module_file
+
+    def test_element_matching_fallback(self, tmp_path):
+        """Test defensive element matching with fallback (bug fix verification)."""
+        from testcraft.domain.models import TestElement
+
+        # Test case 1: Element without class prefix in name (fallback scenario)
+        element_without_prefix = TestElement(
+            name="test_method",  # Just method name, no class prefix
+            type=TestElementType.METHOD,
+            line_range=(1, 5),
+            docstring="Test method",
+        )
+
+        parser_port = MockParserPort()
+        resolver = SymbolResolver(parser_port)
+
+        # Should match using fallback logic
+        assert resolver._matches_symbol(
+            element_without_prefix, "module", "TestClass", "test_method"
+        )
+
+        # Test case 2: Element with class prefix in name (exact match)
+        element_with_prefix = TestElement(
+            name="TestClass.test_method",
+            type=TestElementType.METHOD,
+            line_range=(1, 5),
+            docstring="Test method",
+        )
+
+        # Should match using exact match logic
+        assert resolver._matches_symbol(
+            element_with_prefix, "module", "TestClass", "test_method"
+        )
+
+        # Test case 3: Element with missing attributes (defensive check)
+        class IncompleteElement:
+            """Mock element missing required attributes."""
+
+            pass
+
+        incomplete_element = IncompleteElement()
+        # Should return False and not crash
+        assert not resolver._matches_symbol(
+            incomplete_element, "module", "TestClass", "test_method"
+        )
+
 
 class TestLLMOrchestrator:
     """Test the LLMOrchestrator with symbol resolution."""

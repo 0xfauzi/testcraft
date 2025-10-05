@@ -10,6 +10,12 @@ from ...config.model_catalog import (
     ModelLimits,
 )
 from ...config.model_catalog import (
+    get_all_models_for_provider as catalog_get_all_models_for_provider,
+)
+from ...config.model_catalog import (
+    get_all_providers as catalog_get_all_providers,
+)
+from ...config.model_catalog import (
     get_flags as catalog_get_flags,
 )
 from ...config.model_catalog import (
@@ -143,7 +149,7 @@ class TokenCalculator:
         Returns:
             Recommended thinking tokens, or None if model doesn't support thinking
         """
-        # Only if catalog indicates support and a cap exists
+        # Check support at the very beginning and return None immediately if not supported
         if (self.limits.max_thinking is None) or (
             not getattr(self, "flags", None) or not self.flags.supports_thinking
         ):
@@ -176,11 +182,8 @@ class TokenCalculator:
         final_thinking = min(safe_thinking, max_safe_thinking)
 
         # Ensure minimum viable thinking without exceeding the safe cap
-        if final_thinking is not None and final_thinking > 0:
-            min_viable = min(1000, max_safe_thinking)
-            final_thinking = max(final_thinking, min_viable)
-        else:
-            final_thinking = None
+        min_viable = min(1000, max_safe_thinking)
+        final_thinking = max(final_thinking, min_viable)
 
         logger.debug(
             f"Calculated thinking tokens: {final_thinking} for {use_case} ({complexity_level}) on {self.provider}/{self.model}"
@@ -259,7 +262,7 @@ class TokenCalculator:
         Returns:
             List of supported model identifiers
         """
-        return list(cls.PROVIDER_LIMITS.get(provider, {}).keys())
+        return catalog_get_all_models_for_provider(provider)
 
     @classmethod
     def get_all_providers(cls) -> list[str]:
@@ -268,4 +271,4 @@ class TokenCalculator:
         Returns:
             List of provider names
         """
-        return list(cls.PROVIDER_LIMITS.keys())
+        return catalog_get_all_providers()

@@ -10,6 +10,7 @@ Builds comprehensive enriched context including:
 
 from __future__ import annotations
 
+import ast
 import logging
 from pathlib import Path
 from typing import Any
@@ -202,7 +203,11 @@ class EnrichedContextBuilder:
 
     def _get_packaging_info(self, project_root: Path) -> PackagingInfo:
         """Get packaging information, using cache if available."""
-        cache_key = str(project_root.resolve())
+        try:
+            cache_key = str(project_root.resolve())
+        except Exception:
+            # Fallback to string representation if resolve fails
+            cache_key = str(project_root)
 
         if cache_key not in self._packaging_cache:
             self._packaging_cache[cache_key] = PackagingDetector.detect_packaging(
@@ -234,6 +239,22 @@ class EnrichedContextBuilder:
 
         return file_path.parent if file_path.is_file() else file_path
 
+    def _safe_read_file(self, file_path: Path) -> str:
+        """Read file with multiple encoding fallbacks."""
+        encodings = ["utf-8", "latin-1", "cp1252"]
+
+        for encoding in encodings:
+            try:
+                return file_path.read_text(encoding=encoding)
+            except UnicodeDecodeError:
+                continue
+            except Exception as e:
+                logger.debug("Failed to read %s with %s: %s", file_path, encoding, e)
+                break
+
+        # If all encodings fail, raise the last exception
+        raise UnicodeDecodeError("utf-8", b"", 0, 1, "All encodings failed")
+
     def _build_import_info(
         self, source_file: Path, packaging_info: PackagingInfo
     ) -> dict[str, Any]:
@@ -253,10 +274,36 @@ class EnrichedContextBuilder:
                 else:
                     # Try to detect main classes/functions for better import suggestions
                     try:
-                        content = source_file.read_text(encoding="utf-8")
-                        import ast
+                        content = self._safe_read_file(source_file)
 
-                        tree = ast.parse(content)
+                        # Parse AST with specific error handling
+                        try:
+                            tree = ast.parse(content)
+                        except SyntaxError as e:
+                            logger.debug(
+                                "Syntax error in %s (line %d): %s - using module import fallback",
+                                source_file,
+                                e.lineno,
+                                e.msg,
+                            )
+                            # Fallback to module import for syntax errors
+                            import_info["canonical_import"] = (
+                                f"import {canonical_import}"
+                            )
+                            import_info["validation_status"] = "syntax_error"
+                            import_info["syntax_error"] = f"Line {e.lineno}: {e.msg}"
+                        except Exception as e:
+                            logger.debug(
+                                "AST parsing error in %s: %s - using module import fallback",
+                                source_file,
+                                e,
+                            )
+                            # Fallback to module import for other AST errors
+                            import_info["canonical_import"] = (
+                                f"import {canonical_import}"
+                            )
+                            import_info["validation_status"] = "parse_error"
+                            import_info["parse_error"] = str(e)
 
                         classes = []
                         functions = []
@@ -295,9 +342,23 @@ class EnrichedContextBuilder:
                                 f"import {canonical_import}"
                             )
 
-                    except Exception:
-                        # Fallback to module import
+                    except UnicodeDecodeError:
+                        # File reading failed - fallback to module import
                         import_info["canonical_import"] = f"import {canonical_import}"
+                        import_info["validation_status"] = "encoding_error"
+                        import_info["encoding_error"] = (
+                            "Could not decode file with available encodings"
+                        )
+                    except Exception as e:
+                        # Other errors - fallback to module import
+                        logger.debug(
+                            "Error analyzing %s for import suggestions: %s",
+                            source_file,
+                            e,
+                        )
+                        import_info["canonical_import"] = f"import {canonical_import}"
+                        import_info["validation_status"] = "analysis_error"
+                        import_info["analysis_error"] = str(e)
 
                 # Validate import
                 if packaging_info.is_import_allowed(canonical_import):
@@ -364,7 +425,7 @@ class EnrichedContextBuilder:
     def _build_boundaries_info(
         self, source_file: Path, entity_info: dict[str, Any]
     ) -> dict[str, list[str]]:
-        """Build information about side-effect boundaries that need mocking."""
+        """Build information about side-effect boundaries that need mocking using AST analysis."""
         boundaries = {
             "database": [],
             "http": [],
@@ -374,10 +435,11 @@ class EnrichedContextBuilder:
         }
 
         try:
-            content = source_file.read_text(encoding="utf-8")
+            content = self._safe_read_file(source_file)
+            tree = ast.parse(content)
 
-            # Database boundaries
-            db_patterns = [
+            # Database boundaries - look for ORM patterns and database operations
+            db_patterns = {
                 "session",
                 "query",
                 "commit",
@@ -385,64 +447,142 @@ class EnrichedContextBuilder:
                 "execute",
                 "get_db",
                 "database",
-                "db.",
                 "Session",
                 "sessionmaker",
-            ]
-            for pattern in db_patterns:
-                if pattern in content:
-                    boundaries["database"].append(pattern)
+                "transaction",
+                "save",
+                "delete",
+                "update",
+                "insert",
+                "select",
+                "connection",
+                "cursor",
+            }
 
-            # HTTP boundaries
-            http_patterns = [
-                "requests.",
-                "httpx.",
-                "urllib.",
-                "http.",
+            # HTTP boundaries - look for HTTP clients and requests
+            http_patterns = {
+                "requests",
+                "httpx",
+                "urllib",
+                "http",
                 "fetch",
-                "get(",
-                "post(",
                 "APIClient",
                 "HttpClient",
                 "RestClient",
-            ]
-            for pattern in http_patterns:
-                if pattern in content:
-                    boundaries["http"].append(pattern)
+                "client",
+                "session",
+                "get",
+                "post",
+                "put",
+                "delete",
+                "patch",
+                "head",
+                "options",
+            }
 
-            # Filesystem boundaries
-            fs_patterns = [
-                "open(",
+            # Filesystem boundaries - look for file operations
+            fs_patterns = {
+                "open",
                 "read_text",
                 "write_text",
-                "Path(",
+                "Path",
                 "os.path",
-                "shutil.",
-                "tempfile.",
-                "glob.",
-                "pathlib.",
-            ]
-            for pattern in fs_patterns:
-                if pattern in content:
-                    boundaries["filesystem"].append(pattern)
+                "shutil",
+                "tempfile",
+                "glob",
+                "pathlib",
+                "exists",
+                "is_file",
+                "is_dir",
+                "mkdir",
+                "makedirs",
+                "remove",
+                "unlink",
+                "rename",
+                "copy",
+                "move",
+            }
 
-            # Time boundaries
-            time_patterns = [
+            # Time boundaries - look for time and scheduling operations
+            time_patterns = {
                 "time.sleep",
                 "datetime.now",
                 "time.time",
-                "schedule.",
+                "schedule",
                 "asyncio.sleep",
-            ]
-            for pattern in time_patterns:
-                if pattern in content:
-                    boundaries["time"].append(pattern)
+                "datetime",
+                "time",
+                "sleep",
+                "delay",
+                "wait",
+                "timeout",
+            }
 
-            # External processes
-            process_patterns = ["subprocess.", "os.system", "run(", "Popen", "call("]
-            for pattern in process_patterns:
-                if pattern in content:
-                    boundaries["external_processes"].append(pattern)
+            # External processes - look for subprocess operations
+            process_patterns = {
+                "subprocess",
+                "os.system",
+                "run",
+                "Popen",
+                "call",
+                "check_call",
+                "check_output",
+                "os.exec",
+                "os.spawn",
+                "os.fork",
+                "multiprocessing",
+            }
+
+            for node in ast.walk(tree):
+                # Check function calls
+                if isinstance(node, ast.Call):
+                    # Check function name
+                    if isinstance(node.func, ast.Name):
+                        func_name = node.func.id
+                        self._categorize_boundary(
+                            boundaries,
+                            func_name,
+                            db_patterns,
+                            http_patterns,
+                            fs_patterns,
+                            time_patterns,
+                            process_patterns,
+                        )
+                    elif isinstance(node.func, ast.Attribute):
+                        # Handle module.function() calls
+                        self._categorize_boundary_attr(
+                            boundaries,
+                            node.func,
+                            db_patterns,
+                            http_patterns,
+                            fs_patterns,
+                            time_patterns,
+                            process_patterns,
+                        )
+
+                # Check attribute access
+                elif isinstance(node, ast.Attribute):
+                    self._categorize_boundary_attr(
+                        boundaries,
+                        node,
+                        db_patterns,
+                        http_patterns,
+                        fs_patterns,
+                        time_patterns,
+                        process_patterns,
+                    )
+
+                # Check imports
+                elif isinstance(node, ast.Import | ast.ImportFrom):
+                    self._categorize_import_boundary(
+                        boundaries,
+                        node,
+                        db_patterns,
+                        http_patterns,
+                        fs_patterns,
+                        time_patterns,
+                        process_patterns,
+                    )
 
             # Remove duplicates and limit items
             for category in boundaries:
@@ -452,3 +592,97 @@ class EnrichedContextBuilder:
             logger.debug("Failed to analyze boundaries for %s: %s", source_file, e)
 
         return boundaries
+
+    def _categorize_boundary(
+        self,
+        boundaries: dict,
+        name: str,
+        db_patterns: set,
+        http_patterns: set,
+        fs_patterns: set,
+        time_patterns: set,
+        process_patterns: set,
+    ) -> None:
+        """Categorize a function name into appropriate boundary category."""
+        if name in db_patterns:
+            boundaries["database"].append(name)
+        elif name in http_patterns:
+            boundaries["http"].append(name)
+        elif name in fs_patterns:
+            boundaries["filesystem"].append(name)
+        elif name in time_patterns:
+            boundaries["time"].append(name)
+        elif name in process_patterns:
+            boundaries["external_processes"].append(name)
+
+    def _categorize_boundary_attr(
+        self,
+        boundaries: dict,
+        node: ast.Attribute,
+        db_patterns: set,
+        http_patterns: set,
+        fs_patterns: set,
+        time_patterns: set,
+        process_patterns: set,
+    ) -> None:
+        """Categorize attribute access patterns."""
+        # Handle cases like module.function or object.method
+        if isinstance(node.value, ast.Name):
+            module_attr = f"{node.value.id}.{node.attr}"
+            if module_attr in time_patterns:
+                boundaries["time"].append(module_attr)
+            elif module_attr in process_patterns:
+                boundaries["external_processes"].append(module_attr)
+            elif module_attr in fs_patterns:
+                boundaries["filesystem"].append(module_attr)
+            elif node.value.id in {"requests", "httpx", "urllib"}:
+                boundaries["http"].append(f"{node.value.id}.{node.attr}")
+            elif node.value.id in {"os", "shutil", "tempfile", "glob", "pathlib"}:
+                boundaries["filesystem"].append(f"{node.value.id}.{node.attr}")
+            elif node.value.id == "subprocess":
+                boundaries["external_processes"].append(f"subprocess.{node.attr}")
+        elif isinstance(node.value, ast.Attribute):
+            # Handle nested attributes like db.session.commit
+            if isinstance(node.value.value, ast.Name):
+                nested_attr = f"{node.value.value.id}.{node.value.attr}.{node.attr}"
+                if "session" in nested_attr or "query" in nested_attr:
+                    boundaries["database"].append(nested_attr)
+
+    def _categorize_import_boundary(
+        self,
+        boundaries: dict,
+        node: ast.expr,
+        db_patterns: set,
+        http_patterns: set,
+        fs_patterns: set,
+        time_patterns: set,
+        process_patterns: set,
+    ) -> None:
+        """Categorize import statements."""
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                module_name = alias.name.split(".")[0]  # Get root module
+                if module_name in db_patterns:
+                    boundaries["database"].append(module_name)
+                elif module_name in http_patterns:
+                    boundaries["http"].append(module_name)
+                elif module_name in fs_patterns:
+                    boundaries["filesystem"].append(module_name)
+                elif module_name in time_patterns:
+                    boundaries["time"].append(module_name)
+                elif module_name in process_patterns:
+                    boundaries["external_processes"].append(module_name)
+
+        elif isinstance(node, ast.ImportFrom):
+            if node.module:
+                module_name = node.module.split(".")[0]  # Get root module
+                if module_name in db_patterns:
+                    boundaries["database"].append(module_name)
+                elif module_name in http_patterns:
+                    boundaries["http"].append(module_name)
+                elif module_name in fs_patterns:
+                    boundaries["filesystem"].append(module_name)
+                elif module_name in time_patterns:
+                    boundaries["time"].append(module_name)
+                elif module_name in process_patterns:
+                    boundaries["external_processes"].append(module_name)

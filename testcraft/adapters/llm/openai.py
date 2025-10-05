@@ -90,6 +90,9 @@ class OpenAIAdapter(LLMPort):
             "test_generation"
         )
 
+        # Detect SDK capabilities
+        self._sdk_supports_responses_api = self._detect_responses_api_support()
+
         # Initialize OpenAI client
         self._client: OpenAI | None = None
         self._initialize_client(base_url, **kwargs)
@@ -160,6 +163,60 @@ class OpenAIAdapter(LLMPort):
                 raw_pretty,
             )
 
+    def _create_stub_client(self) -> OpenAI:
+        """Create a stub OpenAI client for testing/fallback scenarios."""
+
+        class _StubChatCompletions:
+            def create(self, **_kwargs):
+                class _Choice:
+                    def __init__(self, text: str) -> None:
+                        class _Message:
+                            def __init__(self, content: str) -> None:
+                                self.content = content
+
+                        self.message = _Message(text)
+                        self.finish_reason = "stop"
+
+                class _Usage:
+                    prompt_tokens = 0
+                    completion_tokens = 0
+                    total_tokens = 0
+
+                class _ChatCompletion:
+                    def __init__(self) -> None:
+                        self.choices = [
+                            _Choice(
+                                '{"tests": "# stub", "coverage_focus": [], "confidence": 0.0}'
+                            )
+                        ]
+                        self.usage = _Usage()
+                        self.model = "stub-model"
+
+                return _ChatCompletion()
+
+        class _StubResponses:
+            def create(self, **_kwargs):
+                class _Usage:
+                    input_tokens = 0
+                    output_tokens = 0
+                    total_tokens = 0
+
+                class _ResponsesCompletion:
+                    output_text = (
+                        '{"tests": "# stub", "coverage_focus": [], "confidence": 0.0}'
+                    )
+                    usage = _Usage()
+                    model = "stub-model"
+
+                return _ResponsesCompletion()
+
+        class _StubClient:
+            def __init__(self) -> None:
+                self.chat = type("_Chat", (), {"completions": _StubChatCompletions()})()
+                self.responses = _StubResponses()
+
+        return _StubClient()  # type: ignore[return-value]
+
     def _initialize_client(self, base_url: str | None = None, **kwargs: Any) -> None:
         """Initialize the OpenAI client with credentials."""
         try:
@@ -185,110 +242,10 @@ class OpenAIAdapter(LLMPort):
         except CredentialError as e:
             # In test environments without credentials, fall back to a stub client
             logger.warning(f"OpenAI credentials not available, using stub client: {e}")
-
-            class _StubChatCompletions:
-                def create(self, **_kwargs):
-                    class _Choice:
-                        def __init__(self, text: str) -> None:
-                            class _Msg:
-                                def __init__(self, content: str) -> None:
-                                    self.content = content
-
-                            self.message = _Msg(text)
-                            self.finish_reason = "stop"
-
-                    class _Usage:
-                        prompt_tokens = 0
-                        completion_tokens = 0
-                        total_tokens = 0
-
-                    class _Resp:
-                        def __init__(self) -> None:
-                            self.choices = [
-                                _Choice(
-                                    '{"tests": "# stub", "coverage_focus": [], "confidence": 0.0}'
-                                )
-                            ]
-                            self.usage = _Usage()
-                            self.model = "stub-model"
-
-                    return _Resp()
-
-            class _StubResponses:
-                def create(self, **_kwargs):
-                    class _Usage:
-                        input_tokens = 0
-                        output_tokens = 0
-                        total_tokens = 0
-
-                    class _Resp:
-                        output_text = '{"tests": "# stub", "coverage_focus": [], "confidence": 0.0}'
-                        usage = _Usage()
-                        model = "stub-model"
-
-                    return _Resp()
-
-            class _StubClient:
-                def __init__(self) -> None:
-                    self.chat = type(
-                        "_Chat", (), {"completions": _StubChatCompletions()}
-                    )()
-                    self.responses = _StubResponses()
-
-            self._client = _StubClient()  # type: ignore[assignment]
+            self._client = self._create_stub_client()
         except Exception as e:
             logger.warning(f"OpenAI client init failed, using stub client: {e}")
-
-            class _StubChatCompletions:
-                def create(self, **_kwargs):
-                    class _Choice:
-                        def __init__(self, text: str) -> None:
-                            class _Msg:
-                                def __init__(self, content: str) -> None:
-                                    self.content = content
-
-                            self.message = _Msg(text)
-                            self.finish_reason = "stop"
-
-                    class _Usage:
-                        prompt_tokens = 0
-                        completion_tokens = 0
-                        total_tokens = 0
-
-                    class _Resp:
-                        def __init__(self) -> None:
-                            self.choices = [
-                                _Choice(
-                                    '{"tests": "# stub", "coverage_focus": [], "confidence": 0.0}'
-                                )
-                            ]
-                            self.usage = _Usage()
-                            self.model = "stub-model"
-
-                    return _Resp()
-
-            class _StubResponses:
-                def create(self, **_kwargs):
-                    class _Usage:
-                        input_tokens = 0
-                        output_tokens = 0
-                        total_tokens = 0
-
-                    class _Resp:
-                        output_text = '{"tests": "# stub", "coverage_focus": [], "confidence": 0.0}'
-                        usage = _Usage()
-                        model = "stub-model"
-
-                    return _Resp()
-
-            class _StubClient:
-                def __init__(self) -> None:
-                    self.chat = type(
-                        "_Chat", (), {"completions": _StubChatCompletions()}
-                    )()
-                    self.responses = _StubResponses()
-
-            self._client = _StubClient()  # type: ignore[assignment]
+            self._client = self._create_stub_client()
 
     @property
     def client(self) -> OpenAI:
@@ -791,6 +748,59 @@ class OpenAIAdapter(LLMPort):
             return True
         return False
 
+    def _get_model_capabilities(self) -> dict[str, Any]:
+        """Get comprehensive model capabilities mapping.
+
+        Returns:
+            Dictionary mapping model names to their capabilities
+        """
+        return {
+            # O-series reasoning models that require Responses API
+            "o4-mini": {
+                "requires_responses_api": True,
+                "requires_completion_tokens": True,
+                "supports_temperature": False,
+                "is_reasoning_model": True,
+            },
+            "o3": {
+                "requires_responses_api": True,
+                "requires_completion_tokens": True,
+                "supports_temperature": False,
+                "is_reasoning_model": True,
+            },
+            "o4": {
+                "requires_responses_api": True,
+                "requires_completion_tokens": True,
+                "supports_temperature": False,
+                "is_reasoning_model": True,
+            },
+            # Standard models that use Chat Completions API
+            "gpt-4.1": {
+                "requires_responses_api": False,
+                "requires_completion_tokens": False,
+                "supports_temperature": True,
+                "is_reasoning_model": False,
+            },
+            "gpt-5": {
+                "requires_responses_api": False,
+                "requires_completion_tokens": False,
+                "supports_temperature": True,
+                "is_reasoning_model": False,
+            },
+            "gpt-4": {
+                "requires_responses_api": False,
+                "requires_completion_tokens": False,
+                "supports_temperature": True,
+                "is_reasoning_model": False,
+            },
+            "gpt-3.5-turbo": {
+                "requires_responses_api": False,
+                "requires_completion_tokens": False,
+                "supports_temperature": True,
+                "is_reasoning_model": False,
+            },
+        }
+
     def _requires_completion_tokens_param(self) -> bool:
         """Check if the model requires max_completion_tokens instead of max_tokens.
 
@@ -800,24 +810,49 @@ class OpenAIAdapter(LLMPort):
         Returns:
             True if model requires max_completion_tokens, False for max_tokens
         """
-        # Models that require max_completion_tokens instead of max_tokens
-        completion_token_models = [
-            "o4-mini",
-            "o3",
-            "o4",
-            # Add other models as OpenAI updates their API requirements
-        ]
+        capabilities = self._get_model_capabilities()
+        model_capability = capabilities.get(self.model)
 
-        return any(model_name in self.model for model_name in completion_token_models)
+        if model_capability:
+            return model_capability.get("requires_completion_tokens", False)
+
+        # For unknown models, log warning and assume legacy behavior
+        logger.warning(
+            f"Unknown model '{self.model}', assuming legacy max_tokens behavior"
+        )
+        return False
+
+    def _detect_responses_api_support(self) -> bool:
+        """Detect if the current OpenAI SDK supports the Responses API.
+
+        Returns:
+            True if SDK supports Responses API, False otherwise
+        """
+        try:
+            # Check if openai module has responses attribute
+            return hasattr(openai, "responses")
+        except Exception:
+            return False
 
     def _is_o_series_reasoning_model(self) -> bool:
         """Detect OpenAI o-series reasoning models that should use Responses API.
 
         Returns:
-            True if the model is an o-series (o4-mini, o3, o4), else False.
+            True if the model is an o-series AND SDK supports Responses API, else False.
         """
-        o_series = ["o4-mini", "o3", "o4"]
-        return any(name in self.model for name in o_series)
+        # First check if SDK supports Responses API
+        if not self._sdk_supports_responses_api:
+            return False
+
+        capabilities = self._get_model_capabilities()
+        model_capability = capabilities.get(self.model)
+
+        if model_capability:
+            return model_capability.get("requires_responses_api", False)
+
+        # For unknown models, log warning and assume not a reasoning model
+        logger.warning(f"Unknown model '{self.model}', assuming not a reasoning model")
+        return False
 
     def _supports_temperature_adjustment(self) -> bool:
         """Check if the model supports custom temperature values.
@@ -828,12 +863,16 @@ class OpenAIAdapter(LLMPort):
         Returns:
             True if model supports temperature adjustment, False if only default
         """
-        # Prefer catalog flags via token calculator
-        try:
-            if self.token_calculator.is_reasoning_model():
-                return False
-        except Exception:
-            pass
+        capabilities = self._get_model_capabilities()
+        model_capability = capabilities.get(self.model)
+
+        if model_capability:
+            return model_capability.get("supports_temperature", True)
+
+        # For unknown models, log warning and assume temperature is supported
+        logger.warning(
+            f"Unknown model '{self.model}', assuming temperature is supported"
+        )
         return True
 
     def _estimate_complexity(
@@ -943,6 +982,14 @@ class OpenAIAdapter(LLMPort):
 
                 try:
                     response = self.client.responses.create(**responses_kwargs)  # type: ignore[attr-defined]
+                except AttributeError:
+                    # Fallback: client doesn't have responses attribute, fall back to chat completions
+                    logger.warning(
+                        "Responses API not available, falling back to Chat Completions API"
+                    )
+                    return self._chat_completion_fallback(
+                        system_prompt, user_prompt, tokens_to_use, kwargs
+                    )
                 except TypeError as te:
                     err_msg = str(te)
                     # Fallback: older SDKs may expect 'max_tokens' instead of 'max_output_tokens'
@@ -966,6 +1013,14 @@ class OpenAIAdapter(LLMPort):
                                 },
                             )
                             response = self.client.responses.create(**alt_kwargs)  # type: ignore[attr-defined]
+                        except AttributeError:
+                            # Fallback: client doesn't have responses attribute
+                            logger.warning(
+                                "Responses API not available, falling back to Chat Completions API"
+                            )
+                            return self._chat_completion_fallback(
+                                system_prompt, user_prompt, tokens_to_use, kwargs
+                            )
                         except Exception as e2:
                             raise OpenAIError(
                                 f"Responses API call failed (fallback): {e2}"
@@ -1071,6 +1126,28 @@ class OpenAIAdapter(LLMPort):
                 raise OpenAIError(f"Responses API call failed: {e}") from e
 
         # Default path: Chat Completions for non o-series models
+        # Also used as fallback when Responses API is unavailable
+        return self._chat_completion_fallback(
+            system_prompt, user_prompt, tokens_to_use, kwargs
+        )
+
+    def _chat_completion_fallback(
+        self,
+        system_prompt: str,
+        user_prompt: str,
+        tokens_to_use: int | None = None,
+        kwargs: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """Fallback Chat Completions API implementation when Responses API is unavailable.
+
+        This method is called when:
+        1. The model is not an o-series reasoning model
+        2. The client doesn't have a responses attribute (older SDK)
+        3. The Responses API call fails with AttributeError
+        """
+        if kwargs is None:
+            kwargs = {}
+
         messages = [
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_prompt},

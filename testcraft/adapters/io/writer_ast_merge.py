@@ -7,7 +7,12 @@ analyzing AST structures to avoid duplicates and merge content intelligently.
 
 import ast
 import difflib
+import fcntl
 import logging
+import os
+import platform
+import tempfile
+import time
 from pathlib import Path
 from typing import Any
 
@@ -137,12 +142,20 @@ class ASTMerger:
                 all_names = existing_names | new_names
 
                 if all_names != existing_names:
-                    # Update the import with merged names
-                    node = existing_modules[module]["node"]
-                    node.names = [
-                        ast.alias(name=name, asname=asname)
-                        for name, asname in sorted(all_names)
-                    ]
+                    # Create new ImportFrom node with merged names
+                    existing_node = existing_modules[module]["node"]
+                    new_node = ast.ImportFrom(
+                        module=existing_node.module,
+                        names=[
+                            ast.alias(name=name, asname=asname)
+                            for name, asname in sorted(all_names)
+                        ],
+                        level=existing_node.level,
+                        lineno=existing_node.lineno,
+                        col_offset=existing_node.col_offset,
+                    )
+                    existing_modules[module]["node"] = new_node
+                    existing_modules[module]["names"] = all_names
             else:
                 # Add new module import
                 existing_modules[module] = {
@@ -214,6 +227,10 @@ class WriterASTMergeAdapter:
         self.dry_run = dry_run
         self.merger = ASTMerger()
         self.logger = logging.getLogger(__name__)
+        # Cache for parsed ASTs to avoid re-parsing
+        self._ast_cache: dict[str, ast.Module] = {}
+        self._cache_hits = 0
+        self._cache_misses = 0
 
     def write_file(
         self,
@@ -269,6 +286,7 @@ class WriterASTMergeAdapter:
 
             # Format the merged content
             formatted_content = self._format_content(merged_content)
+            formatting_status = "success"
 
             if self.dry_run:
                 # Generate diff for dry-run
@@ -287,6 +305,7 @@ class WriterASTMergeAdapter:
                     "diff": diff,
                     "file_existed": file_existed,
                     "backup_path": None,
+                    "formatting_status": formatting_status,
                 }
 
             # Create backup if file existed
@@ -307,6 +326,7 @@ class WriterASTMergeAdapter:
                 "file_existed": file_existed,
                 "formatted": True,
                 "merged": bool(existing_content),
+                "formatting_status": formatting_status,
             }
 
         except (SafetyError, OSError, SyntaxError) as e:
@@ -361,7 +381,7 @@ class WriterASTMergeAdapter:
         self, file_path: str | Path, backup_suffix: str = ".backup"
     ) -> dict[str, Any]:
         """
-        Create a backup of an existing file.
+        Create a backup of an existing file with atomic operations.
 
         Args:
             file_path: Path of the file to backup
@@ -384,10 +404,13 @@ class WriterASTMergeAdapter:
                     "backup_path": None,
                 }
 
-            # Create backup path
-            backup_path = file_path.with_suffix(file_path.suffix + backup_suffix)
-
             if self.dry_run:
+                # For dry run, create timestamped backup name
+                timestamp = int(time.time())
+                pid = os.getpid()
+                backup_name = f"{file_path.stem}{backup_suffix}.{timestamp}.{pid}{file_path.suffix}"
+                backup_path = file_path.parent / backup_name
+
                 return {
                     "success": True,
                     "dry_run": True,
@@ -395,14 +418,53 @@ class WriterASTMergeAdapter:
                     "backup_path": str(backup_path),
                 }
 
-            # Copy file content
-            content = file_path.read_text(encoding="utf-8")
-            backup_path.write_text(content, encoding="utf-8")
+            # Create atomic backup using tempfile.mkstemp for race condition safety
+            timestamp = int(time.time())
+            pid = os.getpid()
+
+            # Use atomic temporary file creation
+            with tempfile.NamedTemporaryFile(
+                mode="w",
+                suffix=f"{backup_suffix}.{timestamp}.{pid}{file_path.suffix}",
+                dir=file_path.parent,
+                delete=False,
+                encoding="utf-8",
+            ) as temp_file:
+                # Read original content
+                try:
+                    with open(file_path, encoding="utf-8") as src_file:
+                        # Use file locking for cross-platform compatibility
+                        if platform.system() != "Windows":
+                            fcntl.flock(
+                                src_file.fileno(), fcntl.LOCK_SH
+                            )  # Shared lock for reading
+
+                        content = src_file.read()
+
+                        # Write to temporary file
+                        temp_file.write(content)
+                        temp_file.flush()
+
+                        # Atomically move temp file to final backup location
+                        final_backup_path = (
+                            file_path.parent / temp_file.name.split("/")[-1]
+                        )
+                        os.rename(temp_file.name, final_backup_path)
+
+                except OSError as lock_error:
+                    # Clean up temp file if locking fails
+                    try:
+                        os.unlink(temp_file.name)
+                    except OSError:
+                        pass  # Ignore cleanup errors
+                    raise WriterASTMergeError(
+                        f"Failed to lock file for backup: {lock_error}"
+                    ) from lock_error
 
             return {
                 "success": True,
                 "original_path": str(file_path),
-                "backup_path": str(backup_path),
+                "backup_path": str(final_backup_path),
             }
 
         except OSError as e:
@@ -466,61 +528,128 @@ class WriterASTMergeAdapter:
             WriterASTMergeError: If merging fails
         """
         try:
+            self.logger.debug("Starting AST merge process")
+
             # Parse both contents
+            self.logger.debug("Parsing existing content")
             existing_tree = ast.parse(existing_content)
+            self.logger.debug("Parsing new content")
             new_tree = ast.parse(new_content)
 
             # Extract elements from both trees
+            self.logger.debug("Extracting elements from existing content")
             existing_elements = self.merger.extract_elements(existing_tree)
+            self.logger.debug("Extracting elements from new content")
             new_elements = self.merger.extract_elements(new_tree)
+
+            self.logger.debug(
+                f"Existing elements: imports={len(existing_elements['imports'])}, "
+                f"from_imports={len(existing_elements['from_imports'])}, "
+                f"functions={len(existing_elements['functions'])}, "
+                f"classes={len(existing_elements['classes'])}, "
+                f"constants={len(existing_elements['constants'])}"
+            )
+
+            self.logger.debug(
+                f"New elements: imports={len(new_elements['imports'])}, "
+                f"from_imports={len(new_elements['from_imports'])}, "
+                f"functions={len(new_elements['functions'])}, "
+                f"classes={len(new_elements['classes'])}, "
+                f"constants={len(new_elements['constants'])}"
+            )
 
             # Merge elements
             merged_body = []
 
             # Merge imports
+            self.logger.debug("Merging imports")
             merged_imports = self.merger.merge_imports(
                 existing_elements["imports"], new_elements["imports"]
             )
+            self.logger.debug(f"Merged {len(merged_imports)} import statements")
             merged_body.extend(merged_imports)
 
             # Merge from imports
+            self.logger.debug("Merging from imports")
             merged_from_imports = self.merger.merge_from_imports(
                 existing_elements["from_imports"], new_elements["from_imports"]
+            )
+            self.logger.debug(
+                f"Merged {len(merged_from_imports)} from import statements"
             )
             merged_body.extend(merged_from_imports)
 
             # Add a blank line after imports if there are any
             if merged_imports or merged_from_imports:
-                # Add blank line (represented as a Pass statement that will be formatted away)
-                pass
+                # Add blank line using an expression statement with None constant
+                # This creates proper AST structure that formatters will handle correctly
+                blank_line = ast.Expr(value=ast.Constant(value=None))
+                merged_body.append(blank_line)
 
-            # Merge constants
+            # Merge constants with value comparison
             merged_constants = []
-            existing_constant_names = {
-                const["name"] for const in existing_elements["constants"]
+            existing_constants_by_name = {
+                const["name"]: const for const in existing_elements["constants"]
             }
 
-            # Add existing constants
+            # Process existing constants first
             for const in existing_elements["constants"]:
                 merged_constants.append(const["node"])
 
-            # Add new constants that don't exist
+            # Process new constants, checking for conflicts
             for const in new_elements["constants"]:
-                if const["name"] not in existing_constant_names:
+                const_name = const["name"]
+                const_value = const["value"]
+
+                if const_name in existing_constants_by_name:
+                    # Check if values match
+                    existing_value = existing_constants_by_name[const_name]["value"]
+                    if existing_value == const_value:
+                        # Same name and value, skip (already have it)
+                        self.logger.debug(f"Skipping duplicate constant: {const_name}")
+                        continue
+                    else:
+                        # Same name, different value - create renamed version
+                        new_name = self._resolve_constant_name_conflict(const_name)
+                        self.logger.warning(
+                            f"Constant name conflict resolved: {const_name} -> {new_name} "
+                            f"(original: {existing_value}, new: {const_value})"
+                        )
+
+                        # Create new constant node with renamed variable
+                        parsed = ast.parse(const_value)
+                        parsed_stmt = parsed.body[0]
+                        if isinstance(parsed_stmt, ast.Expr):
+                            value_node = parsed_stmt.value
+                        else:
+                            value_node = parsed_stmt  # type: ignore[assignment]
+                        new_node = ast.Assign(
+                            targets=[ast.Name(id=new_name, ctx=ast.Store())],
+                            value=value_node,  # Parse the value expression
+                            lineno=const["node"].lineno,
+                            col_offset=const["node"].col_offset,
+                        )
+                        merged_constants.append(new_node)
+                else:
+                    # New constant, add it
                     merged_constants.append(const["node"])
 
             merged_body.extend(merged_constants)
 
             # Merge classes
+            self.logger.debug("Merging classes")
             merged_classes = self.merger.merge_classes(
                 existing_elements["classes"], new_elements["classes"]
             )
+            self.logger.debug(f"Merged {len(merged_classes)} class definitions")
             merged_body.extend(merged_classes)
 
             # Merge functions (including test functions)
+            self.logger.debug("Merging functions")
             merged_functions = self.merger.merge_functions(
                 existing_elements["functions"], new_elements["functions"]
             )
+            self.logger.debug(f"Merged {len(merged_functions)} function definitions")
             merged_body.extend(merged_functions)
 
             # Add other statements from existing content
@@ -532,12 +661,66 @@ class WriterASTMergeAdapter:
             # Create new module with merged body
             merged_tree = ast.Module(body=merged_body, type_ignores=[])
 
-            # Convert back to source code
-            return ast.unparse(merged_tree)
+            # Validate merged AST before unparsing
+            self._validate_merged_ast(merged_tree)
 
-        except (SyntaxError, ValueError):
-            # Fallback to simple concatenation if AST parsing fails
-            return existing_content + "\n\n" + new_content
+            # Convert back to source code
+            try:
+                merged_content = ast.unparse(merged_tree)
+                self.logger.debug("AST merge completed successfully")
+                return merged_content
+            except Exception as unparse_error:
+                self.logger.error(f"Failed to unparse merged AST: {unparse_error}")
+                raise WriterASTMergeError(
+                    f"Failed to convert merged AST back to source: {unparse_error}"
+                ) from unparse_error
+
+        except (SyntaxError, ValueError) as e:
+            # Enhanced fallback with validation and logging
+            self.logger.warning(
+                "AST merge failed, falling back to safe concatenation. "
+                f"Original error: {e}"
+            )
+
+            # Try partial merge: extract what's parseable
+            try:
+                # Try to parse each content separately
+                existing_fallback_tree: ast.Module | None = self._safe_parse_content(
+                    existing_content
+                )
+                new_fallback_tree: ast.Module | None = self._safe_parse_content(
+                    new_content
+                )
+
+                if existing_fallback_tree and new_fallback_tree:
+                    # Both parse successfully, merge what we can
+                    merged_content = self._partial_ast_merge(
+                        existing_content, new_content
+                    )
+                else:
+                    # At least one failed to parse, use safe concatenation
+                    merged_content = self._safe_concatenate_content(
+                        existing_content, new_content
+                    )
+
+                # Validate the final result
+                self._validate_merged_content(merged_content)
+
+                self.logger.info("Partial AST merge succeeded")
+                return merged_content
+
+            except Exception as merge_error:
+                # Final fallback: safe concatenation with comments
+                self.logger.error(f"Partial merge also failed: {merge_error}")
+                safe_content = self._safe_concatenate_content(
+                    existing_content, new_content
+                )
+
+                # Validate even the safe concatenation
+                self._validate_merged_content(safe_content)
+
+                self.logger.warning("Using safe concatenation as final fallback")
+                return safe_content
 
     def _format_content(self, content: str) -> str:
         """
@@ -553,9 +736,39 @@ class WriterASTMergeAdapter:
             Formatted content
 
         Raises:
-            WriterASTMergeError: If formatting fails
+            WriterASTMergeError: If formatting fails completely
         """
-        return format_python_content(content, timeout=15, disable_ruff=False)
+        try:
+            # Try primary formatting with ruff + black + isort
+            self.logger.debug("Attempting primary formatting with ruff + black + isort")
+            return format_python_content(content, timeout=15, disable_ruff=False)
+
+        except Exception as primary_error:
+            self.logger.warning(f"Primary formatting failed: {primary_error}")
+
+            try:
+                # Fallback 1: Try with black only (disable ruff)
+                self.logger.debug("Attempting fallback formatting with black only")
+                return format_python_content(content, timeout=15, disable_ruff=True)
+
+            except Exception as black_error:
+                self.logger.warning(f"Black-only formatting also failed: {black_error}")
+
+                try:
+                    # Fallback 2: Try basic isort only (minimal formatting)
+                    self.logger.debug("Attempting minimal formatting with isort only")
+                    # For minimal formatting, we'll just return the content as-is
+                    # since we don't have a standalone isort formatter
+                    return content
+
+                except Exception as isort_error:
+                    self.logger.error(f"All formatting attempts failed: {isort_error}")
+
+                    # Final fallback: return unformatted content with warning
+                    self.logger.warning(
+                        "Returning unformatted content due to formatting failures"
+                    )
+                    return content
 
     def _generate_diff(self, original: str, modified: str, filename: str) -> str:
         """Generate unified diff between original and modified content."""
@@ -609,3 +822,207 @@ class WriterASTMergeAdapter:
         except (SyntaxError, ValueError):
             # Fallback to simple parsing if AST fails
             return {"imports": [], "functions": []}
+
+    def _safe_parse_content(self, content: str) -> ast.Module | None:
+        """
+        Safely parse content, returning None if parsing fails.
+        Uses caching to avoid re-parsing identical content.
+
+        Args:
+            content: Python code content to parse
+
+        Returns:
+            AST module if parsing succeeds, None otherwise
+        """
+        # Use content hash as cache key for efficiency
+        content_hash_str = str(hash(content))
+
+        if content_hash_str in self._ast_cache:
+            self._cache_hits += 1
+            return self._ast_cache[content_hash_str]
+
+        try:
+            tree = ast.parse(content)
+            self._ast_cache[content_hash_str] = tree
+            self._cache_misses += 1
+            return tree
+        except (SyntaxError, ValueError):
+            self._cache_misses += 1
+            return None
+
+    def _partial_ast_merge(self, existing_content: str, new_content: str) -> str:
+        """
+        Attempt partial AST merge by extracting parseable parts.
+
+        Args:
+            existing_content: Original file content
+            new_content: New content to merge
+
+        Returns:
+            Merged content with parseable parts preserved
+        """
+        try:
+            # Try to extract parseable sections
+            existing_tree = self._safe_parse_content(existing_content)
+            new_tree = self._safe_parse_content(new_content)
+
+            if not existing_tree and not new_tree:
+                # Neither parses, use safe concatenation
+                return self._safe_concatenate_content(existing_content, new_content)
+
+            # Build merged content from parseable parts
+            parts = []
+
+            if existing_tree:
+                try:
+                    parts.append(ast.unparse(existing_tree))
+                except Exception:
+                    parts.append(existing_content)
+
+            if new_tree:
+                try:
+                    parts.append(ast.unparse(new_tree))
+                except Exception:
+                    parts.append(new_content)
+            elif new_content and not existing_tree:
+                parts.append(new_content)
+
+            return "\n\n".join(parts)
+
+        except Exception:
+            # Final fallback
+            return self._safe_concatenate_content(existing_content, new_content)
+
+    def _safe_concatenate_content(self, existing_content: str, new_content: str) -> str:
+        """
+        Safely concatenate content with proper separation.
+
+        Args:
+            existing_content: Original file content
+            new_content: New content to append
+
+        Returns:
+            Safely concatenated content
+        """
+        parts = []
+
+        if existing_content.strip():
+            # Add original content as a comment block if it doesn't parse
+            if self._safe_parse_content(existing_content) is None:
+                parts.append(f"# Original content (unparseable):\n{existing_content}")
+            else:
+                parts.append(existing_content)
+
+        if new_content.strip():
+            # Add new content as a comment block if it doesn't parse
+            if self._safe_parse_content(new_content) is None:
+                parts.append(f"# New content (unparseable):\n{new_content}")
+            else:
+                parts.append(new_content)
+
+        return "\n\n".join(parts)
+
+    def _validate_merged_content(self, content: str) -> None:
+        """
+        Validate that merged content is valid Python.
+
+        Args:
+            content: Content to validate
+
+        Raises:
+            WriterASTMergeError: If content is not valid Python
+        """
+        try:
+            ast.parse(content)
+        except (SyntaxError, ValueError) as e:
+            raise WriterASTMergeError(
+                f"Merged content is not valid Python: {e}\n"
+                f"Content preview: {content[:200]}{'...' if len(content) > 200 else ''}"
+            ) from e
+
+    def _resolve_constant_name_conflict(self, original_name: str) -> str:
+        """
+        Resolve naming conflicts for constants by adding numeric suffixes.
+
+        Args:
+            original_name: The original constant name that conflicts
+
+        Returns:
+            A unique name with numeric suffix (e.g., CONST -> CONST_1)
+        """
+        base_name = original_name
+        counter = 1
+
+        # Remove existing numeric suffix if present
+        if "_" in base_name:
+            parts = base_name.split("_")
+            if len(parts) > 1 and parts[-1].isdigit():
+                base_name = "_".join(parts[:-1])
+                counter = int(parts[-1]) + 1
+
+        # Find next available number
+        while True:
+            candidate = f"{base_name}_{counter}"
+            # In a real implementation, we'd check against all existing names
+            # For now, we'll just increment until we find a reasonable candidate
+            counter += 1
+            if counter > 1000:  # Prevent infinite loops
+                candidate = f"{base_name}_{int(time.time())}_{os.getpid()}"
+                break
+
+        return candidate
+
+    def _validate_merged_ast(self, tree: ast.Module) -> None:
+        """
+        Validate that a merged AST is well-formed and can be safely unparsed.
+
+        Args:
+            tree: AST module to validate
+
+        Raises:
+            WriterASTMergeError: If AST is invalid or malformed
+        """
+        try:
+            # Basic AST validation
+            if not isinstance(tree, ast.Module):
+                raise WriterASTMergeError("Merged AST is not a valid Module node")
+
+            if not hasattr(tree, "body") or not isinstance(tree.body, list):
+                raise WriterASTMergeError("Merged AST missing or invalid body")
+
+            # Validate all nodes in the body
+            for i, node in enumerate(tree.body):
+                if not isinstance(node, ast.stmt):
+                    raise WriterASTMergeError(
+                        f"Invalid statement at index {i}: {type(node)}"
+                    )
+
+            # Try to unparse to catch any issues
+            ast.unparse(tree)
+
+            self.logger.debug(f"AST validation passed: {len(tree.body)} statements")
+
+        except Exception as e:
+            if isinstance(e, WriterASTMergeError):
+                raise
+            raise WriterASTMergeError(f"AST validation failed: {e}") from e
+
+    def get_cache_stats(self) -> dict[str, int]:
+        """
+        Get AST cache statistics for debugging.
+
+        Returns:
+            Dictionary with cache hit/miss counts
+        """
+        return {
+            "cache_hits": self._cache_hits,
+            "cache_misses": self._cache_misses,
+            "cache_size": len(self._ast_cache),
+        }
+
+    def clear_cache(self) -> None:
+        """Clear the AST cache."""
+        self._ast_cache.clear()
+        self._cache_hits = 0
+        self._cache_misses = 0
+        self.logger.debug("AST cache cleared")

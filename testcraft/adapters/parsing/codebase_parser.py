@@ -6,6 +6,10 @@ extracting both structural metadata and source code content for test generation.
 """
 
 import ast
+import importlib.util
+import sys
+import threading
+from collections import OrderedDict
 from pathlib import Path
 from typing import Any
 
@@ -26,9 +30,15 @@ class CodebaseParser:
     and source code content from Python files using AST analysis.
     """
 
-    def __init__(self) -> None:
-        """Initialize the codebase parser."""
-        self._cache: dict[str, dict[str, Any]] = {}
+    def __init__(self, max_cache_size: int = 100) -> None:
+        """Initialize the codebase parser.
+
+        Args:
+            max_cache_size: Maximum number of files to cache (default: 100)
+        """
+        self._cache: OrderedDict[str, dict[str, Any]] = OrderedDict()
+        self._cache_lock = threading.Lock()
+        self._max_cache_size = max_cache_size
 
     def parse_file(
         self, file_path: Path, language: str | None = None, **kwargs: Any
@@ -51,58 +61,111 @@ class CodebaseParser:
                 - 'source_content': Dict mapping element IDs to source code
 
         Raises:
-            ParseError: If file parsing fails
+            ParseError: If file parsing fails completely
         """
-        try:
-            # Check cache first (avoid calling absolute() to prevent cwd issues)
-            cache_key = str(file_path)
+        cache_key = str(file_path)
+        parse_errors: list[dict[str, Any]] = []
+
+        # Check cache first (thread-safe read)
+        with self._cache_lock:
             if cache_key in self._cache:
                 return self._cache[cache_key]
 
+        try:
             # Read file content
             if not file_path.exists():
+                parse_errors.append(
+                    {
+                        "type": "file_error",
+                        "message": f"File does not exist: {file_path}",
+                        "line": None,
+                        "column": None,
+                    }
+                )
                 raise ParseError(f"File does not exist: {file_path}")
 
-            with open(file_path, encoding="utf-8") as f:
-                source_code = f.read()
+            try:
+                with open(file_path, encoding="utf-8") as f:
+                    source_code = f.read()
+            except OSError as e:
+                parse_errors.append(
+                    {
+                        "type": "io_error",
+                        "message": f"Failed to read file: {e}",
+                        "line": None,
+                        "column": None,
+                    }
+                )
+                raise ParseError(f"Failed to read {file_path}: {e}") from e
 
             # Detect language (currently only Python supported)
             detected_language = self._detect_language(file_path, language)
             if detected_language != "python":
+                parse_errors.append(
+                    {
+                        "type": "language_error",
+                        "message": f"Unsupported language: {detected_language}",
+                        "line": None,
+                        "column": None,
+                    }
+                )
                 raise ParseError(f"Unsupported language: {detected_language}")
 
-            # Parse AST
+            # Parse AST with error collection
+            tree = None
             try:
                 tree = ast.parse(source_code, filename=str(file_path))
             except SyntaxError as e:
-                raise ParseError(f"Syntax error in {file_path}: {e}") from e
+                parse_errors.append(
+                    {
+                        "type": "syntax_error",
+                        "message": f"Syntax error: {e}",
+                        "line": e.lineno,
+                        "column": e.offset,
+                    }
+                )
+                # Try to parse partial content for better error recovery
+                tree = self._parse_partial_ast(source_code, file_path, parse_errors)
 
-            # Extract elements and their source code
-            elements, source_content = self._extract_elements(
-                tree, source_code, file_path
+            # Extract elements and their source code (continue even with parse errors)
+            elements, source_content = self._extract_elements_safe(
+                tree, source_code, file_path, parse_errors
             )
 
-            # Extract imports
-            imports = self._extract_imports(tree)
+            # Extract imports (continue even with parse errors)
+            imports = self._extract_imports_safe(tree, parse_errors) if tree else []
 
             result = {
                 "ast": tree,
                 "elements": elements,
                 "imports": imports,
                 "language": detected_language,
-                "parse_errors": [],
+                "parse_errors": parse_errors,
                 "source_content": source_content,
                 "file_path": str(file_path),
                 "source_lines": source_code.splitlines(),
             }
 
-            # Cache the result
-            self._cache[cache_key] = result
+            # Cache the result (thread-safe write with eviction)
+            with self._cache_lock:
+                # Evict oldest entries if cache is full
+                while len(self._cache) >= self._max_cache_size:
+                    self._cache.popitem(last=False)
+                self._cache[cache_key] = result
+
             return result
 
         except Exception as e:
             if isinstance(e, ParseError):
                 raise
+            parse_errors.append(
+                {
+                    "type": "parsing_error",
+                    "message": f"Unexpected error: {e}",
+                    "line": None,
+                    "column": None,
+                }
+            )
             raise ParseError(f"Failed to parse {file_path}: {e}") from e
 
     def extract_functions(
@@ -217,7 +280,7 @@ class CodebaseParser:
 
         for import_info in imports:
             module_name = import_info["module"]
-            if self._is_external_dependency(module_name):
+            if self._is_external_dependency(module_name, file_path):
                 external_deps.append(module_name)
             else:
                 internal_deps.append(module_name)
@@ -363,9 +426,180 @@ class CodebaseParser:
 
         return imports
 
-    def _is_external_dependency(self, module_name: str) -> bool:
+    def _parse_partial_ast(
+        self, source_code: str, file_path: Path, parse_errors: list[dict[str, Any]]
+    ) -> ast.Module | None:
+        """Attempt to parse partial AST when syntax errors are present."""
+        try:
+            # Try parsing line by line to find where the error occurs
+            lines = source_code.splitlines()
+            valid_lines: list[str] = []
+
+            for i, line in enumerate(lines, 1):
+                try:
+                    # Try parsing just this line in context
+                    test_code = "\n".join(valid_lines + [line])
+                    ast.parse(test_code, filename=str(file_path))
+                    valid_lines.append(line)
+                except SyntaxError:
+                    # If this line causes syntax error, try to fix common issues
+                    fixed_line = self._fix_common_syntax_issues(line)
+                    if fixed_line != line:
+                        try:
+                            test_code = "\n".join(valid_lines + [fixed_line])
+                            ast.parse(test_code, filename=str(file_path))
+                            valid_lines.append(fixed_line)
+                        except SyntaxError:
+                            # Line is unparseable, stop here
+                            parse_errors.append(
+                                {
+                                    "type": "unparseable_line",
+                                    "message": f"Cannot parse line {i}: {line.strip()}",
+                                    "line": i,
+                                    "column": None,
+                                }
+                            )
+                            break
+                    else:
+                        parse_errors.append(
+                            {
+                                "type": "unparseable_line",
+                                "message": f"Cannot parse line {i}: {line.strip()}",
+                                "line": i,
+                                "column": None,
+                            }
+                        )
+                        break
+
+            if valid_lines:
+                partial_code = "\n".join(valid_lines)
+                try:
+                    return ast.parse(partial_code, filename=str(file_path))
+                except SyntaxError:
+                    pass
+
+        except Exception:
+            pass
+
+        return None
+
+    def _fix_common_syntax_issues(self, line: str) -> str:
+        """Attempt to fix common syntax issues in a line."""
+        # Fix missing colons after function definitions, class definitions, etc.
+        line = line.rstrip()
+        if line and not line.endswith(":") and not line.endswith(","):
+            # Check if this looks like a function/class definition
+            if any(
+                keyword in line
+                for keyword in [
+                    "def ",
+                    "class ",
+                    "if ",
+                    "elif ",
+                    "else",
+                    "for ",
+                    "while ",
+                    "try",
+                    "except ",
+                    "finally",
+                ]
+            ):
+                return line + ":"
+        return line
+
+    def _extract_elements_safe(
+        self,
+        tree: ast.Module | None,
+        source_code: str,
+        file_path: Path,
+        parse_errors: list[dict[str, Any]],
+    ) -> tuple[list[TestElement], dict[str, str]]:
+        """Extract elements safely, handling parse errors gracefully."""
+        elements: list[TestElement] = []
+        source_content: dict[str, str] = {}
+
+        if not tree:
+            parse_errors.append(
+                {
+                    "type": "no_ast",
+                    "message": "No AST available for element extraction",
+                    "line": None,
+                    "column": None,
+                }
+            )
+            return elements, source_content
+
+        try:
+            elements, source_content = self._extract_elements(
+                tree, source_code, file_path
+            )
+        except Exception as e:
+            parse_errors.append(
+                {
+                    "type": "element_extraction_error",
+                    "message": f"Failed to extract elements: {e}",
+                    "line": None,
+                    "column": None,
+                }
+            )
+
+        return elements, source_content
+
+    def _extract_imports_safe(
+        self, tree: ast.Module | None, parse_errors: list[dict[str, Any]]
+    ) -> list[dict[str, Any]]:
+        """Extract imports safely, handling parse errors gracefully."""
+        if not tree:
+            parse_errors.append(
+                {
+                    "type": "no_ast",
+                    "message": "No AST available for import extraction",
+                    "line": None,
+                    "column": None,
+                }
+            )
+            return []
+
+        try:
+            return self._extract_imports(tree)
+        except Exception as e:
+            parse_errors.append(
+                {
+                    "type": "import_extraction_error",
+                    "message": f"Failed to extract imports: {e}",
+                    "line": None,
+                    "column": None,
+                }
+            )
+            return []
+
+    def _is_external_dependency(self, module_name: str, file_path: Path) -> bool:
         """Determine if a module is an external dependency."""
-        # Simple heuristic: if it's a standard library or common third-party module
+        base_module = module_name.split(".")[0]
+
+        # Check if it's in sys.modules (indicates it's loaded/available)
+        if base_module in sys.modules:
+            return True
+
+        # Try to find the module spec
+        try:
+            spec = importlib.util.find_spec(base_module)
+            if spec is not None:
+                # Check if it's a standard library module by checking origin
+                if spec.origin and "site-packages" not in spec.origin:
+                    return True
+        except (ImportError, AttributeError):
+            pass
+
+        # Check project root for requirements or pyproject.toml
+        try:
+            project_root = self._find_project_root(file_path.parent)
+            if self._is_in_requirements(base_module, project_root):
+                return True
+        except Exception:
+            pass
+
+        # Fallback to heuristics
         stdlib_modules = {
             "os",
             "sys",
@@ -378,6 +612,83 @@ class CodebaseParser:
             "functools",
             "itertools",
             "datetime",
+            "re",
+            "math",
+            "random",
+            "uuid",
+            "hashlib",
+            "base64",
+            "urllib",
+            "http",
+            "socket",
+            "ssl",
+            "subprocess",
+            "shutil",
+            "tempfile",
+            "glob",
+            "fnmatch",
+            "pickle",
+            "sqlite3",
+            "csv",
+            "configparser",
+            "argparse",
+            "logging",
+            "multiprocessing",
+            "concurrent",
+            "asyncio",
+            "contextlib",
+            "operator",
+            "copy",
+            "weakref",
+            "gc",
+            "inspect",
+            "traceback",
+            "warnings",
+            "abc",
+            "io",
+            "string",
+            "textwrap",
+            "codecs",
+            "locale",
+            "struct",
+            "array",
+            "binascii",
+            "calendar",
+            "time",
+            "sched",
+            "queue",
+            "threading",
+            "zipfile",
+            "tarfile",
+            "gzip",
+            "bz2",
+            "lzma",
+            "zipimport",
+            "imp",
+            "importlib",
+            "pkgutil",
+            "modulefinder",
+            "runpy",
+            "compileall",
+            "py_compile",
+            "dis",
+            "pydoc",
+            "doctest",
+            "unittest",
+            "test",
+            "pdb",
+            "profile",
+            "cProfile",
+            "pstats",
+            "timeit",
+            "trace",
+            "cgitb",
+            "webbrowser",
+            "wsgiref",
+            "html",
+            "xml",
+            "email",
+            "cgi",
         }
 
         common_third_party = {
@@ -391,7 +702,170 @@ class CodebaseParser:
             "pydantic",
             "sqlalchemy",
             "click",
+            "rich",
+            "typer",
+            "httpx",
+            "aiohttp",
+            "uvicorn",
+            "gunicorn",
+            "celery",
+            "redis",
+            "jinja2",
+            "markupsafe",
+            "werkzeug",
+            "itsdangerous",
+            "blinker",
+            "alembic",
+            "marshmallow",
+            "apispec",
+            "connexion",
+            "tornado",
+            "sanic",
+            "bottle",
+            "cherrypy",
+            "web",
+            "pyramid",
+            "zope",
+            "twisted",
+            "gevent",
+            "grequests",
+            "tqdm",
+            "colorama",
+            "termcolor",
+            "blessed",
+            "curses",
+            "pygame",
+            "kivy",
+            "tkinter",
+            "wx",
+            "pyqt",
+            "pyside",
+            "pillow",
+            "opencv",
+            "scikit",
+            "image",
+            "scipy",
+            "matplotlib",
+            "seaborn",
+            "plotly",
+            "bokeh",
+            "altair",
+            "folium",
+            "geopandas",
+            "shapely",
+            "fiona",
+            "rasterio",
+            "pyproj",
+            "cartopy",
+            "networkx",
+            "igraph",
+            "graph",
+            "toolz",
+            "cytoolz",
+            "more",
+            "itertools",
+            "boltons",
+            "python",
+            "dateutil",
+            "pytz",
+            "babel",
+            "mako",
+            "chameleon",
+            "lxml",
+            "beautifulsoup4",
+            "html5lib",
+            "bleach",
+            "markdown",
+            "mistune",
+            "docutils",
+            "sphinx",
+            "mkdocs",
+            "pelican",
+            "hugo",
+            "jekyll",
+            "git",
+            "dulwich",
+            "gitpython",
+            "paramiko",
+            "scp",
+            "fabric",
+            "invoke",
+            "pexpect",
+            "sh",
+            "plumbum",
+            "fire",
+            "docopt",
+            "argh",
+            "cement",
+            "cliff",
+            "cmd2",
+            "prompt",
+            "toolkit",
+            "questionary",
+            "inquirer",
+            "pyinquirer",
+            "cookiecutter",
+            "copier",
+            "time",
         }
 
-        base_module = module_name.split(".")[0]
         return base_module in stdlib_modules or base_module in common_third_party
+
+    def _find_project_root(self, start_path: Path) -> Path:
+        """Find the project root by looking for pyproject.toml or requirements.txt."""
+        current = start_path
+        for _ in range(10):  # Prevent infinite loops
+            if (current / "pyproject.toml").exists() or (
+                current / "requirements.txt"
+            ).exists():
+                return current
+            if current.parent == current:
+                break
+            current = current.parent
+        return start_path
+
+    def _is_in_requirements(self, module_name: str, project_root: Path) -> bool:
+        """Check if a module is listed in requirements files."""
+        # Check pyproject.toml dependencies
+        pyproject_file = project_root / "pyproject.toml"
+        if pyproject_file.exists():
+            try:
+                import tomllib
+
+                with open(pyproject_file, "rb") as f:
+                    data = tomllib.load(f)
+                    dependencies = data.get("project", {}).get("dependencies", [])
+                    for dep in dependencies:
+                        dep_name = (
+                            dep.split()[0]
+                            .split(">=")[0]
+                            .split("==")[0]
+                            .split("~=")[0]
+                            .split("<")[0]
+                        )
+                        if dep_name.lower() == module_name.lower():
+                            return True
+            except Exception:
+                pass
+
+        # Check requirements.txt
+        requirements_file = project_root / "requirements.txt"
+        if requirements_file.exists():
+            try:
+                with open(requirements_file, encoding="utf-8") as f:
+                    for line in f:
+                        line = line.strip().split("#")[0]  # Remove comments
+                        if line:
+                            dep_name = (
+                                line.split()[0]
+                                .split(">=")[0]
+                                .split("==")[0]
+                                .split("~=")[0]
+                                .split("<")[0]
+                            )
+                            if dep_name.lower() == module_name.lower():
+                                return True
+            except Exception:
+                pass
+
+        return False

@@ -7,9 +7,13 @@ test refinement until tests pass or max iterations are reached.
 
 from __future__ import annotations
 
+import ast
 import asyncio
+import hashlib
 import logging
 import re
+import tempfile
+from collections import defaultdict
 from collections.abc import Awaitable, Callable
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
@@ -69,6 +73,631 @@ class PytestRefiner:
 
         # Create semaphore to limit concurrent pytest operations
         self._refine_semaphore = asyncio.Semaphore(max_concurrent_refines)
+
+        # Initialize per-file semaphores for enhanced concurrency control
+        self._file_semaphores = defaultdict(lambda: asyncio.Semaphore(1))
+        self._file_operation_queues = defaultdict(lambda: asyncio.Queue())
+
+        # File locking configuration
+        self._lock_timeout = 10.0  # seconds
+        self._file_locks = {}  # Track active file locks
+
+        # Content backup for rollback mechanism
+        self._content_backups = {}  # Track original content for rollback
+
+        # Queue system for pending refinements per file
+        self._file_queues = defaultdict(lambda: asyncio.Queue())
+        self._queue_processing_tasks = {}  # Track active queue processing tasks
+
+    def _extract_test_assertions(self, content: str) -> dict[str, Any]:
+        """
+        Extract and analyze test assertions from Python content using AST parsing.
+
+        Args:
+            content: Python source code content
+
+        Returns:
+            Dictionary with assertion analysis including counts and types
+        """
+        try:
+            tree = ast.parse(content)
+        except SyntaxError as e:
+            logger.warning("Failed to parse content for assertion analysis: %s", e)
+            return {
+                "valid": False,
+                "error": f"SyntaxError: {e}",
+                "assertion_count": 0,
+                "assertion_types": [],
+            }
+
+        assertions = []
+        assertion_types = set()
+
+        class AssertionVisitor(ast.NodeVisitor):
+            def visit_Assert(self, node):
+                assertions.append(
+                    {
+                        "type": "assert",
+                        "line": node.lineno,
+                        "test": ast.unparse(node.test)
+                        if hasattr(ast, "unparse")
+                        else str(node.test),
+                        "msg": ast.unparse(node.msg)
+                        if node.msg and hasattr(ast, "unparse")
+                        else (str(node.msg) if node.msg else None),
+                    }
+                )
+                assertion_types.add("assert")
+                self.generic_visit(node)
+
+            def visit_Call(self, node):
+                if isinstance(node.func, ast.Name) and node.func.id in [
+                    "self.assertEqual",
+                    "self.assertTrue",
+                    "self.assertFalse",
+                    "self.assertRaises",
+                    "self.assertIsNone",
+                ]:
+                    assertions.append(
+                        {
+                            "type": "unittest",
+                            "line": node.lineno,
+                            "method": node.func.id,
+                            "args": [
+                                ast.unparse(arg)
+                                if hasattr(ast, "unparse")
+                                else str(arg)
+                                for arg in node.args
+                            ],
+                        }
+                    )
+                    assertion_types.add("unittest")
+                elif isinstance(node.func, ast.Attribute) and node.func.attr.startswith(
+                    "assert"
+                ):
+                    assertions.append(
+                        {
+                            "type": "unittest",
+                            "line": node.lineno,
+                            "method": node.func.attr,
+                            "args": [
+                                ast.unparse(arg)
+                                if hasattr(ast, "unparse")
+                                else str(arg)
+                                for arg in node.args
+                            ],
+                        }
+                    )
+                    assertion_types.add("unittest")
+                self.generic_visit(node)
+
+        visitor = AssertionVisitor()
+        visitor.visit(tree)
+
+        return {
+            "valid": True,
+            "assertion_count": len(assertions),
+            "assertion_types": list(assertion_types),
+            "assertions": assertions,
+        }
+
+    def _check_import_integrity(
+        self, original_content: str, refined_content: str
+    ) -> dict[str, Any]:
+        """
+        Check import integrity between original and refined content.
+
+        Args:
+            original_content: Original file content
+            refined_content: Refined file content
+
+        Returns:
+            Dictionary with import integrity analysis
+        """
+
+        def extract_imports(content: str) -> set[str]:
+            """Extract import statements from content."""
+            try:
+                tree = ast.parse(content)
+            except SyntaxError:
+                return set()
+
+            imports = set()
+
+            for node in ast.walk(tree):
+                if isinstance(node, ast.Import):
+                    for alias in node.names:
+                        imports.add(alias.name.split(".")[0])  # Top-level module
+                elif isinstance(node, ast.ImportFrom):
+                    if node.module:
+                        imports.add(node.module.split(".")[0])  # Top-level module
+                    elif node.level > 0:  # Relative import
+                        imports.add(f"relative_import_level_{node.level}")
+
+            return imports
+
+        original_imports = extract_imports(original_content)
+        refined_imports = extract_imports(refined_content)
+
+        added_imports = refined_imports - original_imports
+        removed_imports = original_imports - refined_imports
+
+        return {
+            "valid": True,
+            "original_imports": original_imports,
+            "refined_imports": refined_imports,
+            "added_imports": added_imports,
+            "removed_imports": removed_imports,
+            "import_compatibility": len(removed_imports) == 0 or len(added_imports) > 0,
+        }
+
+    def _validate_refined_content(
+        self,
+        original_content: str,
+        refined_content: str,
+        test_file: Path,
+        context: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """
+        Comprehensive validation of refined content before file write.
+
+        Args:
+            original_content: Original file content
+            refined_content: Refined file content
+            test_file: Path to the test file
+            context: Additional validation context
+
+        Returns:
+            Dictionary with validation results and any issues found
+        """
+        validation_result = {
+            "valid": True,
+            "issues": [],
+            "warnings": [],
+            "rollback_recommended": False,
+        }
+
+        if not refined_content or not refined_content.strip():
+            validation_result["valid"] = False
+            validation_result["issues"].append(
+                "Refined content is empty or whitespace-only"
+            )
+            validation_result["rollback_recommended"] = True
+            return validation_result
+
+        # 1. Basic syntax validation
+        try:
+            ast.parse(refined_content)
+        except SyntaxError as e:
+            validation_result["valid"] = False
+            validation_result["issues"].append(f"Syntax error in refined content: {e}")
+            validation_result["rollback_recommended"] = True
+            return validation_result
+
+        # 2. Import integrity check
+        import_check = self._check_import_integrity(original_content, refined_content)
+        if not import_check["import_compatibility"]:
+            validation_result["warnings"].append(
+                f"Import changes detected: added={import_check['added_imports']}, removed={import_check['removed_imports']}"
+            )
+
+        # 3. Assertion analysis
+        original_assertions = self._extract_test_assertions(original_content)
+        refined_assertions = self._extract_test_assertions(refined_content)
+
+        if not original_assertions["valid"] or not refined_assertions["valid"]:
+            validation_result["warnings"].append(
+                "Could not analyze assertions due to parsing issues"
+            )
+        else:
+            # Check for significant assertion changes
+            assertion_diff = abs(
+                refined_assertions["assertion_count"]
+                - original_assertions["assertion_count"]
+            )
+            if assertion_diff > 0:
+                validation_result["warnings"].append(
+                    f"Assertion count changed by {assertion_diff} (from {original_assertions['assertion_count']} to {refined_assertions['assertion_count']})"
+                )
+
+            # Check for assertion type changes
+            type_diff = set(refined_assertions["assertion_types"]) - set(
+                original_assertions["assertion_types"]
+            )
+            if type_diff:
+                validation_result["warnings"].append(
+                    f"New assertion types introduced: {type_diff}"
+                )
+
+        # 4. Content similarity check (avoid no-op refinements)
+        if refined_content.strip() == original_content.strip():
+            validation_result["warnings"].append(
+                "Refined content is identical to original content"
+            )
+            validation_result["rollback_recommended"] = True
+
+        # 5. Length validation (prevent extreme changes)
+        original_lines = len(original_content.splitlines())
+        refined_lines = len(refined_content.splitlines())
+        line_diff_ratio = abs(refined_lines - original_lines) / max(original_lines, 1)
+
+        if line_diff_ratio > 0.5:  # More than 50% line count change
+            validation_result["warnings"].append(
+                f"Significant line count change: {original_lines} -> {refined_lines} lines ({line_diff_ratio * 100:.1f}%)"
+            )
+
+        # 6. Context-aware validation
+        if context:
+            # Check if refinement addressed the specific failures mentioned in context
+            failure_indicators = context.get("failure_indicators", [])
+            for indicator in failure_indicators:
+                if indicator.lower() in refined_content.lower():
+                    validation_result["warnings"].append(
+                        f"Failure indicator '{indicator}' still present in refined content"
+                    )
+
+        return validation_result
+
+    async def _acquire_file_lock(self, file_path: Path) -> bool:
+        """
+        Acquire a file lock for exclusive access.
+
+        Args:
+            file_path: Path to the file to lock
+
+        Returns:
+            True if lock acquired successfully, False if timeout or error
+        """
+        try:
+            import fcntl
+
+            # Open file in read-write mode to acquire lock
+            file_handle = open(file_path, "r+")
+            self._file_locks[file_path] = file_handle
+
+            # Try to acquire exclusive lock with timeout
+            start_time = asyncio.get_event_loop().time()
+            while True:
+                try:
+                    fcntl.flock(file_handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+                    logger.debug(f"Acquired file lock for {file_path}")
+                    return True
+                except BlockingIOError:
+                    if (
+                        asyncio.get_event_loop().time() - start_time
+                        > self._lock_timeout
+                    ):
+                        logger.warning(
+                            f"Failed to acquire file lock for {file_path} within timeout"
+                        )
+                        return False
+                    await asyncio.sleep(0.1)
+
+        except Exception as e:
+            logger.error(f"Error acquiring file lock for {file_path}: {e}")
+            return False
+
+    async def _release_file_lock(self, file_path: Path) -> None:
+        """
+        Release a file lock.
+
+        Args:
+            file_path: Path to the file to unlock
+        """
+        try:
+            if file_path in self._file_locks:
+                import fcntl
+
+                file_handle = self._file_locks.pop(file_path)
+                fcntl.flock(file_handle.fileno(), fcntl.LOCK_UN)
+                file_handle.close()
+                logger.debug(f"Released file lock for {file_path}")
+        except Exception as e:
+            logger.error(f"Error releasing file lock for {file_path}: {e}")
+
+    async def _write_with_atomic_operation(self, test_file: Path, content: str) -> bool:
+        """
+        Write content to file using atomic operation with temporary file.
+
+        Args:
+            test_file: Target file path
+            content: Content to write
+
+        Returns:
+            True if write successful, False otherwise
+        """
+        try:
+            # Calculate checksum of content for validation
+            content_checksum = hashlib.sha256(content.encode("utf-8")).hexdigest()
+
+            # Write to temporary file first
+            with tempfile.NamedTemporaryFile(
+                mode="w",
+                encoding="utf-8",
+                suffix=".py",
+                delete=False,
+                dir=test_file.parent,
+            ) as temp_file:
+                temp_file.write(content)
+                temp_file_path = Path(temp_file.name)
+
+            # Atomic rename to target file
+            temp_file_path.replace(test_file)
+
+            # Validate the write by checking file exists and content checksum
+            if not test_file.exists():
+                logger.error(
+                    f"Atomic write failed: target file {test_file} does not exist after rename"
+                )
+                return False
+
+            written_content = test_file.read_text(encoding="utf-8")
+            written_checksum = hashlib.sha256(
+                written_content.encode("utf-8")
+            ).hexdigest()
+
+            if written_checksum != content_checksum:
+                logger.error(f"Atomic write failed: checksum mismatch for {test_file}")
+                return False
+
+            logger.debug(f"Successfully wrote {len(content)} characters to {test_file}")
+            return True
+
+        except Exception as e:
+            logger.error(f"Error in atomic write operation for {test_file}: {e}")
+            return False
+
+    def _backup_original_content(self, test_file: Path) -> bool:
+        """
+        Backup original content for potential rollback.
+
+        Args:
+            test_file: Path to the test file
+
+        Returns:
+            True if backup successful, False otherwise
+        """
+        try:
+            if test_file.exists():
+                original_content = test_file.read_text(encoding="utf-8")
+                self._content_backups[test_file] = original_content
+                logger.debug(f"Backed up original content for {test_file}")
+                return True
+            else:
+                logger.warning(
+                    f"Cannot backup content for non-existent file: {test_file}"
+                )
+                return False
+        except Exception as e:
+            logger.error(f"Failed to backup content for {test_file}: {e}")
+            return False
+
+    async def _rollback_on_validation_failure(
+        self, test_file: Path, reason: str
+    ) -> bool:
+        """
+        Rollback to original content if validation fails.
+
+        Args:
+            test_file: Path to the test file
+            reason: Reason for rollback
+
+        Returns:
+            True if rollback successful, False otherwise
+        """
+        try:
+            if test_file not in self._content_backups:
+                logger.error(f"No backup content available for rollback of {test_file}")
+                return False
+
+            original_content = self._content_backups[test_file]
+
+            # Use atomic write for rollback to ensure consistency
+            success = await self._write_with_atomic_operation(
+                test_file, original_content
+            )
+
+            if success:
+                logger.warning(
+                    f"Rolled back {test_file} due to validation failure: {reason}"
+                )
+                # Clean up backup after successful rollback
+                del self._content_backups[test_file]
+            else:
+                logger.error(f"Failed to rollback {test_file}")
+
+            return success
+
+        except Exception as e:
+            logger.error(f"Error during rollback of {test_file}: {e}")
+            return False
+
+    async def _write_with_validation_and_rollback(
+        self,
+        test_file: Path,
+        refined_content: str,
+        context: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """
+        Write refined content with comprehensive validation and rollback capability.
+
+        Args:
+            test_file: Path to the test file
+            refined_content: Refined content to write
+            context: Additional validation context
+
+        Returns:
+            Dictionary with write results including success status and any issues
+        """
+        result = {
+            "success": False,
+            "validation_passed": False,
+            "rollback_performed": False,
+            "issues": [],
+            "warnings": [],
+        }
+
+        # Step 1: Backup original content for rollback
+        if not self._backup_original_content(test_file):
+            result["issues"].append("Failed to backup original content")
+            return result
+
+        # Step 2: Get current content for validation
+        try:
+            original_content = self._content_backups[test_file]
+        except KeyError:
+            result["issues"].append("Original content not available for validation")
+            return result
+
+        # Step 3: Validate refined content
+        validation_result = self._validate_refined_content(
+            original_content=original_content,
+            refined_content=refined_content,
+            test_file=test_file,
+            context=context,
+        )
+
+        result["validation_passed"] = validation_result["valid"]
+        result["issues"].extend(validation_result["issues"])
+        result["warnings"].extend(validation_result["warnings"])
+
+        # Step 4: If validation fails, rollback
+        if not validation_result["valid"] or validation_result["rollback_recommended"]:
+            logger.warning(f"Validation failed for {test_file}, performing rollback")
+            result["rollback_performed"] = await self._rollback_on_validation_failure(
+                test_file,
+                f"Validation failed: {', '.join(validation_result['issues'][:3])}",
+            )
+            if result["rollback_performed"]:
+                result["issues"].append("Content rolled back due to validation failure")
+            else:
+                result["issues"].append(
+                    "Rollback failed - manual intervention may be required"
+                )
+            return result
+
+        # Step 5: If validation passes, write the content atomically
+        try:
+            # Acquire file lock before writing
+            if not await self._acquire_file_lock(test_file):
+                result["issues"].append("Failed to acquire file lock for writing")
+                # Perform rollback since we can't safely write
+                result[
+                    "rollback_performed"
+                ] = await self._rollback_on_validation_failure(
+                    test_file, "Failed to acquire file lock"
+                )
+                return result
+
+            try:
+                # Write with atomic operation
+                write_success = await self._write_with_atomic_operation(
+                    test_file, refined_content
+                )
+
+                if write_success:
+                    result["success"] = True
+                    logger.debug(f"Successfully wrote validated content to {test_file}")
+                    # Clean up backup after successful write
+                    if test_file in self._content_backups:
+                        del self._content_backups[test_file]
+                else:
+                    result["issues"].append("Atomic write operation failed")
+                    # Perform rollback
+                    result[
+                        "rollback_performed"
+                    ] = await self._rollback_on_validation_failure(
+                        test_file, "Atomic write operation failed"
+                    )
+
+            finally:
+                # Always release file lock
+                await self._release_file_lock(test_file)
+
+        except Exception as e:
+            logger.error(f"Error during validated write of {test_file}: {e}")
+            result["issues"].append(f"Write operation failed: {e}")
+            # Attempt rollback
+            result["rollback_performed"] = await self._rollback_on_validation_failure(
+                test_file, f"Write operation failed: {e}"
+            )
+
+        return result
+
+    async def _process_file_queue(self, test_file: Path) -> None:
+        """
+        Process the queue of pending operations for a specific file.
+
+        Args:
+            test_file: Path to the test file
+        """
+        queue = self._file_queues[test_file]
+
+        while True:
+            try:
+                # Wait for next operation in queue
+                operation = await queue.get()
+                if operation is None:  # Sentinel value to stop processing
+                    break
+
+                try:
+                    # Execute the operation
+                    await operation()
+                except Exception as e:
+                    logger.error(
+                        f"Error executing queued operation for {test_file}: {e}"
+                    )
+                finally:
+                    # Mark operation as done
+                    queue.task_done()
+
+            except asyncio.CancelledError:
+                logger.info(f"Queue processing cancelled for {test_file}")
+                break
+            except Exception as e:
+                logger.error(
+                    f"Unexpected error in queue processing for {test_file}: {e}"
+                )
+
+    async def _queue_file_operation(
+        self, test_file: Path, operation: Callable[[], Awaitable[None]]
+    ) -> None:
+        """
+        Queue a file operation for the specified file.
+
+        Args:
+            test_file: Path to the test file
+            operation: Async callable to execute
+        """
+        queue = self._file_queues[test_file]
+
+        # Start queue processing task if not already running
+        if test_file not in self._queue_processing_tasks:
+            task = asyncio.create_task(self._process_file_queue(test_file))
+            self._queue_processing_tasks[test_file] = task
+
+        # Add operation to queue
+        await queue.put(operation)
+
+    async def _shutdown_file_queues(self) -> None:
+        """
+        Shutdown all file queue processing tasks.
+        """
+        # Stop all queue processing tasks
+        for test_file in self._queue_processing_tasks.keys():
+            # Send sentinel value to stop processing
+            queue = self._file_queues[test_file]
+            await queue.put(None)
+
+        # Wait for all tasks to complete
+        if self._queue_processing_tasks:
+            await asyncio.gather(
+                *self._queue_processing_tasks.values(), return_exceptions=True
+            )
+
+        # Clear tracking dictionaries
+        self._file_queues.clear()
+        self._queue_processing_tasks.clear()
 
     async def run_pytest(self, test_path: str) -> dict[str, Any]:
         """
@@ -383,12 +1012,17 @@ pytestmark = pytest.mark.xfail(
             # Prepend the bug marker to the file
             marked_content = bug_marker + current_content
 
-            # Write the marked content back
-            test_file.write_text(marked_content, encoding="utf-8")
-
-            logger.info(
-                "Marked test file %s with production bug information", test_file
+            # Write the marked content back using atomic operation
+            write_success = await self._write_with_atomic_operation(
+                test_file, marked_content
             )
+
+            if write_success:
+                logger.info(
+                    "Marked test file %s with production bug information", test_file
+                )
+            else:
+                logger.error("Failed to write bug marker to test file %s", test_file)
 
         except Exception as e:
             logger.error("Failed to mark test file with bug info: %s", e)
@@ -543,15 +1177,13 @@ pytestmark = pytest.mark.xfail(
             else:  # bottom
                 new_content = current_content + "\n\n" + banner_content
 
-            # Write using writer port if available, otherwise fallback
-            if self._writer:
-                try:
-                    await self._write_with_writer_port(test_file, new_content)
-                except Exception as e:
-                    logger.warning("WriterPort failed, using fallback: %s", e)
-                    await self._write_with_fallback(test_file, new_content)
-            else:
-                await self._write_with_fallback(test_file, new_content)
+            # Write using atomic operation with validation
+            write_success = await self._write_with_atomic_operation(
+                test_file, new_content
+            )
+
+            if not write_success:
+                logger.error("Failed to write annotation to test file %s", test_file)
 
             logger.info("Added failed refinement annotation to %s", test_file)
 
@@ -883,21 +1515,26 @@ pytestmark = pytest.mark.xfail(
         return "\n".join(instructions)
 
     async def _write_with_writer_port(self, test_file: Path, content: str) -> None:
-        """Write using the writer port."""
-        self._writer.write_file(file_path=test_file, content=content, overwrite=True)
+        """
+        DEPRECATED: Use _write_with_atomic_operation() or _write_with_validation_and_rollback() instead.
+
+        This method is kept for backward compatibility but should not be used directly.
+        """
+        logger.warning(
+            "Using deprecated _write_with_writer_port, use _write_with_atomic_operation instead"
+        )
+        await self._write_with_atomic_operation(test_file, content)
 
     async def _write_with_fallback(self, test_file: Path, content: str) -> None:
-        """Fallback writing method."""
-        test_file.write_text(content, encoding="utf-8")
-        # Optional: format the content
-        try:
-            from ....adapters.io.python_formatters import format_python_content
+        """
+        DEPRECATED: Use _write_with_atomic_operation() or _write_with_validation_and_rollback() instead.
 
-            formatted = format_python_content(content)
-            if formatted != content:
-                test_file.write_text(formatted, encoding="utf-8")
-        except Exception as e:
-            logger.debug("Could not format Python content: %s", e)
+        This method is kept for backward compatibility but should not be used directly.
+        """
+        logger.warning(
+            "Using deprecated _write_with_fallback, use _write_with_atomic_operation instead"
+        )
+        await self._write_with_atomic_operation(test_file, content)
 
     async def _create_bug_report(
         self,
@@ -1095,8 +1732,9 @@ The test expectations appear correct, but the production code is not behaving as
             except Exception as e:
                 logger.warning("Failed to read test file %s: %s", test_path, e)
 
-        # Use semaphore to limit concurrent refinement operations
-        async with self._refine_semaphore:
+        # Use per-file semaphore to limit concurrent operations on the same file
+        file_semaphore = self._file_semaphores[test_file]
+        async with file_semaphore:
             with self._telemetry.create_child_span("refine_test_file") as span:
                 span.set_attribute("test_file", test_path)
                 span.set_attribute("max_iterations", max_iterations)
@@ -1608,7 +2246,44 @@ The test expectations appear correct, but the production code is not behaving as
                                 "last_failure": failure_output,
                             }
 
-                        # Step 5: Content changed, update for next iteration
+                        # Step 5: Content changed, queue file write operation with validation
+                        # Bind loop variables to avoid closure issues
+                        current_refined_content = refined_content
+                        current_iteration = iteration + 1
+                        current_failure_output = failure_output
+
+                        async def write_operation(
+                            refined_content=current_refined_content,
+                            iteration=current_iteration,
+                            failure_output=current_failure_output,
+                        ):
+                            current_write_result = (
+                                await self._write_with_validation_and_rollback(
+                                    test_file=test_file,
+                                    refined_content=refined_content,
+                                    context={
+                                        "iteration": iteration,
+                                        "failure_indicators": failure_output.split(
+                                            "\n"
+                                        )[:10],  # Top failure lines
+                                    },
+                                )
+                            )
+
+                            if not current_write_result["success"]:
+                                logger.error(
+                                    f"Failed to write refined content for {test_path}: {current_write_result['issues']}"
+                                )
+                                # Log the error in telemetry
+                                span.set_attribute("write_failed", True)
+                                span.set_attribute(
+                                    "write_issues", current_write_result["issues"]
+                                )
+
+                        # Queue the write operation
+                        await self._queue_file_operation(test_file, write_operation)
+
+                        # Update for next iteration
                         previous_content = refined_content
 
                         # Step 6: Add exponential backoff only after successful write attempts

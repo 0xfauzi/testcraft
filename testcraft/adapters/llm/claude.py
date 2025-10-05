@@ -109,69 +109,11 @@ class ClaudeAdapter(LLMPort):
             logger.info(f"Anthropic client initialized with model: {self.model}")
 
         except CredentialError as e:
-            logger.warning(
-                f"Anthropic credentials not available, using stub client: {e}"
-            )
-
-            class _StubMessages:
-                def create(self, **_kwargs):
-                    class _Usage:
-                        input_tokens = 0
-                        output_tokens = 0
-
-                    class _Block:
-                        def __init__(self, text: str) -> None:
-                            self.text = text
-
-                    class _Resp:
-                        def __init__(self) -> None:
-                            self.content = [
-                                _Block(
-                                    '{"testability_score": 5.0, "complexity_metrics": {}, "recommendations": [], "potential_issues": [], "analysis_summary": "stub"}'
-                                )
-                            ]
-                            self.usage = _Usage()
-                            self.model = "stub-model"
-                            self.stop_reason = "end_turn"
-
-                    return _Resp()
-
-            class _StubClient:
-                def __init__(self) -> None:
-                    self.messages = _StubMessages()
-
-            self._client = _StubClient()  # type: ignore[assignment]
+            logger.error(f"Anthropic credentials not available: {e}")
+            raise
         except Exception as e:
-            logger.warning(f"Anthropic client init failed, using stub client: {e}")
-
-            class _StubMessages:
-                def create(self, **_kwargs):
-                    class _Usage:
-                        input_tokens = 0
-                        output_tokens = 0
-
-                    class _Block:
-                        def __init__(self, text: str) -> None:
-                            self.text = text
-
-                    class _Resp:
-                        def __init__(self) -> None:
-                            self.content = [
-                                _Block(
-                                    '{"testability_score": 5.0, "complexity_metrics": {}, "recommendations": [], "potential_issues": [], "analysis_summary": "stub"}'
-                                )
-                            ]
-                            self.usage = _Usage()
-                            self.model = "stub-model"
-                            self.stop_reason = "end_turn"
-
-                    return _Resp()
-
-            class _StubClient:
-                def __init__(self) -> None:
-                    self.messages = _StubMessages()
-
-            self._client = _StubClient()  # type: ignore[assignment]
+            logger.error(f"Anthropic client initialization failed: {e}")
+            raise
 
     @property
     def client(self) -> Anthropic:
@@ -731,8 +673,9 @@ class ClaudeAdapter(LLMPort):
         try:
             cap = self.token_calculator.limits.max_output
             tokens_to_use = min(int(tokens_to_use or cap), int(cap))
-        except Exception:
-            pass
+        except (AttributeError, ValueError, TypeError):
+            # Fallback to safe default if token calculator fails
+            tokens_to_use = 4096
 
         request_kwargs = {
             "model": self.model,
@@ -749,12 +692,12 @@ class ClaudeAdapter(LLMPort):
             and self.token_calculator.supports_thinking_mode()
             and bool(self.beta.get("anthropic_enable_extended_thinking", False))
         ):
-            # Note: As of late 2024, Claude thinking mode is still in beta
-            # and may use different parameter names. This is best-effort.
-            # Check Anthropic's latest API documentation for exact parameter names
-            if "thinking_budget" not in kwargs and "thinking_tokens" not in kwargs:
-                # Try common parameter names for thinking mode
-                request_kwargs["thinking_budget"] = thinking_tokens
+            # Use the correct parameter structure as per Claude API documentation
+            if "thinking" not in kwargs:
+                request_kwargs["thinking"] = {
+                    "type": "enabled",
+                    "budget_tokens": thinking_tokens,
+                }
 
         try:
             response: Message = self.client.messages.create(**request_kwargs)

@@ -202,7 +202,9 @@ class TestCoverageUseCase:
         assert result["success"] is True
 
         # Verify that file discovery service was called for filtering
-        mock_file_discovery_service.filter_existing_files.assert_called_once()
+        mock_file_discovery_service.filter_existing_files.assert_called_once_with(
+            source_files, sample_project_path
+        )
 
         # Verify that measure_coverage was called
         mock_coverage_port.measure_coverage.assert_called_once()

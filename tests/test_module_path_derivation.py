@@ -264,7 +264,7 @@ class TestModulePathDeriver:
             assert result["module_path"] == "mypackage.testmodule"
 
     def test_validation_failure_handling(self):
-        """Test handling of import validation failures."""
+        """Test handling of import validation failures (legacy import-based validation)."""
         project_root = self.create_test_project(
             {
                 "broken": {
@@ -275,11 +275,14 @@ class TestModulePathDeriver:
 
         file_path = project_root / "broken" / "module.py"
 
-        # Mock failed import validation
+        # Mock failed import validation (only affects legacy import validation)
         with patch("importlib.util.find_spec") as mock_find_spec:
             mock_find_spec.return_value = None  # No spec found
 
-            result = ModulePathDeriver.derive_module_path(file_path, project_root)
+            # Use legacy import-based validation to test the mocked behavior
+            result = ModulePathDeriver.derive_module_path(
+                file_path, project_root, use_import_validation=True
+            )
 
             assert result["validation_status"] == "unvalidated"
             assert result["module_path"]  # Should still provide best guess

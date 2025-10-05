@@ -18,7 +18,7 @@ from testcraft.config.models import OrchestratorConfig
 
 from ..adapters.io.file_discovery import FileDiscoveryService
 from ..adapters.io.file_status_tracker import FileStatus
-from ..domain.models import GenerationResult, ImportMap
+from ..domain.models import ContextPack, GenerationResult, ImportMap
 from ..ports.context_port import ContextPort
 from ..ports.coverage_port import CoveragePort
 from ..ports.llm_port import LLMPort
@@ -141,7 +141,6 @@ class GenerateUseCase:
         # Initialize without status tracker initially - will be set per operation
         self._batch_executor = BatchExecutor(
             telemetry_port=telemetry_port,
-            executor=self._executor,
         )
 
         self._pytest_refiner = PytestRefiner(
@@ -389,6 +388,21 @@ class GenerateUseCase:
             # Get source path for this plan
             source_path = self._plan_builder.get_source_path_for_plan(plan)
 
+            # ✅ FIX: Extract project_root at function scope using existing utility
+            # This ensures project_root is available throughout the method
+            project_root = None
+            if source_path:
+                try:
+                    project_root = self._context_pack_builder._find_project_root(
+                        source_path
+                    )
+                except Exception as e:
+                    logger.warning(
+                        "Failed to detect project root for %s: %s", source_path, e
+                    )
+                    # Fallback: use source file's parent
+                    project_root = source_path.parent
+
             # Build code content from plan elements
             code_content = self._content_builder.build_code_content(plan, source_path)
 
@@ -397,37 +411,29 @@ class GenerateUseCase:
                 plan, source_path
             )
 
-            # Extract context string and import_map from result
+            # Extract context string from ContextPack (import_map is handled by ContextPack)
             relevant_context = None
-            # import_map = None
-            if context_result:
-                if isinstance(context_result, dict):
-                    relevant_context = context_result.get("context")
-                    # TODO: USE REAL import_map
-                    # import_map = context_result.get("import_map")
+            if context_result and isinstance(context_result, ContextPack):
+                # Get the enriched context string from the ContextPack
+                # Preserve enriched context for legacy fallback path
+                enriched_context_data = (
+                    self._context_assembler.get_last_enriched_context()
+                )
+                if enriched_context_data and isinstance(enriched_context_data, dict):
+                    relevant_context = enriched_context_data.get("enriched_context")
                 else:
-                    # Backward compatibility: if it's still a string
-                    relevant_context = context_result
+                    relevant_context = None
+            elif context_result and isinstance(context_result, dict):
+                # Backward compatibility: if it's still a dictionary
+                relevant_context = context_result.get("context")
+            else:
+                # Backward compatibility: if it's still a string
+                relevant_context = context_result
 
             # Derive authoritative module path and import suggestions
             module_path_info = {}
             if source_path:
                 try:
-                    # Get project root from context_data or detect automatically
-                    project_root = None
-                    if context_data.get("project_structure"):
-                        # Try to extract project root from context structure
-                        project_structure = context_data["project_structure"]
-                        if isinstance(
-                            project_structure, dict
-                        ) and project_structure.get("name"):
-                            # This is a simplified approach - in practice you might need more logic
-                            project_root = source_path.parent
-                            while project_root != project_root.parent:
-                                if (project_root / "pyproject.toml").exists():
-                                    break
-                                project_root = project_root.parent
-
                     module_path_info = ModulePathDeriver.derive_module_path(
                         source_path, project_root
                     )
@@ -491,68 +497,10 @@ class GenerateUseCase:
                     )
 
             # Use LLMOrchestrator for PLAN/GENERATE/REFINE with symbol resolution
-            # Check if symbol resolution is enabled in config
-            if not self._config.get("enable_symbol_resolution", True):
-                # Fall back to legacy LLM call
-                llm_result = await self._llm.generate_tests(
-                    code_content=code_content,
-                    context=enhanced_context,
-                    test_framework=self._config["test_framework"],
-                )
-                test_content = llm_result.get("tests", "")
-            else:
-                # First, build a ContextPack for this target
-                from ..domain.models import ImportMap
-
-                # Create target information
-                # target = Target(
-                #     module_file=str(source_path),
-                #     object=plan.elements_to_test[0].name
-                #     if plan.elements_to_test
-                #     else "unknown",
-                # )
-
-                # Import map will be created in the context pack builder
-
-                # Create focal information
-                # focal = Focal(
-                #     source=code_content,
-                #     signature="def "
-                #     + (
-                #         plan.elements_to_test[0].name.split(".")[-1]
-                #         if plan.elements_to_test
-                #         else "unknown"
-                #     )
-                #     + "(...):",
-                #     docstring=plan.elements_to_test[0].docstring
-                #     if plan.elements_to_test
-                #     else None,
-                # )
-
-                # Build context pack using the existing import resolver
-                try:
-                    import_map = self._context_assembler._import_resolver.resolve(
-                        source_path
-                    )
-                except Exception as e:
-                    logger.warning(
-                        "Import resolution failed: %s. Using simplified import.", e
-                    )
-                    # Fallback import map - use the one we already created above
-                    import_map = ImportMap(
-                        target_import="from "
-                        + (module_path_info.get("module_path", "unknown") or "unknown")
-                        + " import "
-                        + (
-                            plan.elements_to_test[0].name.split(".")[-1]
-                            if plan.elements_to_test
-                            else "unknown"
-                        ),
-                        sys_path_roots=[str(project_root)] if project_root else [],
-                        needs_bootstrap=False,
-                        bootstrap_conftest="",
-                    )
-
+            # Check if context is available - if so, use ContextPackBuilder
+            if enhanced_context is not None:
+                # ✅ Build complete ContextPack using ContextPackBuilder
+                # ContextPackBuilder handles Target, Focal, and ImportMap creation internally
                 context_pack = self._context_pack_builder.build_context_pack(
                     target_file=Path(source_path),
                     target_object=plan.elements_to_test[0].name
@@ -561,18 +509,18 @@ class GenerateUseCase:
                     project_root=Path(project_root) if project_root else None,
                 )
 
-                # Override the import_map with our resolved one
-                from ..domain.models import ContextPack
-
-                context_pack = ContextPack(
-                    target=context_pack.target,
-                    import_map=import_map,
-                    focal=context_pack.focal,
-                    resolved_defs=context_pack.resolved_defs,
-                    property_context=context_pack.property_context,
-                    conventions=context_pack.conventions,
-                    budget=context_pack.budget,
-                )
+                # Import Resolution Flow (Authoritative):
+                # 1. ContextPackBuilder calls ImportResolver.resolve(target_file)
+                # 2. ImportResolver produces canonical ImportMap with:
+                #    - target_import: canonical import statement
+                #    - sys_path_roots: PYTHONPATH directories
+                #    - needs_bootstrap: whether conftest.py needed
+                #    - bootstrap_conftest: conftest.py content if needed
+                # 3. ImportMap embedded in ContextPack.import_map
+                # 4. LLMOrchestrator extracts import_map from ContextPack for prompts
+                #
+                # Note: ModulePathDeriver provides supplementary import suggestions
+                #       but ContextPack.import_map is the authoritative source.
 
                 # Use LLMOrchestrator for PLAN/GENERATE workflow
                 orchestrator_result = self._llm_orchestrator.plan_and_generate(
@@ -582,6 +530,14 @@ class GenerateUseCase:
 
                 # Extract test content from orchestrator result
                 test_content = orchestrator_result.get("generated_code", "")
+            else:
+                # Fall back to legacy LLM call when context is not available
+                llm_result = await self._llm.generate_tests(
+                    code_content=code_content,
+                    context=enhanced_context,
+                    test_framework=self._config["test_framework"],
+                )
+                test_content = llm_result.get("tests", "")
             if not test_content or not test_content.strip():
                 return GenerationResult(
                     file_path="unknown",  # Would use actual path
@@ -1007,8 +963,9 @@ class GenerateUseCase:
 
         bootstrap_runner = BootstrapRunner(prefer_conftest=True)
 
-        # Create coverage evaluator (stub for now)
-        coverage_evaluator = None  # This would need proper initialization
+        # ✅ FIX: Use existing coverage evaluator instance
+        # The coverage evaluator is already initialized in __init__ (lines 121-124)
+        coverage_evaluator = self._coverage_evaluator
 
         # Create quality gates service
         quality_gates_service = QualityGatesService(

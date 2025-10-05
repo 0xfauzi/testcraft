@@ -41,7 +41,7 @@ def _extract_token_counts(usage: Any) -> tuple[int, int]:
             completion_tokens = usage.completion_tokens
         elif hasattr(usage, "output_tokens"):
             completion_tokens = usage.output_tokens
-    except Exception:
+    except AttributeError:
         prompt_tokens = None
         completion_tokens = None
 

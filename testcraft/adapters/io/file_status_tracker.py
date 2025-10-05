@@ -7,6 +7,7 @@ UI system to provide live status updates with granular details.
 """
 
 import asyncio
+import logging
 import time
 from dataclasses import dataclass, field
 from enum import Enum
@@ -39,6 +40,21 @@ class FileStatus(Enum):
     COMPLETED = "completed"
     FAILED = "failed"
     SKIPPED = "skipped"
+
+
+# State transition validation
+_VALID_TRANSITIONS = {
+    FileStatus.WAITING: {FileStatus.ANALYZING, FileStatus.SKIPPED},
+    FileStatus.ANALYZING: {FileStatus.GENERATING, FileStatus.FAILED},
+    FileStatus.GENERATING: {FileStatus.WRITING, FileStatus.FAILED},
+    FileStatus.WRITING: {FileStatus.TESTING, FileStatus.FAILED},
+    FileStatus.TESTING: {FileStatus.REFINING, FileStatus.COMPLETED, FileStatus.FAILED},
+    FileStatus.REFINING: {FileStatus.TESTING, FileStatus.COMPLETED, FileStatus.FAILED},
+    # Terminal states - no transitions allowed
+    FileStatus.COMPLETED: set(),
+    FileStatus.FAILED: set(),
+    FileStatus.SKIPPED: set(),
+}
 
 
 @dataclass
@@ -131,6 +147,7 @@ class FileStatusTracker:
         self._live_display: Live | None = None
         self._layout: Layout | None = None
         self._is_running = False
+        self._display_task: asyncio.Task | None = None
 
         # Progress tracking
         self._overall_progress: Progress | None = None
@@ -141,6 +158,16 @@ class FileStatusTracker:
         self._completed_count = 0
         self._failed_count = 0
 
+        # Initialization state
+        self._initialized = False
+
+        # Logging
+        self._logger = logging.getLogger(__name__)
+
+        # Error tracking
+        self._consecutive_errors = 0
+        self._last_error_time = 0
+
     def initialize_files(self, file_paths: list[str]) -> None:
         """Initialize tracking for a list of files."""
         with self._lock:
@@ -149,6 +176,104 @@ class FileStatusTracker:
 
             for file_path in file_paths:
                 self._files[file_path] = FileProcessingState(file_path=file_path)
+
+            self._initialized = True
+            self._completed_count = 0
+            self._failed_count = 0
+            self._consecutive_errors = 0
+
+    def _validate_transition(self, current: FileStatus, new: FileStatus) -> bool:
+        """Validate if a state transition is allowed."""
+        valid_next_states = _VALID_TRANSITIONS.get(current, set())
+        return new in valid_next_states
+
+    def _start_generation_phase(self, file_state: FileProcessingState) -> None:
+        """Start the generation phase for a file."""
+        if not file_state.generation_start:
+            file_state.generation_start = time.time()
+
+    def _end_generation_phase(
+        self, file_state: FileProcessingState, success: bool = True
+    ) -> None:
+        """End the generation phase for a file."""
+        if file_state.generation_start and not file_state.generation_end:
+            file_state.generation_end = time.time()
+            file_state.generation_success = success
+
+    def _start_writing_phase(self, file_state: FileProcessingState) -> None:
+        """Start the writing phase for a file."""
+        if not file_state.write_start:
+            file_state.write_start = time.time()
+
+    def _end_writing_phase(
+        self, file_state: FileProcessingState, success: bool = True
+    ) -> None:
+        """End the writing phase for a file."""
+        if file_state.write_start and not file_state.write_end:
+            file_state.write_end = time.time()
+            file_state.write_success = success
+
+    def _start_testing_phase(self, file_state: FileProcessingState) -> None:
+        """Start the testing phase for a file."""
+        if not file_state.test_start:
+            file_state.test_start = time.time()
+
+    def _end_testing_phase(
+        self, file_state: FileProcessingState, success: bool = True
+    ) -> None:
+        """End the testing phase for a file."""
+        if file_state.test_start and not file_state.test_end:
+            file_state.test_end = time.time()
+            file_state.final_test_success = success
+
+    def _check_timeout(self, file_state: FileProcessingState) -> FileStatus | None:
+        """Check if file has exceeded reasonable timeout limits."""
+        current_time = time.time()
+
+        # Check generation timeout (5 minutes)
+        if (
+            file_state.status == FileStatus.GENERATING
+            and file_state.generation_start
+            and current_time - file_state.generation_start > 300
+        ):
+            self._logger.warning(
+                f"File {file_state.file_path} timed out in GENERATING phase"
+            )
+            return FileStatus.FAILED
+
+        # Check writing timeout (2 minutes)
+        if (
+            file_state.status == FileStatus.WRITING
+            and file_state.write_start
+            and current_time - file_state.write_start > 120
+        ):
+            self._logger.warning(
+                f"File {file_state.file_path} timed out in WRITING phase"
+            )
+            return FileStatus.FAILED
+
+        # Check testing timeout (10 minutes)
+        if (
+            file_state.status in [FileStatus.TESTING, FileStatus.REFINING]
+            and file_state.test_start
+            and current_time - file_state.test_start > 600
+        ):
+            self._logger.warning(
+                f"File {file_state.file_path} timed out in TESTING/REFINING phase"
+            )
+            return FileStatus.FAILED
+
+        return None
+
+    def reset_file_status(self, file_path: str) -> None:
+        """Reset a file's status for manual recovery."""
+        with self._lock:
+            if file_path in self._files:
+                old_state = self._files[file_path]
+                self._files[file_path] = FileProcessingState(file_path=file_path)
+                self._logger.info(
+                    f"Reset file {file_path} from {old_state.status} to WAITING"
+                )
 
     def start_live_tracking(self, title: str = "File Processing Status") -> None:
         """Start the live status display."""
@@ -199,12 +324,21 @@ class FileStatusTracker:
         )
         self._live_display.start()
 
-        # Start update loop
-        asyncio.create_task(self._update_display_loop())
+        # Start update loop and store task reference
+        self._display_task = asyncio.create_task(self._update_display_loop())
 
-    def stop_live_tracking(self) -> None:
+    async def stop_live_tracking(self) -> None:
         """Stop the live status display."""
         self._is_running = False
+
+        # Cancel the display task if it exists
+        if self._display_task and not self._display_task.done():
+            self._display_task.cancel()
+            try:
+                await self._display_task
+            except asyncio.CancelledError:
+                pass  # Expected when cancelling
+
         if self._live_display:
             self._live_display.stop()
             self._live_display = None
@@ -219,47 +353,63 @@ class FileStatusTracker:
         **kwargs,
     ) -> None:
         """Update the status of a specific file."""
+        # Check initialization guard
+        if not self._initialized:
+            self._logger.warning(
+                f"Attempted to update file status before initialization: {file_path}"
+            )
+            return
+
         with self._lock:
             if file_path not in self._files:
                 self._files[file_path] = FileProcessingState(file_path=file_path)
 
             file_state = self._files[file_path]
+
+            # Validate state transition
+            if not self._validate_transition(file_state.status, status):
+                self._logger.warning(
+                    f"Invalid state transition for {file_path}: "
+                    f"{file_state.status} -> {status}"
+                )
+                return
+
+            # Check for timeout
+            timeout_status = self._check_timeout(file_state)
+            if timeout_status:
+                status = timeout_status
+
+            # Update basic state
+            old_status = file_state.status
             file_state.status = status
             file_state.last_update = time.time()
             file_state.current_operation = operation
             file_state.current_step = step
             file_state.progress_percentage = progress
 
-            # Update phase-specific information
-            if status == FileStatus.GENERATING and not file_state.generation_start:
-                file_state.generation_start = time.time()
-            elif (
-                status in [FileStatus.WRITING, FileStatus.TESTING]
-                and file_state.generation_start
-                and not file_state.generation_end
-            ):
-                file_state.generation_end = time.time()
-                file_state.generation_success = True
-            elif status == FileStatus.WRITING and not file_state.write_start:
-                file_state.write_start = time.time()
-            elif (
-                status == FileStatus.TESTING
-                and file_state.write_start
-                and not file_state.write_end
-            ):
-                file_state.write_end = time.time()
-                file_state.write_success = True
-            elif status == FileStatus.TESTING and not file_state.test_start:
-                file_state.test_start = time.time()
+            # Update phase-specific information using new methods
+            if status == FileStatus.GENERATING:
+                self._start_generation_phase(file_state)
+            elif status == FileStatus.WRITING:
+                self._start_writing_phase(file_state)
+                # End generation phase if it was active
+                if old_status == FileStatus.GENERATING:
+                    self._end_generation_phase(file_state, True)
+            elif status == FileStatus.TESTING:
+                self._start_testing_phase(file_state)
+                # End writing phase if it was active
+                if old_status == FileStatus.WRITING:
+                    self._end_writing_phase(file_state, True)
             elif status == FileStatus.REFINING:
                 if not file_state.test_start:
-                    file_state.test_start = time.time()
+                    self._start_testing_phase(file_state)
                 file_state.pytest_runs += 1
             elif status in [FileStatus.COMPLETED, FileStatus.FAILED]:
-                if file_state.test_start and not file_state.test_end:
-                    file_state.test_end = time.time()
+                # End testing phase if it was active
+                if old_status in [FileStatus.TESTING, FileStatus.REFINING]:
+                    self._end_testing_phase(file_state, status == FileStatus.COMPLETED)
+
                 if status == FileStatus.COMPLETED:
-                    file_state.final_test_success = True
                     self._completed_count += 1
                 elif status == FileStatus.FAILED:
                     self._failed_count += 1
@@ -334,6 +484,17 @@ class FileStatusTracker:
                 "files_per_minute": (completed + failed) / max(total_duration / 60, 1),
             }
 
+    def _get_display_snapshot(self) -> dict[str, Any]:
+        """Get a snapshot of current state for display purposes."""
+        with self._lock:
+            return {
+                "files": self._files.copy(),
+                "file_order": self._file_order.copy(),
+                "completed_count": self._completed_count,
+                "failed_count": self._failed_count,
+                "start_time": self._start_time,
+            }
+
     async def _update_display_loop(self) -> None:
         """Continuous update loop for the live display."""
         sleep_time = (
@@ -343,8 +504,18 @@ class FileStatusTracker:
             try:
                 self._update_display()
                 await asyncio.sleep(sleep_time)
-            except Exception:
-                # Don't crash the display loop
+            except asyncio.CancelledError:
+                self._logger.info("Display update loop cancelled")
+                break
+            except Exception as e:
+                # Log error with exponential backoff to prevent spam
+                current_time = time.time()
+                if current_time - self._last_error_time > min(
+                    30, 2**self._consecutive_errors
+                ):
+                    self._logger.warning(f"Display update failed: {e}")
+                    self._consecutive_errors += 1
+                    self._last_error_time = int(current_time)
                 continue
 
     def _update_display(self) -> None:
@@ -352,9 +523,16 @@ class FileStatusTracker:
         if not self._layout or not self._is_running:
             return
 
-        with self._lock:
-            # Update files table
-            files_table = self._create_files_table()
+        # Get snapshot under lock to prevent race conditions
+        try:
+            snapshot = self._get_display_snapshot()
+        except Exception as e:
+            self._logger.warning(f"Failed to get display snapshot: {e}")
+            return
+
+        try:
+            # Update files table using snapshot data
+            files_table = self._create_files_table_from_snapshot(snapshot)
             if self.minimal_mode:
                 # In minimal mode, files table is directly in main
                 self._layout["main"].update(files_table)
@@ -364,15 +542,23 @@ class FileStatusTracker:
 
             # Update statistics panel (skip in minimal mode)
             if not self.minimal_mode:
-                stats_panel = self._create_stats_panel()
+                stats_panel = self._create_stats_panel_from_snapshot(snapshot)
                 self._layout["stats"].update(stats_panel)
 
             # Update footer with overall progress
-            footer_content = self._create_footer_content()
+            footer_content = self._create_footer_content_from_snapshot(snapshot)
             self._layout["footer"].update(footer_content)
 
-    def _create_files_table(self) -> Table:
-        """Create the clean, minimal files status table."""
+            # Reset error counter on successful update
+            self._consecutive_errors = 0
+
+        except Exception as e:
+            # Handle display-specific errors (Rich rendering issues)
+            self._logger.warning(f"Display update failed: {e}")
+            self._consecutive_errors += 1
+
+    def _create_files_table_from_snapshot(self, snapshot: dict[str, Any]) -> Table:
+        """Create the clean, minimal files status table from snapshot data."""
         table = Table(
             show_header=True,
             header_style="header",
@@ -391,9 +577,9 @@ class FileStatusTracker:
 
         # Sort files by status and name
         files_to_show = []
-        for file_path in self._file_order:
-            if file_path in self._files:
-                files_to_show.append(self._files[file_path])
+        for file_path in snapshot["file_order"]:
+            if file_path in snapshot["files"]:
+                files_to_show.append(snapshot["files"][file_path])
 
         # Show recent/active files first
         files_to_show.sort(key=lambda f: (f.is_complete(), f.last_update), reverse=True)
@@ -450,17 +636,35 @@ class FileStatusTracker:
 
         return table
 
-    def _create_stats_panel(self) -> Panel:
-        """Create the clean, minimal statistics panel."""
-        stats = self.get_summary_stats()
+    def _create_files_table(self) -> Table:
+        """Create the clean, minimal files status table (deprecated - use snapshot version)."""
+        # Fallback to snapshot method for backward compatibility
+        try:
+            snapshot = self._get_display_snapshot()
+            return self._create_files_table_from_snapshot(snapshot)
+        except Exception:
+            # Return empty table on error
+            table = Table(show_header=True, header_style="header")
+            table.add_column("file", style="primary")
+            return table
+
+    def _create_stats_panel_from_snapshot(self, snapshot: dict[str, Any]) -> Panel:
+        """Create the clean, minimal statistics panel from snapshot data."""
+        total_files = len(snapshot["files"])
+        completed = snapshot["completed_count"]
+        failed = snapshot["failed_count"]
+        in_progress = sum(1 for f in snapshot["files"].values() if not f.is_complete())
+
+        total_tests = sum(f.tests_generated for f in snapshot["files"].values())
+        success_rate = completed / max(total_files, 1)
 
         content_lines = [
-            f"[success]done[/] {stats['completed']}",
-            f"[error]failed[/] {stats['failed']}",
-            f"[status_working]active[/] {stats['in_progress']}",
+            f"[success]done[/] {completed}",
+            f"[error]failed[/] {failed}",
+            f"[status_working]active[/] {in_progress}",
             "",
-            f"tests {stats['total_tests_generated']}",
-            f"rate {stats['success_rate']:.0%}",
+            f"tests {total_tests}",
+            f"rate {success_rate:.0%}",
         ]
 
         return Panel(
@@ -470,11 +674,19 @@ class FileStatusTracker:
             padding=(1, 1),
         )
 
-    def _create_footer_content(self) -> Panel:
-        """Create clean footer with minimal overall progress."""
-        stats = self.get_summary_stats()
-        total_processed = stats["completed"] + stats["failed"]
-        total_files = stats["total_files"]
+    def _create_stats_panel(self) -> Panel:
+        """Create the clean, minimal statistics panel (deprecated - use snapshot version)."""
+        try:
+            snapshot = self._get_display_snapshot()
+            return self._create_stats_panel_from_snapshot(snapshot)
+        except Exception:
+            # Return minimal panel on error
+            return Panel("stats unavailable", title="stats", border_style="border")
+
+    def _create_footer_content_from_snapshot(self, snapshot: dict[str, Any]) -> Panel:
+        """Create clean footer with minimal overall progress from snapshot data."""
+        total_processed = snapshot["completed_count"] + snapshot["failed_count"]
+        total_files = len(snapshot["files"])
 
         if total_files > 0:
             overall_progress = total_processed / total_files
@@ -486,7 +698,7 @@ class FileStatusTracker:
         else:
             progress_text = "[muted]starting...[/]"
 
-        elapsed = stats["total_duration"]
+        elapsed = time.time() - snapshot["start_time"]
         if elapsed < 60:
             time_text = f"{elapsed:.0f}s"
         else:
@@ -496,6 +708,15 @@ class FileStatusTracker:
         footer_text = f"progress {progress_text}  •  {time_text}"
 
         return Panel(footer_text, border_style="border", padding=(0, 1), title=None)
+
+    def _create_footer_content(self) -> Panel:
+        """Create clean footer with minimal overall progress (deprecated - use snapshot version)."""
+        try:
+            snapshot = self._get_display_snapshot()
+            return self._create_footer_content_from_snapshot(snapshot)
+        except Exception:
+            # Return minimal footer on error
+            return Panel("progress unavailable", border_style="border", padding=(0, 1))
 
     def _get_minimal_status_display(self, status: FileStatus) -> tuple[str, str]:
         """Get minimal display text and color for a status."""
@@ -529,7 +750,23 @@ class LiveFileTracking:
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb) -> None:
-        self.tracker.stop_live_tracking()
+        # Handle async cleanup - we need to get the event loop
+        try:
+            loop = asyncio.get_running_loop()
+            if loop.is_running():
+                # If we're in an async context, we need to schedule the cleanup
+                asyncio.create_task(self.tracker.stop_live_tracking())
+            else:
+                # If no loop is running, just call the cleanup synchronously
+                loop.run_until_complete(self.tracker.stop_live_tracking())
+        except RuntimeError:
+            # No event loop, just call cleanup synchronously (will be a no-op)
+            try:
+                loop = asyncio.new_event_loop()
+                loop.run_until_complete(self.tracker.stop_live_tracking())
+            except Exception:
+                # If all else fails, just set the running flag to False
+                self.tracker._is_running = False
 
     def initialize_and_start(self, file_paths: list[str]) -> FileStatusTracker:
         """Initialize files and start tracking."""

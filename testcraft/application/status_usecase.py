@@ -333,8 +333,11 @@ class StatusUseCase:
                     }
                     history.append(history_entry)
 
+                # Filter out entries without valid timestamps
+                history = [entry for entry in history if entry.get("timestamp")]
+
                 # Sort by timestamp descending
-                history.sort(key=lambda x: x.get("timestamp", 0), reverse=True)
+                history.sort(key=lambda x: x["timestamp"], reverse=True)
 
                 # Limit history size
                 max_entries = self._config.get("max_history_entries", 50)
@@ -405,7 +408,8 @@ class StatusUseCase:
                             [
                                 e
                                 for e in recent_entries
-                                if datetime.fromtimestamp(e.get("timestamp", 0))
+                                if e.get("timestamp")
+                                and datetime.fromtimestamp(e["timestamp"])
                                 > datetime.now() - timedelta(hours=24)
                             ]
                         ),
@@ -445,6 +449,7 @@ class StatusUseCase:
                     has_tests = self._has_existing_tests(path_obj)
 
                     # Get file modification time
+                    mod_time = None
                     try:
                         mod_time = path_obj.stat().st_mtime
                         file_age_days = (datetime.now().timestamp() - mod_time) / (
@@ -458,7 +463,7 @@ class StatusUseCase:
                         "file_age_days": file_age_days,
                         "last_modified": (
                             datetime.fromtimestamp(mod_time).isoformat()
-                            if mod_time
+                            if mod_time is not None
                             else None
                         ),
                         "needs_attention": not has_tests,  # Simple heuristic

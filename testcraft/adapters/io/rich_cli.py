@@ -6,10 +6,7 @@ CLI output including tables, progress indicators, summaries, and themed layouts.
 """
 
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
-
-if TYPE_CHECKING:
-    from .ui_rich import UIStyle
+from typing import TYPE_CHECKING, Any, Protocol
 
 from rich import box
 from rich.console import Console
@@ -31,6 +28,26 @@ from rich.table import Table
 from rich.theme import Theme
 from rich.tree import Tree
 
+if TYPE_CHECKING:
+    pass
+
+
+class StatusSpinner(Protocol):
+    """Protocol for status spinner objects that support start/stop and context manager."""
+
+    def __str__(self) -> str: ...
+
+    def start(self) -> None: ...
+
+    def stop(self) -> None: ...
+
+    def __enter__(self): ...
+
+    def __exit__(self, exc_type, exc_val, exc_tb) -> None: ...
+
+    def __getattr__(self, item: Any) -> Any: ...
+
+
 # Minimalist testcraft theme with subtle colors and clean hierarchy
 TESTCRAFT_THEME = Theme(
     {
@@ -48,10 +65,12 @@ TESTCRAFT_THEME = Theme(
         "title": "bold",
         "muted": "dim white",
         "subtle": "dim",
-        # Simplified coverage colors
+        # Enhanced coverage colors with more granular levels
         "coverage_good": "green",
         "coverage_medium": "yellow",
         "coverage_low": "red",
+        "coverage_excellent": "bright_green",
+        "coverage_high": "green",
         # Clean status indicators
         "status_pass": "green",
         "status_fail": "red",
@@ -59,8 +78,14 @@ TESTCRAFT_THEME = Theme(
         # Minimal interactive elements
         "prompt": "cyan",
         "selected": "green",
-        # Clean borders
+        # Clean borders with different styles
         "border": "dim white",
+        "border_info": "blue",
+        "border_success": "green",
+        # Additional text styles
+        "subheader": "bold cyan",
+        "choice": "cyan",
+        "code": "bright_white",
     }
 )
 
@@ -86,20 +111,24 @@ MINIMAL_THEME = Theme(
         "coverage_good": "green",
         "coverage_medium": "yellow",
         "coverage_low": "red",
+        "coverage_excellent": "green",
+        "coverage_high": "green",
         "status_pass": "green",
         "status_fail": "red",
         "prompt": "cyan",
         "selected": "green",
+        "border_info": "cyan",
+        "border_success": "green",
+        "subheader": "white",
+        "choice": "cyan",
+        "code": "white",
     }
 )
 
 
-def get_theme(ui_style: "UIStyle") -> Theme:
+def get_theme(ui_style: str) -> Theme:
     """Get the appropriate theme for the UI style."""
-    # Import here to avoid circular import
-    from .ui_rich import UIStyle
-
-    if ui_style == UIStyle.MINIMAL:
+    if ui_style == "minimal":
         return MINIMAL_THEME
     else:
         return TESTCRAFT_THEME
@@ -424,7 +453,7 @@ class RichCliComponents:
             console=self.console,
         )
 
-    def create_status_spinner(self, message: str) -> Status:
+    def create_status_spinner(self, message: str) -> StatusSpinner:
         """
         Create a status spinner.
 
@@ -461,7 +490,7 @@ class RichCliComponents:
             def __getattr__(self, item: Any) -> Any:  # delegate other attrs
                 return getattr(self._inner, item)
 
-        return _StatusWrapper(status, message)  # type: ignore[return-value]
+        return _StatusWrapper(status, message)
 
     def display_error(self, message: str, title: str = "Error") -> None:
         """
@@ -740,11 +769,15 @@ class RichCliComponents:
 
                 # Get user input based on field type
                 if field_type == "boolean":
-                    value = Confirm.ask(
-                        "[choice]Enable this option?[/]",
-                        default=field_default or False,
-                        console=self.console,
-                    )
+                    try:
+                        value = Confirm.ask(
+                            "[choice]Enable this option?[/]",
+                            default=field_default or False,
+                            console=self.console,
+                        )
+                    except KeyboardInterrupt:
+                        self.console.print("\n[warning]Operation cancelled by user[/]")
+                        return {}
 
                 elif field_type == "choice" and field_choices:
                     self.console.print("[choice]Available options:[/]")
@@ -756,7 +789,10 @@ class RichCliComponents:
                         )
                         self.console.print(f"  [secondary]{j}.[/] {choice_text}")
 
-                    while True:
+                    max_retries = 3
+                    retry_count = 0
+
+                    while retry_count < max_retries:
                         try:
                             choice_input = Prompt.ask(
                                 "[choice]Select option (number)[/]",
@@ -776,11 +812,27 @@ class RichCliComponents:
                                 self.console.print(
                                     f"[error]Please enter a number between 1 and {len(field_choices)}[/]"
                                 )
+                                retry_count += 1
                         except ValueError:
                             self.console.print("[error]Please enter a valid number[/]")
+                            retry_count += 1
+                        except KeyboardInterrupt:
+                            self.console.print(
+                                "\n[warning]Operation cancelled by user[/]"
+                            )
+                            return {}
+
+                    if retry_count >= max_retries:
+                        self.console.print(
+                            f"[error]Maximum retries ({max_retries}) exceeded. Skipping this field.[/]"
+                        )
+                        continue
 
                 elif field_type == "number":
-                    while True:
+                    max_retries = 3
+                    retry_count = 0
+
+                    while retry_count < max_retries:
                         try:
                             num_input = Prompt.ask(
                                 "[choice]Enter value[/]",
@@ -802,15 +854,33 @@ class RichCliComponents:
                             break
                         except ValueError:
                             self.console.print("[error]Please enter a valid number[/]")
+                            retry_count += 1
+                        except KeyboardInterrupt:
+                            self.console.print(
+                                "\n[warning]Operation cancelled by user[/]"
+                            )
+                            return {}
+
+                    if retry_count >= max_retries:
+                        self.console.print(
+                            f"[error]Maximum retries ({max_retries}) exceeded. Skipping this field.[/]"
+                        )
+                        continue
 
                 else:  # string type
-                    value = Prompt.ask(
-                        "[choice]Enter value[/]",
-                        default=(
-                            str(field_default) if field_default is not None else None
-                        ),
-                        console=self.console,
-                    )
+                    try:
+                        value = Prompt.ask(
+                            "[choice]Enter value[/]",
+                            default=(
+                                str(field_default)
+                                if field_default is not None
+                                else None
+                            ),
+                            console=self.console,
+                        )
+                    except KeyboardInterrupt:
+                        self.console.print("\n[warning]Operation cancelled by user[/]")
+                        return {}
 
                     if field_required and not value:
                         self.console.print("[error]This field is required[/]")
@@ -850,13 +920,19 @@ class RichCliComponents:
         self.console.print(summary_panel)
 
         # Confirmation
-        if Confirm.ask(
-            "\n[prompt]Save this configuration?[/]", default=True, console=self.console
-        ):
-            self.console.print("\n[success]🎊 Configuration saved successfully![/]")
-            return config_values
-        else:
-            self.console.print("\n[warning]⚠️ Configuration cancelled[/]")
+        try:
+            if Confirm.ask(
+                "\n[prompt]Save this configuration?[/]",
+                default=True,
+                console=self.console,
+            ):
+                self.console.print("\n[success]🎊 Configuration saved successfully![/]")
+                return config_values
+            else:
+                self.console.print("\n[warning]⚠️ Configuration cancelled[/]")
+                return {}
+        except KeyboardInterrupt:
+            self.console.print("\n[warning]Operation cancelled by user[/]")
             return {}
 
     def display_code_snippet(
