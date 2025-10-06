@@ -19,7 +19,6 @@ import re
 import threading
 import time
 import unicodedata
-import weakref
 from contextlib import contextmanager
 from enum import Enum
 from pathlib import Path
@@ -423,9 +422,8 @@ class StructuredLogger:
 class LoggerManager:
     """Manager for creating and configuring structured loggers."""
 
-    _loggers: weakref.WeakValueDictionary[str, StructuredLogger] = (
-        weakref.WeakValueDictionary()
-    )
+    # Use a strong reference map to avoid premature GC of loggers during setup
+    _loggers: dict[str, StructuredLogger] = {}
     _console: Console | None = None
     log_mode: LogMode = LogMode.CLASSIC
     output_format: OutputFormat = OutputFormat.CONSOLE
@@ -848,20 +846,8 @@ class LoggerManager:
     @classmethod
     def cleanup_unused_loggers(cls) -> int:
         """Clean up unused loggers to prevent memory leaks. Returns count of removed loggers."""
-        removed_count = 0
-        keys_to_remove: list[str] = []
-
-        # Find loggers that are no longer referenced
-        for key, logger_ref in cls._loggers.items():
-            if logger_ref is None:  # Weak reference is dead
-                keys_to_remove.append(key)
-                removed_count += 1
-
-        # Remove dead references
-        for key in keys_to_remove:
-            cls._loggers.pop(key, None)
-
-        return removed_count
+        # With strong references we don't auto-remove; provide no-op cleanup
+        return 0
 
     @classmethod
     def cleanup_resources(cls) -> None:

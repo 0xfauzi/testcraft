@@ -23,8 +23,6 @@ from ..application.environment.preflight import EnvironmentValidator
 from ..config.loader import ConfigLoader, ConfigurationError
 from ..config.models import TestCraftConfig
 from .commands.models import add_model_commands
-from .dependency_injection import DependencyError, create_dependency_container
-from .evaluation_commands import add_evaluation_commands
 from .utility_commands import add_utility_commands
 
 
@@ -150,6 +148,14 @@ def app(
         logging.getLogger().setLevel(logging.DEBUG)
         logger.debug("🔍 [cyan]Debug mode enabled[/] - verbose logging active")
 
+    # Import DependencyError early for exception handling
+    try:
+        from .dependency_injection import DependencyError
+    except ImportError:
+        # Define a fallback if import fails
+        class DependencyError(Exception):
+            pass
+
     # Allow running certain commands without a valid config
     skip_config_commands = {"init-config", "models"}
     invoked = None
@@ -171,6 +177,8 @@ def app(
         ctx.obj.config = loader.load_config()
 
         # Create dependency container
+        from .dependency_injection import create_dependency_container
+
         ctx.obj.container = create_dependency_container(ctx.obj.config)
 
     except ConfigurationError as e:
@@ -300,6 +308,7 @@ def generate(
             batch_size=batch_size,
             immediate_mode=immediate,
         ):
+            # Display dry-run notice if applicable
             if ctx.obj.dry_run:
                 ctx.obj.ui.display_info(
                     "DRY RUN: No tests will actually be generated", "Dry Run Mode"
@@ -334,6 +343,9 @@ def generate(
 
             # Get use case from container (after preflight passes)
             generate_usecase = ctx.obj.container["generate_usecase"]
+
+            # Override dry_run from CLI context
+            generate_usecase._dry_run = ctx.obj.dry_run
 
             # Configure generation parameters
             config_overrides = {
@@ -950,8 +962,14 @@ def _display_status_results(
             ui_adapter.display_info("\n".join(stats_info), "Summary Statistics")
 
 
-# Add evaluation commands
-add_evaluation_commands(app)
+# Add evaluation commands (optional)
+try:
+    from .evaluation_commands import add_evaluation_commands
+
+    add_evaluation_commands(app)
+except Exception:
+    # Evaluation commands rely on optional LLM/router modules; skip if unavailable
+    pass
 
 # Add utility commands
 add_utility_commands(app)

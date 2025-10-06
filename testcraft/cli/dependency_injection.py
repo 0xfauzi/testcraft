@@ -116,6 +116,7 @@ def create_dependency_container(config: TestCraftConfig) -> dict[str, Any]:
                 telemetry_port=container["telemetry_adapter"],
                 file_discovery_service=container["file_discovery"],
                 config=config.model_dump(),
+                dry_run=False,  # Default to False; will be overridden by CLI if needed
             )
 
             container["analyze_usecase"] = AnalyzeUseCase(

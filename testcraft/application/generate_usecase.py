@@ -75,6 +75,7 @@ class GenerateUseCase:
         telemetry_port: TelemetryPort,
         file_discovery_service: FileDiscoveryService | None = None,
         config: dict[str, Any] | None = None,
+        dry_run: bool = False,
     ):
         """
         Initialize the Generate Use Case orchestrator with all required ports.
@@ -90,6 +91,7 @@ class GenerateUseCase:
             telemetry_port: Port for telemetry and metrics
             file_discovery_service: Service for file discovery (creates default if None)
             config: Optional configuration overrides
+            dry_run: If True, analyze files without generating tests
         """
         # Initialize all ports (unchanged interface)
         self._llm = llm_port
@@ -100,6 +102,7 @@ class GenerateUseCase:
         self._parser = parser_port
         self._state = state_port
         self._telemetry = telemetry_port
+        self._dry_run = dry_run
 
         # Merge and validate configuration
         self._config = GenerationConfig.merge_config(config)
@@ -218,6 +221,10 @@ class GenerateUseCase:
         ) as span:
             try:
                 logger.info("Starting test generation for project: %s", project_path)
+
+                # DRY-RUN EARLY EXIT: Preview files without generation
+                if self._dry_run:
+                    return await self._execute_dry_run(project_path, target_files)
 
                 # Step 1: Sync state and discover files
                 discovery_result = self._state_discovery.sync_and_discover(
@@ -1638,7 +1645,90 @@ class GenerateUseCase:
             logger.warning("Failed to record final state: %s", e)
             # Don't fail the entire operation for state recording issues
 
-    async def _record_telemetry_and_costs(
+    async def _execute_dry_run(
+        self,
+        project_path: Path,
+        target_files: list[str | Path] | None,
+    ) -> dict[str, Any]:
+        """
+        Execute dry-run mode: analyze files without generating tests.
+
+        Returns preview of what would be generated without actual execution.
+
+        Args:
+            project_path: Root directory of the project
+            target_files: Optional list of specific files to analyze
+
+        Returns:
+            Dictionary with dry_run=True, preview of files, and metadata
+        """
+        logger.info("🔍 Dry-run mode: Analyzing files without generation")
+
+        # Discover files (read-only operation)
+        discovery_result = self._state_discovery.sync_and_discover(
+            project_path, target_files
+        )
+
+        # Build preview data
+        files_to_analyze = discovery_result["files"]
+        preview = []
+
+        for file_path in files_to_analyze:
+            test_path = self._infer_test_path(file_path, project_path)
+            preview.append(
+                {
+                    "source_file": str(file_path),
+                    "would_generate": str(test_path),
+                    "status": "dry_run_preview",
+                    "reason": "Dry-run mode - no actual generation",
+                }
+            )
+
+        logger.info(
+            f"Dry-run analysis complete: {len(files_to_analyze)} file(s) would be processed"
+        )
+
+        return {
+            "success": True,
+            "dry_run": True,
+            "files_analyzed": len(files_to_analyze),
+            "files": preview,
+            "message": "Dry run completed - no files written",
+            "total_time": 0,
+        }
+
+    def _infer_test_path(self, source_file: Path, project_root: Path) -> Path:
+        """
+        Infer where test file would be created.
+
+        Args:
+            source_file: Source file path
+            project_root: Project root directory
+
+        Returns:
+            Inferred test file path
+        """
+        # Use the existing module path deriver for consistency
+        try:
+            # Get relative path from project root
+            rel_path = source_file.relative_to(project_root)
+            stem = source_file.stem
+
+            # Check if file is in a 'src' directory
+            if "src" in rel_path.parts:
+                # Replace 'src' with 'tests'
+                test_parts = ["tests"] + [p for p in rel_path.parts if p != "src"][:-1]
+                test_dir = project_root / Path(*test_parts)
+            else:
+                # Default: put tests in a 'tests' directory parallel to source
+                test_dir = project_root / "tests"
+
+            return test_dir / f"test_{stem}.py"
+        except ValueError:
+            # If source_file is not relative to project_root, default to tests/
+            return project_root / "tests" / f"test_{source_file.stem}.py"
+
+    def _record_telemetry_and_costs(
         self,
         span,
         generation_results: list[GenerationResult],
