@@ -160,7 +160,7 @@ class GenerateUseCase:
             parser_port=parser_port,
         )
 
-        self._context_pack_builder = ContextPackBuilder()
+        self._context_pack_builder = ContextPackBuilder(parser=self._parser)
 
         # Create orchestrator config with values from configuration
         orchestrator_config = OrchestratorConfig(

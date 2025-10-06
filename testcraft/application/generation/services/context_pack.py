@@ -41,28 +41,29 @@ class ContextPackBuilder:
 
     def __init__(
         self,
+        parser: ParserPort,
         import_resolver: ImportResolver | None = None,
         enriched_context_builder: EnrichedContextBuilder | None = None,
-        parser: ParserPort | None = None,
         context_assembler: ContextAssembler | None = None,
     ) -> None:
         """
         Initialize the ContextPack builder.
 
         Args:
+            parser: Parser service for extracting focal code information (REQUIRED)
             import_resolver: Service for resolving canonical imports and bootstrap
             enriched_context_builder: Service for enriched context with safety rules
-            parser: Parser service for extracting focal code information
             context_assembler: Service for context assembly and AST analysis
         """
+        # Parser is required (now enforced by type signature)
+        self._parser = parser
         self._import_resolver = import_resolver or ImportResolver()
         self._enriched_context_builder = (
             enriched_context_builder or EnrichedContextBuilder()
         )
-        self._parser = parser
         self._context_assembler = context_assembler or ContextAssembler(
             context_port=None,  # Will be injected by caller if needed
-            parser_port=parser or ParserPort(),  # Use provided parser or default
+            parser_port=parser,
             config={},  # Will be injected by caller if needed
             import_resolver=self._import_resolver,
         )
