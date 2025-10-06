@@ -410,9 +410,6 @@ class GenerateUseCase:
                     # Fallback: use source file's parent
                     project_root = source_path.parent
 
-            # Build code content from plan elements
-            code_content = self._content_builder.build_code_content(plan, source_path)
-
             # Get relevant context for this file
             context_result = self._context_assembler.context_for_generation(
                 plan, source_path
@@ -422,7 +419,6 @@ class GenerateUseCase:
             relevant_context = None
             if context_result and isinstance(context_result, ContextPack):
                 # Get the enriched context string from the ContextPack
-                # Preserve enriched context for legacy fallback path
                 enriched_context_data = (
                     self._context_assembler.get_last_enriched_context()
                 )
@@ -538,13 +534,48 @@ class GenerateUseCase:
                 # Extract test content from orchestrator result
                 test_content = orchestrator_result.get("generated_code", "")
             else:
-                # Fall back to legacy LLM call when context is not available
-                llm_result = await self._llm.generate_tests(
-                    code_content=code_content,
-                    context=enhanced_context,
-                    test_framework=self._config["test_framework"],
+                # Context unavailable - FAIL FAST with clear diagnostics
+                diagnostics = self._diagnose_context_failure(source_path)
+
+                error_msg = (
+                    f"Cannot generate tests without ContextPack.\n"
+                    f"Context building failed for: {source_path}\n\n"
+                    f"Diagnosis: {diagnostics['reason']}\n"
+                    f"Solution: {diagnostics['fix']}\n\n"
+                    f"This error indicates that the source file could not be parsed "
+                    f"or analyzed for context. Fix the underlying issue before retrying."
                 )
-                test_content = llm_result.get("tests", "")
+
+                logger.error(
+                    "Context building failed for %s: %s",
+                    source_path,
+                    diagnostics["reason"],
+                )
+
+                # Log telemetry event
+                self._telemetry.record_event(
+                    event_type="context_building_failed",
+                    metadata={
+                        "source_path": str(source_path) if source_path else None,
+                        "error_type": "context_unavailable",
+                        "diagnosis": diagnostics["reason"],
+                        "file_exists": source_path.exists() if source_path else False,
+                    },
+                )
+
+                # Return detailed error result (fail fast - no fallback)
+                return GenerationResult(
+                    file_path=str(source_path) if source_path else "unknown",
+                    content=None,
+                    success=False,
+                    error_message=error_msg,
+                    metadata={
+                        "error_type": "context_unavailable",
+                        "diagnosis": diagnostics["reason"],
+                        "remediation": diagnostics["fix"],
+                        "source_path": str(source_path) if source_path else None,
+                    },
+                )
             if not test_content or not test_content.strip():
                 return GenerationResult(
                     file_path="unknown",  # Would use actual path
@@ -1644,6 +1675,65 @@ class GenerateUseCase:
         except Exception as e:
             logger.warning("Failed to record final state: %s", e)
             # Don't fail the entire operation for state recording issues
+
+    def _diagnose_context_failure(self, source_path: Path | None) -> dict[str, Any]:
+        """
+        Diagnose why context building failed.
+
+        Args:
+            source_path: Path to source file (or None)
+
+        Returns:
+            Dictionary with diagnostic information
+        """
+        if not source_path:
+            return {
+                "reason": "No source path provided",
+                "fix": "Ensure target file is specified",
+            }
+
+        if not source_path.exists():
+            return {
+                "reason": f"File does not exist: {source_path}",
+                "fix": "Check file path is correct",
+            }
+
+        if not source_path.is_file():
+            return {
+                "reason": f"Path is not a file: {source_path}",
+                "fix": "Provide path to a Python file, not directory",
+            }
+
+        try:
+            file_size = source_path.stat().st_size
+            if file_size == 0:
+                return {
+                    "reason": "File is empty",
+                    "fix": "Add content to file before generating tests",
+                }
+        except Exception:
+            pass
+
+        # Try parsing
+        try:
+            import ast
+
+            content = source_path.read_text()
+            ast.parse(content)
+            return {
+                "reason": "File parses correctly but context building failed",
+                "fix": "Check logs for context assembler errors. Enable verbose logging with --verbose flag.",
+            }
+        except SyntaxError as e:
+            return {
+                "reason": f"Syntax error in file: {e}",
+                "fix": "Fix Python syntax errors in source file before generating tests",
+            }
+        except Exception as e:
+            return {
+                "reason": f"Error reading/parsing file: {e}",
+                "fix": "Check file encoding and permissions",
+            }
 
     async def _execute_dry_run(
         self,
