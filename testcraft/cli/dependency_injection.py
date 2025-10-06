@@ -95,6 +95,7 @@ def create_dependency_container(config: TestCraftConfig) -> dict[str, Any]:
             )
             container["refine_adapter"] = RefineAdapter(
                 llm=container["llm_adapter"],
+                parser_port=container["parser_adapter"],  # NEW - REQUIRED
                 config=refine_config,
                 writer_port=container["writer_adapter"],
                 telemetry_port=container["telemetry_adapter"],

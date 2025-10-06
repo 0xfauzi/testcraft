@@ -5,20 +5,26 @@ This module implements the RefinePort interface, providing functionality
 for refining tests based on pytest failures and other quality issues.
 """
 
+from __future__ import annotations
+
 import ast
 import logging
 import subprocess
 import time
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from ...adapters.io.subprocess_safe import run_subprocess_simple
 from ...application.generation.services.pytest_refiner import PytestRefiner
 from ...config.models import RefineConfig
 from ...domain.models import RefineOutcome
 from ...ports.llm_port import LLMPort
+from ...ports.parser_port import ParserPort
 from ...ports.telemetry_port import TelemetryPort
 from ...ports.writer_port import WriterPort
+
+if TYPE_CHECKING:
+    from ...application.generation.services.llm_orchestrator import LLMOrchestrator
 
 logger = logging.getLogger(__name__)
 
@@ -34,23 +40,32 @@ class RefineAdapter:
     def __init__(
         self,
         llm: LLMPort,
+        parser_port: ParserPort,
         config: RefineConfig | None = None,
         writer_port: WriterPort | None = None,
         telemetry_port: TelemetryPort | None = None,
+        llm_orchestrator: LLMOrchestrator | None = None,
     ):
         """
-        Initialize the refine adapter.
+        Initialize the refine adapter with orchestrator support.
 
         Args:
-            llm: LLM adapter for generating refinements
+            llm: LLM adapter for low-level operations
+            parser_port: Parser for building context (REQUIRED for orchestrator)
             config: Refinement configuration with guardrails settings
             writer_port: Optional writer port for safe file operations
             telemetry_port: Optional telemetry port for observability
+            llm_orchestrator: Optional pre-initialized orchestrator (lazy if None)
         """
         self.llm = llm
+        self.parser_port = parser_port
         self.config = config or RefineConfig()
         self.writer_port = writer_port
         self.telemetry_port = telemetry_port
+
+        # Lazy initialization of orchestrator
+        self._llm_orchestrator = llm_orchestrator
+        self._orchestrator_initialized = llm_orchestrator is not None
 
         # Extract guardrails config with defaults
         guardrails = self.config.refinement_guardrails
@@ -59,6 +74,103 @@ class RefineAdapter:
         self.reject_identical = guardrails.get("reject_identical", True)
         self.validate_syntax = guardrails.get("validate_syntax", True)
         self.format_on_refine = guardrails.get("format_on_refine", True)
+
+    def _ensure_orchestrator(self) -> LLMOrchestrator:
+        """
+        Ensure orchestrator is initialized (lazy loading).
+
+        Lazy initialization avoids circular imports and allows
+        dependency injection when needed.
+
+        Returns:
+            Initialized LLMOrchestrator instance
+        """
+        if self._orchestrator_initialized:
+            return self._llm_orchestrator  # type: ignore
+
+        # Lazy import to avoid circular dependencies
+        from ...application.generation.services.context_assembler import (
+            ContextAssembler,
+        )
+        from ...application.generation.services.context_pack import ContextPackBuilder
+        from ...application.generation.services.llm_orchestrator import (
+            LLMOrchestrator,
+        )
+        from ...application.generation.services.symbol_resolver import SymbolResolver
+        from ...config.models import OrchestratorConfig
+
+        logger.debug("Lazy-initializing LLMOrchestrator for RefineAdapter")
+
+        # Build orchestrator dependencies
+        context_assembler = ContextAssembler(
+            context_port=None,  # type: ignore  # RefineAdapter doesn't need full context port
+            parser_port=self.parser_port,
+            config={},
+        )
+        context_pack_builder = ContextPackBuilder(parser=self.parser_port)
+        symbol_resolver = SymbolResolver(parser_port=self.parser_port)
+        orchestrator_config = OrchestratorConfig()
+
+        self._llm_orchestrator = LLMOrchestrator(
+            llm_port=self.llm,
+            parser_port=self.parser_port,
+            context_assembler=context_assembler,
+            context_pack_builder=context_pack_builder,
+            symbol_resolver=symbol_resolver,
+            config=orchestrator_config,
+        )
+        self._orchestrator_initialized = True
+
+        return self._llm_orchestrator
+
+    def _build_minimal_context_pack(self, test_content: str, project_root: Path) -> Any:
+        """
+        Build a minimal ContextPack when source context is unavailable.
+
+        Args:
+            test_content: The test file content
+            project_root: Project root directory
+
+        Returns:
+            Minimal ContextPack for refinement
+        """
+        # Create minimal context pack with test content as focal
+        from ...domain.models import (
+            Budget,
+            ContextPack,
+            Conventions,
+            Focal,
+            GwtSnippets,
+            ImportMap,
+            PropertyContext,
+            Target,
+        )
+
+        return ContextPack(
+            target=Target(
+                module_file=str(project_root / "tests" / "test_unknown.py"),
+                object="test_function",
+            ),
+            import_map=ImportMap(
+                target_import="",
+                sys_path_roots=[str(project_root)],
+                needs_bootstrap=False,
+                bootstrap_conftest="",
+            ),
+            focal=Focal(
+                source=test_content,
+                signature="def test_function():",
+                docstring="Test refinement without source context",
+            ),
+            resolved_defs=[],
+            property_context=PropertyContext(
+                ranked_methods=[],
+                gwt_snippets=GwtSnippets(),
+            ),
+            conventions=Conventions(test_style="pytest"),
+            budget=Budget(max_input_tokens=8000),
+            context=None,
+        )
 
     def refine_from_failures(
         self,
@@ -646,18 +758,6 @@ class RefineAdapter:
         # Build preflight suggestions
         preflight_suggestions = self._get_preflight_suggestions(current_content)
 
-        # Prepare context for the prompt registry template
-        prompt_context = {
-            "code_content": current_content,
-            "failure_output": failure_output,
-            "active_import_path": active_import_path or "Not detected",
-            "preflight_suggestions": preflight_suggestions,
-            "source_context": self._format_source_context(
-                payload.get("source_context")
-            ),
-            "version": "v1",
-        }
-
         # Log refinement request for debugging
         logger.debug(
             "Refinement request for %s (iteration %d):\n"
@@ -673,81 +773,101 @@ class RefineAdapter:
             "Yes" if preflight_suggestions.strip() else "None",
         )
 
-        # Use prompt registry for system and user prompts
-        from ...prompts.registry import PromptRegistry
+        # Use LLMOrchestrator for refinement with enhanced context
+        try:
+            orchestrator = self._ensure_orchestrator()
 
-        prompt_registry = PromptRegistry()
+            # Try to build ContextPack from source_context if available
+            context_pack = None
+            source_file = payload.get("source_context", {}).get("source_file")
+            target_object = payload.get("source_context", {}).get("target_object")
 
-        system_prompt = prompt_registry.get_system_prompt("llm_content_refinement")
-        user_prompt = prompt_registry.get_user_prompt(
-            "llm_content_refinement", **prompt_context
-        )
+            if source_file and target_object:
+                try:
+                    from ...application.generation.services.context_pack import (
+                        ContextPackBuilder,
+                    )
+                    from ...domain.models import Budget, Conventions
 
-        # Make LLM request passing system and user prompts separately
-        response = self.llm.refine_content(
-            original_content=current_content,
-            refinement_instructions=user_prompt,
-            system_prompt=system_prompt,
-        )
+                    context_pack_builder = ContextPackBuilder(parser=self.parser_port)
+                    context_pack = context_pack_builder.build_context_pack(
+                        target_file=Path(source_file),
+                        target_object=target_object,
+                        project_root=Path(source_file).parent.parent,
+                        conventions=Conventions(test_style="pytest"),
+                        budget=Budget(max_input_tokens=8000),
+                    )
+                    logger.debug("Built ContextPack for refinement")
+                except Exception as ctx_err:
+                    logger.debug("Could not build ContextPack: %s", ctx_err)
+                    context_pack = None
 
-        # Log raw LLM response for debugging
-        logger.debug(
-            "LLM refinement raw response for %s:\n"
-            "- Response type: %s\n"
-            "- Response keys: %s\n"
-            "- Response preview: %.500s...",
-            payload.get("test_file_path", "unknown"),
-            type(response).__name__,
-            list(response.keys()) if isinstance(response, dict) else "N/A",
-            str(response)[:500] if response else "None",
-        )
+            # Prepare feedback for orchestrator
+            feedback_dict = {
+                "result": "failed",
+                "trace_excerpt": failure_output,
+                "coverage_gaps": {},
+                "notes": f"Refinement iteration {payload.get('iteration', 1)}",
+            }
 
-        # Extract test content from response
-        refined_content = self._extract_refined_content(response)
+            # Use orchestrator refine_stage if we have context_pack
+            if context_pack:
+                logger.debug("Using orchestrator.refine_stage() with ContextPack")
+                refined_content = orchestrator.refine_stage(
+                    context_pack=context_pack,
+                    existing_code=current_content,
+                    feedback=feedback_dict,
+                    project_root=Path(payload.get("test_file_path", ".")),
+                )
+            else:
+                # Fallback: Use orchestrator with minimal context
+                logger.debug("Using orchestrator without ContextPack (minimal context)")
 
-        # Extract LLM metadata from response
-        changes_made = None
-        improvement_areas = None
-        confidence = None
-        suspected_bug = None
-
-        if isinstance(response, dict):
-            changes_made = response.get("changes_made")
-            improvement_areas = response.get("improvement_areas")
-            confidence = response.get("confidence")
-            suspected_bug = response.get("suspected_prod_bug")
-
-            if suspected_bug and suspected_bug.strip().lower() not in (
-                "null",
-                "none",
-                "",
-            ):
-                logger.info(
-                    "LLM detected suspected production bug for %s: %s",
-                    payload.get("test_file_path", "unknown"),
-                    suspected_bug,
+                # Build minimal context pack for refinement
+                minimal_context_pack = self._build_minimal_context_pack(
+                    test_content=current_content,
+                    project_root=Path(payload.get("test_file_path", ".")).parent,
                 )
 
+                refined_content = orchestrator.refine_stage(
+                    context_pack=minimal_context_pack,
+                    existing_code=current_content,
+                    feedback=feedback_dict,
+                    project_root=Path(payload.get("test_file_path", ".")),
+                )
+
+            logger.debug(
+                "Orchestrator refinement response for %s:\n"
+                "- Refined content length: %d chars",
+                payload.get("test_file_path", "unknown"),
+                len(refined_content) if refined_content else 0,
+            )
+
+        except Exception as orch_err:
+            logger.exception("Orchestrator refinement failed: %s", orch_err)
+            # If orchestrator fails, return error
+            return (
+                "",
+                {
+                    "is_valid": False,
+                    "reason": f"Orchestrator error: {orch_err}",
+                    "status": "orchestrator_error",
+                },
+            )
+
+        # Orchestrator returns refined content as string
         # Log extracted content for debugging
         logger.debug(
-            "Extracted refined content for %s:\n"
+            "Orchestrator refined content for %s:\n"
             "- Content type: %s\n"
             "- Content length: %d chars\n"
             "- Content preview: %.200s...\n"
-            "- Content is None: %s\n"
-            "- Content is 'None'/'null': %s\n"
-            "- Changes made: %s\n"
-            "- Confidence: %s",
+            "- Content is None: %s",
             payload.get("test_file_path", "unknown"),
             type(refined_content).__name__,
             len(refined_content) if refined_content else 0,
             refined_content[:200] if refined_content else "None/Empty",
             refined_content is None,
-            refined_content.strip().lower() in ("none", "null")
-            if refined_content
-            else False,
-            "Yes" if changes_made else "None",
-            confidence if confidence is not None else "None",
         )
 
         # Validate the refined content
@@ -755,15 +875,8 @@ class RefineAdapter:
             refined_content, current_content
         )
 
-        # Add LLM metadata to validation result
-        if changes_made:
-            validation_result["changes_made"] = changes_made
-        if improvement_areas:
-            validation_result["improvement_areas"] = improvement_areas
-        if confidence is not None:
-            validation_result["llm_confidence"] = confidence
-        if suspected_bug:
-            validation_result["suspected_prod_bug"] = suspected_bug
+        # Note: Orchestrator doesn't return the same metadata as legacy prompts
+        # Metadata extraction removed since orchestrator.refine_stage() returns string
 
         # Add context information to validation result
         validation_result["active_import_path"] = active_import_path or ""
