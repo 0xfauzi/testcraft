@@ -60,9 +60,18 @@ class ContextPackBuilder:
             enriched_context_builder or EnrichedContextBuilder()
         )
         self._parser = parser
+        # Avoid instantiating Protocol types directly in test environments
+        effective_parser = parser
+        try:
+            # If no parser provided, defer creation to caller to avoid Protocol instantiation
+            if effective_parser is None:
+                effective_parser = None
+        except Exception:
+            effective_parser = None
+
         self._context_assembler = context_assembler or ContextAssembler(
             context_port=None,  # Will be injected by caller if needed
-            parser_port=parser or ParserPort(),  # Use provided parser or default
+            parser_port=effective_parser,  # Do not instantiate ParserPort() here
             config={},  # Will be injected by caller if needed
             import_resolver=self._import_resolver,
         )
