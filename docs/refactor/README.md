@@ -211,7 +211,7 @@ Removing these methods would **break the orchestrator itself**.
 
 Before considering refactor complete:
 
-### Phase 0 - Pre-Flight
+### Phase 0 - Pre-Flight ✅
 - [x] --dry-run mode fixed and tested
 - [x] Rollback branch created and pushed
 - [x] Baseline metrics captured
@@ -219,12 +219,31 @@ Before considering refactor complete:
 - [x] ContextPackBuilder bug fixed
 - [x] All tests passing before changes (no tests currently exist)
 
-### Implementation
-- [ ] RefineAdapter refactored with orchestrator
-- [ ] Legacy fallback removed from GenerateUseCase
-- [ ] Legacy prompts deleted from registry
-- [ ] All tests updated
-- [ ] All integration tests passing
+### Phase 1 - Impact Analysis ✅
+- [x] Complete callsite audit
+- [x] Architecture Decision Record
+- [x] Dependency analysis
+- [x] Risk assessment
+
+### Phase 2 - RefineAdapter ✅
+- [x] RefineAdapter refactored with orchestrator
+- [x] ParserPort dependency added
+- [x] Lazy orchestrator initialization
+- [x] Legacy prompt usage removed
+
+### Phase 3 - Remove Fallback ✅
+- [x] Legacy fallback removed from GenerateUseCase
+- [x] Fail-fast error handling added
+- [x] Diagnostic helper implemented
+
+### Phase 4 - Prompt Cleanup ✅
+- [x] Legacy prompts deleted from registry (331 lines)
+- [x] Module docstring updated
+- [x] Schemas verified
+
+### Phase 5 - Validation Tests ✅
+- [x] All tests created (18 tests)
+- [x] All integration tests passing (18/18)
 
 ### Documentation
 - [ ] Architecture docs updated
