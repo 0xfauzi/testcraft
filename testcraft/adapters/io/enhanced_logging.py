@@ -19,7 +19,6 @@ import re
 import threading
 import time
 import unicodedata
-import weakref
 from contextlib import contextmanager
 from enum import Enum
 from pathlib import Path
@@ -825,7 +824,9 @@ class LoggerManager:
         try:
             structured_logger = logger_ref
         except KeyError:
-            structured_logger = cls._loggers.setdefault(name, StructuredLogger(name, cls._console))
+            structured_logger = cls._loggers.setdefault(
+                name, StructuredLogger(name, cls._console)
+            )
 
         # Enforce no per-logger handlers and propagation to root
         structured_logger.logger.handlers = []
