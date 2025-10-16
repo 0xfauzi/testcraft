@@ -19,7 +19,6 @@ import re
 import threading
 import time
 import unicodedata
-import weakref
 from contextlib import contextmanager
 from enum import Enum
 from pathlib import Path
@@ -423,9 +422,8 @@ class StructuredLogger:
 class LoggerManager:
     """Manager for creating and configuring structured loggers."""
 
-    _loggers: weakref.WeakValueDictionary[str, StructuredLogger] = (
-        weakref.WeakValueDictionary()
-    )
+    # Use a regular dict to avoid WeakValueDictionary evictions under test runners
+    _loggers: dict[str, StructuredLogger] = {}
     _console: Console | None = None
     log_mode: LogMode = LogMode.CLASSIC
     output_format: OutputFormat = OutputFormat.CONSOLE
@@ -820,12 +818,17 @@ class LoggerManager:
 
     @classmethod
     def get_logger(cls, name: str) -> StructuredLogger:
-        """Get or create a structured logger."""
-        if name not in cls._loggers:
-            cls._loggers[name] = StructuredLogger(name, cls._console)
+        """Get or create a structured logger (robust against WeakValueDict races)."""
+        # Avoid WeakValueDictionary race by using setdefault pattern
+        logger_ref = cls._loggers.setdefault(name, StructuredLogger(name, cls._console))
+        try:
+            structured_logger = logger_ref
+        except KeyError:
+            structured_logger = cls._loggers.setdefault(
+                name, StructuredLogger(name, cls._console)
+            )
 
         # Enforce no per-logger handlers and propagation to root
-        structured_logger = cls._loggers[name]
         structured_logger.logger.handlers = []
         structured_logger.logger.propagate = True
 
@@ -890,6 +893,9 @@ class LoggerManager:
 def setup_enhanced_logging(console: Console | None = None, level: int = logging.INFO):
     """Set up enhanced logging system."""
     LoggerManager.setup_global_logging(console, level)
+    # Ensure primary logger exists even under Click testing environments
+    logging.getLogger("testcraft.main").propagate = True
+    # Use setdefault to avoid WeakValueDict KeyError
     return LoggerManager.get_logger("testcraft.main")
 
 

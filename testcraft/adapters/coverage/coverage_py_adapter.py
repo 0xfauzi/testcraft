@@ -34,7 +34,7 @@ class CoveragePyAdapter:
     - llm/common.py (error wrapping)
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         """
         Initialize the coverage adapter.
 
@@ -42,7 +42,7 @@ class CoveragePyAdapter:
             ImportError: If coverage.py is not installed
         """
         try:
-            import coverage  # type: ignore[import-not-found]
+            import coverage
 
             self._coverage_module = coverage
         except ImportError as e:
@@ -151,13 +151,11 @@ class CoveragePyAdapter:
                     branch_coverage = line_coverage * 0.85  # Conservative estimate
                     try:
                         # Get branch data if available
-                        branch_data = cov.get_data().branch_arcs(source_file)
+                        branch_data = cov.get_data().arcs(source_file)
                         if branch_data:
-                            executed_arcs = cov.get_data().arcs(source_file) or set()
+                            executed_arcs: set[tuple[int, int]] = set(branch_data)
                             total_branches = len(branch_data)
-                            executed_branches = len(
-                                [arc for arc in branch_data if arc in executed_arcs]
-                            )
+                            executed_branches = len(executed_arcs)
                             branch_coverage = (
                                 executed_branches / total_branches
                                 if total_branches > 0
@@ -460,7 +458,7 @@ class NoOpCoverageAdapter:
     Matches coverage_evaluator.py pattern (lines 71-78).
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         self._last_method = "noop"
         logger.warning(
             "Using no-op coverage adapter - install coverage.py for real measurements"

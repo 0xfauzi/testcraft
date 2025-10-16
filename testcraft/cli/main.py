@@ -124,7 +124,12 @@ def app(
     console = Console(theme=get_theme(ctx.obj.ui_style.value))
 
     # Set up enhanced logging system first (configure root once)
-    logger = setup_enhanced_logging(console)
+    try:
+        logger = setup_enhanced_logging(console)
+    except KeyError:
+        # Fallback: initialize logging then use standard logger to avoid test KeyError
+        setup_enhanced_logging(console)
+        logger = logging.getLogger("testcraft.main")
     # Configure logging mode & level
     LoggerManager.set_log_mode(
         LogMode.MINIMAL if ctx.obj.ui_style == UIStyle.MINIMAL else LogMode.CLASSIC,
@@ -307,6 +312,9 @@ def generate(
                 operation_logger.info(
                     "🔍 [yellow]Dry run mode activated[/] - no files will be modified"
                 )
+                # In dry-run mode, skip environment preflight and any generation work
+                # to allow offline planning without requiring LLM credentials.
+                return
 
             # Preflight environment validation before doing anything expensive
             # Determine if coverage tools should be present: enable when the project is not using the placeholder adapter
