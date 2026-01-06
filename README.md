@@ -70,6 +70,12 @@ Generate comprehensive tests for your Python modules:
 # Generate tests for a specific module
 testcraft generate src/mymodule.py
 
+# Generate tests with automatic manual-fix guidance on refinement failures
+testcraft generate src/mymodule.py --manual-fix-on-fail
+
+# Generate tests with auto-accepted manual-fix recommendations
+testcraft generate src/mymodule.py --manual-fix-on-fail --auto-accept-fixes
+
 # Generate tests with coverage analysis
 testcraft coverage src/mymodule.py
 
@@ -79,7 +85,7 @@ testcraft generate src/mymodule.py --config .testcraft.toml
 
 ### Configuration
 
-Create a `.testcraft.toml` file in your project root:
+Initialize a configuration file with `testcraft init-config`, or create a `.testcraft.toml` file in your project root:
 
 ```toml
 [style]
@@ -94,16 +100,24 @@ junit_xml = true
 include_docstrings = true
 generate_fixtures = true
 
+[manual_fix]
+enable = true
+on_fail = false  # Set to true to auto-trigger after refinement failures
+auto_accept = false
+output_dir = ".testcraft/manual_fixes"
+
 [evaluation]
-enabled = true
+enabled = false
 acceptance_checks = true
-llm_judge_enabled = true
+llm_judge_enabled = false
 
 [llm]
 default_provider = "openai"
-openai_model = "o4-mini"
+openai_model = "gpt-4.1"
 temperature = 0.1
 ```
+
+**Note**: TestCraft uses TOML format only. Run `testcraft init-config` to generate a comprehensive configuration file with all available options.
 
 ### Advanced: Evaluation and A/B Testing
 
@@ -132,8 +146,13 @@ testcraft version
 # Initialize configuration interactively
 testcraft config init
 
+# Measure and report code coverage
+testcraft coverage . --format xml --output-dir .artifacts/coverage
+testcraft coverage . --format detailed --include src/ --omit "*/tests/*"
+
 # Get help for any command
 testcraft --help
+testcraft coverage --help
 testcraft evaluation --help
 ```
 
@@ -208,6 +227,27 @@ uv run pytest tests/test_evaluation_integration.py -v
 
 # Test CLI evaluation commands
 testcraft evaluation --help
+
+### Repository-Aware Pipeline Commands
+
+TestCraft includes planning and manual-fix commands wired into the repository-aware context assembly pipeline:
+
+```bash
+# PLAN: produces a structured plan JSON for a given target
+testcraft plan . --target-file path/to/module.py --target-object MyClass.method \
+  --output .artifacts/plan.json --max-plan-retries 2 --enable-gates
+
+# MANUAL FIX: generates a failing test and bug note for suspected product bugs
+testcraft manual-fix . --target-file path/to/module.py --target-object MyClass.method \
+  --trace-excerpt "AssertionError: expected X" --notes "repro steps" \
+  --auto-accept-fixes
+
+# Outputs Markdown artifact to .testcraft/manual_fixes/<target>_<hash>.md
+# Optional JSON sidecar written to --output path (default: .artifacts/manual_fix.json)
+```
+
+- Repository awareness enforces canonical imports (no `src.*`) and builds a `ContextPack` with import map, focal, resolved definitions, and property context.
+- Quality gates validate canonical import placement, bootstrap, compilation, determinism (seeded), and coverage delta before write/refine.
 ```
 
 ### Testing Guidelines

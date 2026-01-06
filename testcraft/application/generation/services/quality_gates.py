@@ -188,6 +188,17 @@ class QualityGatesService:
 
         return overall_success, results
 
+    @staticmethod
+    def _has_pytest_plugin(module_candidates: tuple[str, ...]) -> bool:
+        """Check whether at least one of the given plugin modules is importable."""
+        for module_name in module_candidates:
+            try:
+                if importlib.util.find_spec(module_name) is not None:
+                    return True
+            except (ModuleNotFoundError, ValueError):
+                continue
+        return False
+
     def _import_gate(self) -> QualityGateResult:
         """Validate that canonical import is first non-comment import."""
         try:
@@ -363,12 +374,26 @@ class QualityGatesService:
             # Build pytest command with determinism settings
             pytest_cmd = ["pytest", temp_file_path, "-v", "--tb=short"]
 
-            # Add determinism flags based on configuration
-            if self.determinism_config.freeze_time:
-                pytest_cmd.extend(["--freeze-time"])
+            # Add random seed support if plugin is available
+            if self._has_pytest_plugin(("pytest_randomly",)):
+                pytest_cmd.extend(
+                    ["--randomly-seed", str(self.determinism_config.seed)]
+                )
+            else:
+                logger.debug(
+                    "pytest-randomly plugin not available; skipping --randomly-seed flag"
+                )
 
-            # Add random seed for reproducibility
-            pytest_cmd.extend(["--randomly-seed", str(self.determinism_config.seed)])
+            # Add freeze-time flag only when plugin support is present
+            if self.determinism_config.freeze_time:
+                if self._has_pytest_plugin(
+                    ("pytest_freeze_time", "pytest_freezetime", "pytest_freeze")
+                ):
+                    pytest_cmd.extend(["--freeze-time"])
+                else:
+                    logger.debug(
+                        "pytest freeze-time plugin not available; skipping --freeze-time flag"
+                    )
 
             # Run pytest twice with same configuration
             logger.debug(
@@ -380,7 +405,11 @@ class QualityGatesService:
                 capture_output=True,
                 text=True,
                 timeout=self.quality_config.determinism_timeout_seconds,
-                env={**dict(os.environ), "TZ": self.determinism_config.tz},
+                env={
+                    **dict(os.environ),
+                    "TZ": self.determinism_config.tz,
+                    "PYTHONHASHSEED": str(self.determinism_config.seed),
+                },
             )
 
             run2_result = subprocess.run(
@@ -388,7 +417,11 @@ class QualityGatesService:
                 capture_output=True,
                 text=True,
                 timeout=self.quality_config.determinism_timeout_seconds,
-                env={**dict(os.environ), "TZ": self.determinism_config.tz},
+                env={
+                    **dict(os.environ),
+                    "TZ": self.determinism_config.tz,
+                    "PYTHONHASHSEED": str(self.determinism_config.seed),
+                },
             )
 
             # Clean up

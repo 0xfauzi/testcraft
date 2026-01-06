@@ -8,24 +8,41 @@ and other existing services.
 
 from __future__ import annotations
 
+import json
 import logging
 from pathlib import Path
+
+try:  # Python 3.11+
+    import tomllib
+except ModuleNotFoundError:  # pragma: no cover
+    tomllib = None  # type: ignore[assignment]
+
+try:
+    from packaging.requirements import Requirement
+except Exception:  # pragma: no cover
+    Requirement = None  # type: ignore[assignment]
 from typing import Any
 
+from ....adapters.io.file_discovery import FileDiscoveryError, FileDiscoveryService
 from ....domain.models import (
     Budget,
     ContextPack,
     Conventions,
+    DependencyMetadata,
     Focal,
     ImportMap,
     PropertyContext,
     ResolvedDef,
     Target,
+    TestElement,
+    TestElementType,
+    TestGenerationPlan,
 )
 from ....ports.parser_port import ParserPort
 from .context_assembler import ContextAssembler
 from .enhanced_context_builder import EnrichedContextBuilder
 from .import_resolver import ImportResolver
+from .structure import ModulePathDeriver
 
 logger = logging.getLogger(__name__)
 
@@ -45,6 +62,7 @@ class ContextPackBuilder:
         enriched_context_builder: EnrichedContextBuilder | None = None,
         parser: ParserPort | None = None,
         context_assembler: ContextAssembler | None = None,
+        file_discovery_service: FileDiscoveryService | None = None,
     ) -> None:
         """
         Initialize the ContextPack builder.
@@ -75,7 +93,51 @@ class ContextPackBuilder:
             config={},  # Will be injected by caller if needed
             import_resolver=self._import_resolver,
         )
+        self._file_discovery = file_discovery_service or FileDiscoveryService()
         self._cache: dict[str, Any] = {}
+        self._dependency_metadata_cache: DependencyMetadata | None = None
+
+    def _validate_target_file(
+        self, target_file: Path, project_root: Path | None
+    ) -> Path:
+        """Ensure the target file is eligible per discovery configuration."""
+
+        try:
+            resolved_target = target_file.resolve(strict=True)
+        except FileNotFoundError as exc:
+            raise ValueError(f"Target file {target_file} does not exist") from exc
+
+        resolved_root: Path | None = None
+        if project_root is not None:
+            try:
+                resolved_root = project_root.resolve()
+            except OSError as exc:
+                raise ValueError(
+                    f"Unable to resolve project root {project_root}: {exc}"
+                ) from exc
+
+            try:
+                resolved_target.relative_to(resolved_root)
+            except ValueError as exc:
+                raise ValueError(
+                    f"Target file {resolved_target} is outside the project root {resolved_root}"
+                ) from exc
+
+        try:
+            allowed = self._file_discovery.filter_existing_files(
+                [resolved_target], resolved_root
+            )
+        except FileDiscoveryError as exc:
+            raise ValueError(
+                f"Failed to validate target file {resolved_target}: {exc}"
+            ) from exc
+
+        if not allowed:
+            raise ValueError(
+                f"Target file {resolved_target} is excluded by discovery configuration"
+            )
+
+        return Path(allowed[0])
 
     def build_context_pack(
         self,
@@ -109,16 +171,40 @@ class ContextPackBuilder:
             if project_root is None:
                 project_root = self._find_project_root(target_file)
 
-            # Build target information
+            # Resolve canonical module details for richer target metadata
+            resolved_target_file = self._validate_target_file(target_file, project_root)
+            project_root, module_path = self._resolve_project_metadata(
+                resolved_target_file, project_root
+            )
+
+            relative_path: str | None = None
+            if project_root:
+                try:
+                    relative_path = str(resolved_target_file.relative_to(project_root))
+                except ValueError:
+                    relative_path = str(resolved_target_file)
+            else:
+                relative_path = str(resolved_target_file)
+
+            is_method = "." in target_object
+            class_name = target_object.split(".")[0] if is_method else None
+            method_name = target_object.split(".")[1] if is_method else None
+
             target = Target(
-                module_file=str(target_file.resolve()),
+                module_file=str(resolved_target_file),
                 object=target_object,
+                module_path=module_path,
+                relative_path=relative_path,
+                class_name=class_name,
+                method_name=method_name,
+                is_method=is_method,
+                exists_in_source=resolved_target_file.exists(),
             )
 
             # Build import_map component using ImportResolver with enhanced fallback
             import_map = None
             try:
-                import_map = self._import_resolver.resolve(target_file)
+                import_map = self._import_resolver.resolve(resolved_target_file)
             except ValueError as e:
                 # Enhanced fallback using context_assembler's import analysis
                 logger.warning(
@@ -127,16 +213,17 @@ class ContextPackBuilder:
                     e,
                 )
 
-                # Use context_assembler's import analysis for better fallback
                 try:
                     # Try to get project root using context_assembler's method
                     project_root = self._context_assembler._find_project_root(
-                        target_file
+                        resolved_target_file
                     )
 
                     # Use context_assembler's import resolver as fallback
                     fallback_import_map = (
-                        self._context_assembler._import_resolver.resolve(target_file)
+                        self._context_assembler._import_resolver.resolve(
+                            resolved_target_file
+                        )
                     )
 
                     # If context_assembler's resolver also fails, create enhanced fallback
@@ -153,19 +240,50 @@ class ContextPackBuilder:
                     )
 
                     # Create enhanced fallback with better bootstrap logic
-                    module_name = target_file.stem
+                    module_import = module_path
+
+                    if not module_import:
+                        try:
+                            module_info = ModulePathDeriver.derive_module_path(
+                                resolved_target_file, project_root
+                            )
+                            module_import = module_info.get("module_path")
+                        except Exception:
+                            module_import = None
+
+                    if not module_import and project_root:
+                        try:
+                            relative_path = resolved_target_file.relative_to(
+                                project_root
+                            )
+                            parts = list(relative_path.with_suffix("").parts)
+                            if parts and parts[-1] == "__init__":
+                                parts = parts[:-1]
+                            module_import = ".".join(part for part in parts if part)
+                        except Exception:
+                            module_import = None
+
+                    if not module_import:
+                        if resolved_target_file.name == "__init__.py":
+                            module_import = resolved_target_file.parent.name or ""
+                        else:
+                            module_import = target_file.stem
+
+                    if module_import in ("", "__init__"):
+                        parent_name = resolved_target_file.parent.name
+                        module_import = parent_name or module_import
 
                     # Use context_assembler's project root detection for better sys.path setup
                     try:
                         project_root = self._context_assembler._find_project_root(
-                            target_file
+                            resolved_target_file
                         )
                         sys_path_root = str(project_root)
                     except Exception:
-                        sys_path_root = str(target_file.parent.resolve())
+                        sys_path_root = str(resolved_target_file.parent.resolve())
 
                     import_map = ImportMap(
-                        target_import=f"import {module_name} as _under_test",
+                        target_import=f"import {module_import} as _under_test",
                         sys_path_roots=[sys_path_root],
                         needs_bootstrap=True,
                         bootstrap_conftest=f"""import sys
@@ -177,26 +295,32 @@ if str(p) not in sys.path:
     sys.path.insert(0, str(p))
 
 # Add current directory as fallback
-current_dir = pathlib.Path(r"{target_file.parent.resolve()}").resolve()
+current_dir = pathlib.Path(r"{resolved_target_file.parent.resolve()}").resolve()
 if str(current_dir) not in sys.path:
     sys.path.insert(0, str(current_dir))
 """,
                     )
 
             # Build focal code component
-            focal = self._build_focal_component(target_file, target_object)
+            focal = self._build_focal_component(
+                resolved_target_file, target_object, project_root
+            )
 
             # Build resolved_defs component (placeholder for now)
-            resolved_defs = self._build_resolved_defs_component(target_file)
+            resolved_defs = self._build_resolved_defs_component(
+                resolved_target_file, target_object
+            )
 
             # Build property_context component (placeholder for now)
             property_context = self._build_property_context_component(
-                target_file, target_object
+                resolved_target_file, target_object
             )
 
             # Use provided or default conventions/budget
             final_conventions = conventions or Conventions()
             final_budget = budget or Budget()
+
+            dependency_metadata = self._collect_dependency_metadata(project_root)
 
             # Assemble the ContextPack
             context_pack = ContextPack(
@@ -208,7 +332,18 @@ if str(current_dir) not in sys.path:
                 conventions=final_conventions,
                 budget=final_budget,
                 context="",  # Will be set later by context assembler if needed
+                dependency_metadata=dependency_metadata,
             )
+
+            if logger.isEnabledFor(logging.DEBUG):
+                logger.debug(
+                    "ContextPack payload:\n%s",
+                    json.dumps(
+                        context_pack.model_dump(),
+                        indent=2,
+                        sort_keys=True,
+                    ),
+                )
 
             logger.debug("Built ContextPack successfully for %s", target_object)
             return context_pack
@@ -239,6 +374,155 @@ if str(current_dir) not in sys.path:
             # Don't re-raise unexpected errors, return None instead
             return None
 
+    def _collect_dependency_metadata(
+        self, project_root: Path | None
+    ) -> DependencyMetadata:
+        """Collect dependency metadata for prompt and resolver context."""
+
+        if self._dependency_metadata_cache is not None:
+            return self._dependency_metadata_cache
+
+        external_modules: set[str] = set()
+        distributions: dict[str, str] = {}
+
+        if project_root is not None:
+            try:
+                self._augment_with_declared_dependencies(
+                    project_root=project_root,
+                    external_modules=external_modules,
+                    distributions=distributions,
+                )
+            except Exception:
+                logger.debug(
+                    "Unable to augment dependency metadata from project files",
+                    exc_info=True,
+                )
+        else:
+            logger.debug("Project root not provided; skipping dependency metadata")
+
+        dependency_metadata = DependencyMetadata(
+            external_modules=sorted(external_modules),
+            distributions=dict(sorted(distributions.items())),
+        )
+
+        if logger.isEnabledFor(logging.DEBUG):
+            logger.debug(
+                "Dependency metadata snapshot: external=%s distributions=%s",
+                dependency_metadata.external_modules,
+                dependency_metadata.distributions,
+            )
+
+        self._dependency_metadata_cache = dependency_metadata
+        return dependency_metadata
+
+    def _augment_with_declared_dependencies(
+        self,
+        project_root: Path | None,
+        external_modules: set[str],
+        distributions: dict[str, str],
+    ) -> None:
+        """Augment dependency metadata using project lockfiles/configuration."""
+
+        if not project_root:
+            return
+
+        project_root = Path(project_root)
+
+        def _add_name(name: str, version: str | None = None) -> None:
+            if not name:
+                return
+            normalized = name.replace("-", "_")
+            external_modules.add(normalized)
+            external_modules.add(name)
+            if version is not None:
+                distributions[name] = version
+            elif name not in distributions:
+                distributions.setdefault(name, "")
+
+        # pyproject dependencies
+        pyproject_path = project_root / "pyproject.toml"
+        if pyproject_path.exists():
+            try:
+                text = pyproject_path.read_text(encoding="utf-8")
+                if tomllib is not None:
+                    data = tomllib.loads(text)
+                    project_section = data.get("project") or {}
+                    deps = project_section.get("dependencies") or []
+                    opt_deps = project_section.get("optional-dependencies") or {}
+                    dep_groups = data.get("dependency-groups") or {}
+
+                    def _process_dependency(dep: str) -> None:
+                        if not dep:
+                            return
+                        name = dep
+                        if Requirement is not None:
+                            try:
+                                requirement = Requirement(dep)
+                                name = requirement.name
+                                spec = str(requirement.specifier) or None
+                            except Exception:
+                                name = dep.split()[0]
+                                spec = None
+                        else:
+                            name = dep.split()[0]
+                            spec = None
+                        _add_name(name, spec)
+
+                    for dep in deps:
+                        if isinstance(dep, str):
+                            _process_dependency(dep)
+
+                    if isinstance(opt_deps, dict):
+                        for dep_list in opt_deps.values():
+                            if isinstance(dep_list, list):
+                                for dep in dep_list:
+                                    if isinstance(dep, str):
+                                        _process_dependency(dep)
+
+                    if isinstance(dep_groups, dict):
+                        for group in dep_groups.values():
+                            if isinstance(group, list):
+                                for dep in group:
+                                    if isinstance(dep, str):
+                                        _process_dependency(dep)
+            except Exception:
+                logger.debug(
+                    "Failed to parse pyproject.toml for dependency metadata",
+                    exc_info=True,
+                )
+
+        requirements_txt = project_root / "requirements.txt"
+        if requirements_txt.exists():
+            try:
+                text = requirements_txt.read_text(encoding="utf-8")
+                for line in text.splitlines():
+                    line = line.strip()
+                    if (
+                        not line
+                        or line.startswith("#")
+                        or line.startswith(("-", "--"))
+                        or line.lower().startswith("git+")
+                    ):
+                        continue
+                    name = line
+                    if Requirement is not None:
+                        try:
+                            requirement = Requirement(line)
+                            name = requirement.name
+                            spec = str(requirement.specifier) or None
+                        except Exception:
+                            name = line.split()[0]
+                            spec = None
+                    else:
+                        name = line.split()[0]
+                        spec = None
+                    _add_name(name, spec)
+            except Exception:
+                logger.debug(
+                    "Failed to parse requirements.txt for dependency metadata",
+                    exc_info=True,
+                )
+
     def _find_project_root(self, file_path: Path) -> Path:
         """Find project root by looking for common project markers."""
         current = file_path.parent if file_path.is_file() else file_path
@@ -262,7 +546,9 @@ if str(current_dir) not in sys.path:
 
         return file_path.parent if file_path.is_file() else file_path
 
-    def _build_focal_component(self, file_path: Path, target_object: str) -> Focal:
+    def _build_focal_component(
+        self, file_path: Path, target_object: str, project_root: Path | None = None
+    ) -> Focal:
         """
         Build the focal code component with source, signature, and docstring.
 
@@ -275,19 +561,23 @@ if str(current_dir) not in sys.path:
         """
         try:
             # Use context_assembler to extract focal information
-            # Create a minimal plan for the context assembler
-            from ....domain.models import TestElement, TestGenerationPlan
+            resolved_project_root, module_path = self._resolve_project_metadata(
+                file_path, project_root
+            )
 
             element = TestElement(
                 name=target_object,
-                type="function",  # Default type, will be determined by context assembler
-                line_range=(0, 0),  # Will be determined by context assembler
+                type=self._determine_element_type(target_object),
+                line_range=(1, 1),  # Minimal valid range; context assembler refines it
             )
 
             plan = TestGenerationPlan(
                 elements_to_test=[element],
-                test_file_path=str(file_path),
-                source_file_path=str(file_path),
+                existing_tests=[],
+                coverage_before=None,
+                file_path=file_path,
+                project_root=resolved_project_root or project_root,
+                module_path=module_path,
             )
 
             # Use context_assembler's focal building logic
@@ -308,6 +598,8 @@ if str(current_dir) not in sys.path:
                 source=f"# Target: {target_object}",
                 signature=f"# Target: {target_object}",
                 docstring=None,
+                is_placeholder=True,
+                placeholder_reason="context_pack_basic_fallback",
             )
 
         except (ValueError, TypeError) as e:
@@ -319,6 +611,8 @@ if str(current_dir) not in sys.path:
                     source=content[:2000],  # Limit size as fallback
                     signature=f"# Target: {target_object}",
                     docstring=None,
+                    is_placeholder=True,
+                    placeholder_reason="context_pack_file_read_fallback",
                 )
             except OSError:
                 # File read error fallback
@@ -326,6 +620,8 @@ if str(current_dir) not in sys.path:
                     source=f"# Could not read {file_path}",
                     signature=f"# Target: {target_object}",
                     docstring=None,
+                    is_placeholder=True,
+                    placeholder_reason="context_pack_file_read_error",
                 )
             except Exception as e:
                 logger.debug("Unexpected error in focal fallback: %s", e)
@@ -334,6 +630,8 @@ if str(current_dir) not in sys.path:
                     source=f"# Error reading {file_path}",
                     signature=f"# Target: {target_object}",
                     docstring=None,
+                    is_placeholder=True,
+                    placeholder_reason="context_pack_unexpected_error",
                 )
         except OSError as e:
             logger.warning(
@@ -344,6 +642,8 @@ if str(current_dir) not in sys.path:
                 source=f"# File system error: {file_path}",
                 signature=f"# Target: {target_object}",
                 docstring=None,
+                is_placeholder=True,
+                placeholder_reason="context_pack_filesystem_error",
             )
         except Exception as e:
             logger.warning(
@@ -354,9 +654,13 @@ if str(current_dir) not in sys.path:
                 source=f"# Error processing {file_path}",
                 signature=f"# Target: {target_object}",
                 docstring=None,
+                is_placeholder=True,
+                placeholder_reason="context_pack_processing_error",
             )
 
-    def _build_resolved_defs_component(self, file_path: Path) -> list[ResolvedDef]:
+    def _build_resolved_defs_component(
+        self, file_path: Path, target_object: str
+    ) -> list[ResolvedDef]:
         """
         Build resolved_defs component for on-demand symbol definitions.
 
@@ -367,19 +671,25 @@ if str(current_dir) not in sys.path:
             from ....domain.models import TestElement, TestGenerationPlan
 
             # Create a minimal plan for symbol extraction
+            resolved_project_root, module_path = self._resolve_project_metadata(
+                file_path, None
+            )
+
             element = TestElement(
-                name="module_symbols",  # Generic name for symbol extraction
-                type="module",
-                line_range=(0, 0),
+                name=target_object,
+                type=self._determine_element_type(target_object),
+                line_range=(1, 1),
             )
 
             plan = TestGenerationPlan(
                 elements_to_test=[element],
-                test_file_path=str(file_path),
-                source_file_path=str(file_path),
+                existing_tests=[],
+                coverage_before=None,
+                file_path=file_path,
+                project_root=resolved_project_root,
+                module_path=module_path,
             )
 
-            # Use context_assembler's resolved definitions population
             resolved_def_dicts = self._context_assembler._populate_resolved_definitions(
                 source_path=file_path,
                 plan=plan,
@@ -390,13 +700,17 @@ if str(current_dir) not in sys.path:
             resolved_defs = []
             for def_dict in resolved_def_dicts:
                 try:
+                    kind = def_dict.get("kind") or def_dict.get("type", "unknown")
+                    if kind == "function":
+                        kind = "func"
                     resolved_defs.append(
                         ResolvedDef(
                             name=def_dict.get("name", "unknown"),
-                            kind=def_dict.get("type", "unknown"),
+                            kind=kind,
                             signature=def_dict.get("signature", ""),
-                            doc=def_dict.get("doc"),
-                            body=def_dict.get("source", "omitted"),
+                            doc=def_dict.get("doc") or def_dict.get("docstring"),
+                            body=def_dict.get("body")
+                            or def_dict.get("source", "omitted"),
                         )
                     )
                 except Exception as e:
@@ -419,20 +733,24 @@ if str(current_dir) not in sys.path:
         Delegates to context_assembler for comprehensive property analysis.
         """
         try:
-            # Use context_assembler's property context building logic
-            from ....domain.models import TestElement, TestGenerationPlan
-
             # Create a minimal plan for property context analysis
+            resolved_project_root, module_path = self._resolve_project_metadata(
+                file_path, None
+            )
+
             element = TestElement(
                 name=target_object,
-                type="function",  # Will be refined by context assembler
-                line_range=(0, 0),
+                type=self._determine_element_type(target_object),
+                line_range=(1, 1),
             )
 
             plan = TestGenerationPlan(
                 elements_to_test=[element],
-                test_file_path=str(file_path),
-                source_file_path=str(file_path),
+                existing_tests=[],
+                coverage_before=None,
+                file_path=file_path,
+                project_root=resolved_project_root,
+                module_path=module_path,
             )
 
             # Use context_assembler's property context building
@@ -495,3 +813,51 @@ if str(current_dir) not in sys.path:
                 project_root=project_root,
                 existing_context=existing_context,
             )
+
+    def _resolve_project_metadata(
+        self, file_path: Path, project_root: Path | None
+    ) -> tuple[Path | None, str | None]:
+        """
+        Resolve project root and module path metadata for a source file.
+
+        Args:
+            file_path: Path to the Python file
+            project_root: Optional pre-resolved project root
+
+        Returns:
+            Tuple of (project_root, module_path)
+        """
+        resolved_root = project_root
+        if resolved_root is None:
+            try:
+                resolved_root = self._find_project_root(file_path)
+            except Exception as root_error:
+                logger.debug(
+                    "Project root detection failed for %s: %s", file_path, root_error
+                )
+                resolved_root = None
+
+        module_path: str | None = None
+        try:
+            module_info = ModulePathDeriver.derive_module_path(file_path, resolved_root)
+            module_path = module_info.get("module_path")
+        except Exception as module_error:
+            logger.debug(
+                "Module path derivation failed when resolving metadata for %s: %s",
+                file_path,
+                module_error,
+            )
+
+        return resolved_root, module_path
+
+    @staticmethod
+    def _determine_element_type(target_object: str) -> TestElementType:
+        """Best-effort inference of element type based on target identifier."""
+        normalized = (target_object or "").strip()
+        if not normalized or normalized.lower() in {"module", "__module__"}:
+            return TestElementType.MODULE
+        if "." in target_object:
+            return TestElementType.METHOD
+        if target_object and target_object[0].isupper():
+            return TestElementType.CLASS
+        return TestElementType.FUNCTION

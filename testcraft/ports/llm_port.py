@@ -5,9 +5,7 @@ This module defines the interface for Large Language Model operations,
 including test generation and analysis capabilities.
 """
 
-from typing import Any
-
-from typing_extensions import Protocol
+from typing import Any, Protocol
 
 
 class LLMPort(Protocol):

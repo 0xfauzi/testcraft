@@ -162,8 +162,8 @@ Build a **ContextPack**:
 
 ```
 SYSTEM:
-You are a senior Python test engineer. You write small, correct, deterministic pytest tests.
-Do NOT guess missing symbols. List them.
+You are an expert Python test planning architect focused on deterministic pytest suites.
+Produce precise plans without inventing APIs—record unresolved requirements under missing_symbols.
 
 USER:
 TARGET
@@ -207,8 +207,8 @@ Output strictly as JSON: {"plan":[...], "missing_symbols":[...], "import_line":"
 
 ```
 SYSTEM:
-Output a single runnable pytest module. Use ONLY the provided canonical import.
-No network. Use tmp_path for FS. Keep imports minimal.
+You are an expert pytest implementation engineer delivering production-ready, deterministic modules.
+Follow the approved plan precisely, keep the canonical import unchanged, and emit exactly one fenced code block.
 
 USER:
 Canonical import (must appear at top of the file):

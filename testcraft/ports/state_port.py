@@ -5,9 +5,7 @@ This module defines the interface for state management operations,
 including getting and updating application state.
 """
 
-from typing import Any
-
-from typing_extensions import Protocol
+from typing import Any, Protocol
 
 
 class StatePort(Protocol):

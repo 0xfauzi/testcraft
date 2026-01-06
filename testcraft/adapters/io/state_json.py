@@ -45,8 +45,8 @@ class StateJsonAdapter:
         self.state_file_path = self.project_root / self.state_file_name
         self.logger = logging.getLogger(__name__)
 
-        # Thread safety lock
-        self._state_lock = threading.Lock()
+        # Thread safety lock (re-entrant to allow nested acquisitions)
+        self._state_lock = threading.RLock()
 
         # In-memory state cache
         self._state_cache: dict[str, Any] = {}
@@ -101,6 +101,33 @@ class StateJsonAdapter:
                     f"Failed to get state for key '{state_key}': {e}"
                 ) from e
 
+    def _get_state_unlocked(
+        self, state_key: str, default_value: Any | None = None
+    ) -> Any:
+        """Internal helper that reads state without acquiring the lock.
+
+        Callers must ensure appropriate synchronization. Intended for use from
+        code paths that already hold ``self._state_lock`` to avoid unnecessary
+        re-entrant lock acquisition.
+        """
+        try:
+            # Validate cache structure
+            if not isinstance(self._state_cache, dict):
+                raise StateJsonError("State cache is corrupted (not a dictionary)")
+
+            keys = state_key.split(".")
+            current: Any = self._state_cache
+            for key in keys:
+                if isinstance(current, dict) and key in current:
+                    current = current[key]
+                else:
+                    return default_value
+            return current
+        except Exception as e:
+            raise StateJsonError(
+                f"Failed to get state for key '{state_key}': {e}"
+            ) from e
+
     def update_state(
         self,
         state_key: str,
@@ -133,7 +160,7 @@ class StateJsonAdapter:
                 self.logger.debug(f"Updating state for key: {state_key}")
 
                 # Get previous value
-                previous_value = self.get_state(state_key)
+                previous_value = self._get_state_unlocked(state_key)
 
                 # Navigate to parent container and key
                 keys = state_key.split(".")
@@ -506,8 +533,8 @@ class StateJsonAdapter:
             self._initialize_default_structure()
             self._cache_dirty = True
 
-            # Persist initial state
-            self.persist_state()
+        # Persist initial state outside the lock to avoid nested lock acquisition
+        self.persist_state()
 
     def _initialize_default_structure(self) -> None:
         """Initialize the default state structure with required sections."""

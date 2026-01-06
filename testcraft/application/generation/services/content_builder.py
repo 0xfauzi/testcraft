@@ -14,6 +14,7 @@ from typing import Any
 
 from ....domain.models import TestGenerationPlan
 from ....ports.parser_port import ParserPort
+from .structure import ModulePathDeriver
 
 logger = logging.getLogger(__name__)
 
@@ -114,7 +115,7 @@ class ContentBuilder:
                     start, end = element.line_range
                     # Validate line_range format and values
                     if (
-                        not isinstance(element.line_range, tuple | list)
+                        not isinstance(element.line_range, (tuple, list))
                         or len(element.line_range) != 2
                     ):
                         logger.warning(
@@ -189,12 +190,53 @@ class ContentBuilder:
         Returns:
             String path for the output test file
         """
-        # Simplified implementation - would use actual source file paths from plan
-        if plan.elements_to_test:
-            # Use first element to determine naming
-            element = plan.elements_to_test[0]
-            return f"tests/test_{element.name.lower()}.py"
-        return "tests/test_generated.py"
+        source_path = Path(plan.file_path)
+        project_root: Path | None = None
+        if getattr(plan, "project_root", None):
+            project_root = (
+                Path(plan.project_root)
+                if not isinstance(plan.project_root, Path)
+                else plan.project_root
+            )
+
+        module_path: str | None = getattr(plan, "module_path", None)
+        if not module_path:
+            try:
+                module_info = ModulePathDeriver.derive_module_path(
+                    source_path, project_root
+                )
+                module_path = module_info.get("module_path")
+            except Exception as derive_error:
+                logger.debug(
+                    "Unable to derive module path for %s: %s", source_path, derive_error
+                )
+                module_path = None
+
+        if module_path:
+            parts = module_path.split(".")
+            module_dir_parts = parts[:-1]
+            module_name = parts[-1]
+            test_dir = Path("tests")
+            if module_dir_parts:
+                test_dir = test_dir.joinpath(*module_dir_parts)
+            test_name = f"test_{module_name}.py"
+            return str(test_dir / test_name)
+
+        # Fallback: mirror source directory structure under tests
+        relative_parts: Path | None = None
+        if project_root:
+            try:
+                relative_parts = source_path.relative_to(project_root)
+            except ValueError:
+                relative_parts = None
+
+        if relative_parts:
+            relative_parent = relative_parts.parent
+            test_dir = Path("tests") / relative_parent
+        else:
+            test_dir = Path("tests")
+
+        return str(test_dir / f"test_{source_path.stem}.py")
 
     def _get_parse_result_cached(self, file_path: Path) -> dict[str, Any]:
         """

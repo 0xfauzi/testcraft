@@ -71,6 +71,11 @@ class PytestRefiner:
         # Get configurable pytest args with defaults
         self._pytest_args = self._config.pytest_args_for_refinement
 
+        # Timing configuration
+        self._iteration_timeout = float(
+            getattr(self._config, "iteration_timeout_sec", 0.0)
+        )
+
         # Create semaphore to limit concurrent pytest operations
         self._refine_semaphore = asyncio.Semaphore(max_concurrent_refines)
 
@@ -79,7 +84,7 @@ class PytestRefiner:
         self._file_operation_queues = defaultdict(lambda: asyncio.Queue())
 
         # File locking configuration
-        self._lock_timeout = 10.0  # seconds
+        self._lock_timeout = float(getattr(self._config, "file_lock_timeout_sec", 10.0))
         self._file_locks = {}  # Track active file locks
 
         # Content backup for rollback mechanism
@@ -460,7 +465,14 @@ class PytestRefiner:
         try:
             if test_file.exists():
                 original_content = test_file.read_text(encoding="utf-8")
-                self._content_backups[test_file] = original_content
+                try:
+                    mtime_ns = test_file.stat().st_mtime_ns
+                except OSError:
+                    mtime_ns = None
+                self._content_backups[test_file] = {
+                    "content": original_content,
+                    "mtime_ns": mtime_ns,
+                }
                 logger.debug(f"Backed up original content for {test_file}")
                 return True
             else:
@@ -471,6 +483,21 @@ class PytestRefiner:
         except Exception as e:
             logger.error(f"Failed to backup content for {test_file}: {e}")
             return False
+
+    def _record_status_tracker_rollback(self, test_file: Path, reason: str) -> None:
+        """Record rollback details on the status tracker when available."""
+
+        if not self._status_tracker:
+            return
+
+        truncated_reason = (reason or "").strip()
+        if len(truncated_reason) > 160:
+            truncated_reason = f"{truncated_reason[:157]}..."
+
+        try:
+            self._status_tracker.record_rollback(str(test_file), truncated_reason)
+        except Exception:  # pragma: no cover - defensive logging
+            logger.debug("Unable to record rollback for %s", test_file, exc_info=True)
 
     async def _rollback_on_validation_failure(
         self, test_file: Path, reason: str
@@ -490,7 +517,8 @@ class PytestRefiner:
                 logger.error(f"No backup content available for rollback of {test_file}")
                 return False
 
-            original_content = self._content_backups[test_file]
+            backup = self._content_backups[test_file]
+            original_content = backup.get("content", "")
 
             # Use atomic write for rollback to ensure consistency
             success = await self._write_with_atomic_operation(
@@ -498,9 +526,8 @@ class PytestRefiner:
             )
 
             if success:
-                logger.warning(
-                    f"Rolled back {test_file} due to validation failure: {reason}"
-                )
+                logger.info("Rolled back %s after validation failure", test_file)
+                self._record_status_tracker_rollback(test_file, reason)
                 # Clean up backup after successful rollback
                 del self._content_backups[test_file]
             else:
@@ -538,16 +565,20 @@ class PytestRefiner:
         }
 
         # Step 1: Backup original content for rollback
-        if not self._backup_original_content(test_file):
-            result["issues"].append("Failed to backup original content")
-            return result
+        if test_file not in self._content_backups:
+            if not self._backup_original_content(test_file):
+                result["issues"].append("Failed to backup original content")
+                return result
 
-        # Step 2: Get current content for validation
+        # Step 2: Get current content metadata for validation
         try:
-            original_content = self._content_backups[test_file]
+            backup = self._content_backups[test_file]
         except KeyError:
             result["issues"].append("Original content not available for validation")
             return result
+
+        original_content = backup.get("content", "")
+        baseline_mtime = backup.get("mtime_ns")
 
         # Step 3: Validate refined content
         validation_result = self._validate_refined_content(
@@ -590,6 +621,26 @@ class PytestRefiner:
                 return result
 
             try:
+                # Ensure file has not changed since backup was captured
+                if baseline_mtime is not None and test_file.exists():
+                    try:
+                        current_mtime = test_file.stat().st_mtime_ns
+                    except OSError:
+                        current_mtime = None
+                    else:
+                        if (
+                            current_mtime is not None
+                            and current_mtime != baseline_mtime
+                        ):
+                            logger.warning(
+                                "Detected external modification of %s during refinement (mtime changed)",
+                                test_file,
+                            )
+                            result["issues"].append(
+                                "File modified externally during refinement; aborting write"
+                            )
+                            return result
+
                 # Write with atomic operation
                 write_success = await self._write_with_atomic_operation(
                     test_file, refined_content
@@ -659,6 +710,50 @@ class PytestRefiner:
                     f"Unexpected error in queue processing for {test_file}: {e}"
                 )
 
+    def _remaining_iteration_time(
+        self, iteration_deadline: float | None
+    ) -> float | None:
+        """Return remaining seconds before an iteration deadline expires."""
+
+        if iteration_deadline is None:
+            return None
+
+        loop = asyncio.get_running_loop()
+        return max(0.0, iteration_deadline - loop.time())
+
+    async def _sleep_with_iteration_timeout(
+        self,
+        duration: float,
+        iteration_deadline: float | None,
+        *,
+        current_stage: str,
+        failure_output: str,
+        timeout_abort: Callable[[str, str], Awaitable[dict[str, Any]]],
+    ) -> dict[str, Any] | None:
+        """Sleep while ensuring the iteration deadline is not exceeded."""
+
+        if duration <= 0:
+            return None
+
+        if iteration_deadline is None:
+            await asyncio.sleep(duration)
+            return None
+
+        remaining_before = self._remaining_iteration_time(iteration_deadline)
+        if remaining_before is not None and remaining_before <= 0:
+            return await timeout_abort(current_stage, failure_output)
+
+        sleep_duration = (
+            min(duration, remaining_before) if remaining_before else duration
+        )
+        await asyncio.sleep(sleep_duration)
+
+        remaining_after = self._remaining_iteration_time(iteration_deadline)
+        if remaining_after is not None and remaining_after <= 0:
+            return await timeout_abort(current_stage, failure_output)
+
+        return None
+
     async def _queue_file_operation(
         self, test_file: Path, operation: Callable[[], Awaitable[None]]
     ) -> None:
@@ -723,7 +818,7 @@ class PytestRefiner:
                 executor=self._executor,
                 module_name="pytest",
                 args=pytest_args,
-                timeout=60,
+                timeout=self._iteration_timeout or 60,
                 raise_on_error=False,  # Handle failures ourselves like refine adapter
             )
 
@@ -1758,6 +1853,61 @@ The test expectations appear correct, but the production code is not behaving as
                 for iteration in range(max_iterations):
                     span.set_attribute(f"iteration_{iteration}_started", True)
 
+                    iteration_start = asyncio.get_event_loop().time()
+                    iteration_deadline = (
+                        iteration_start + self._iteration_timeout
+                        if self._iteration_timeout > 0
+                        else None
+                    )
+
+                    async def timeout_abort(
+                        stage: str, failure_output: str = ""
+                    ) -> dict[str, Any]:
+                        logger.warning(
+                            "Refinement iteration %d for %s exceeded %.1fs during %s",
+                            iteration + 1,
+                            test_path,
+                            self._iteration_timeout,
+                            stage,
+                        )
+                        span.set_attribute("stopped_reason", "iteration_timeout")
+                        span.set_attribute("timeout_stage", stage)
+                        span.set_attribute("timeout_iteration", iteration + 1)
+                        if self._status_tracker:
+                            self._status_tracker.update_file_status(
+                                test_path,
+                                FileStatus.FAILED,
+                                operation="Refinement Timeout",
+                                step=(
+                                    f"Exceeded {self._iteration_timeout:.1f}s during {stage}"
+                                ),
+                                progress=0.0,
+                            )
+                        if self._config.annotate_failed_tests:
+                            await self._annotate_failed_test(
+                                test_file=test_file,
+                                failure_output=failure_output
+                                or "Iteration timed out before refinement completed",
+                                reason_status="iteration_timeout",
+                                iterations=iteration + 1,
+                                fix_instructions=last_fix_instructions,
+                                extra={
+                                    "active_import_path": last_active_import_path,
+                                    "preflight_suggestions": last_preflight,
+                                },
+                            )
+
+                        return {
+                            "test_file": test_path,
+                            "success": False,
+                            "iterations": iteration + 1,
+                            "final_status": "iteration_timeout",
+                            "error": (
+                                f"Refinement iteration exceeded {self._iteration_timeout:.1f}s during {stage}"
+                            ),
+                            "last_failure": failure_output,
+                        }
+
                     # Update status for each iteration
                     if self._status_tracker:
                         if iteration == 0:
@@ -1784,6 +1934,15 @@ The test expectations appear correct, but the production code is not behaving as
                             f"iteration_{iteration}_pytest_returncode",
                             pytest_result["returncode"],
                         )
+
+                        if (
+                            iteration_deadline is not None
+                            and asyncio.get_event_loop().time() > iteration_deadline
+                        ):
+                            combined_output = self.format_pytest_failure_output(
+                                pytest_result
+                            )
+                            return await timeout_abort("pytest", combined_output)
 
                         # Step 2: Check if tests are now passing
                         if pytest_result["returncode"] == 0:
@@ -1947,6 +2106,14 @@ The test expectations appear correct, but the production code is not behaving as
                             test_file, test_content
                         )
 
+                        if (
+                            iteration_deadline is not None
+                            and asyncio.get_event_loop().time() > iteration_deadline
+                        ):
+                            return await timeout_abort(
+                                "build_source_context", failure_output
+                            )
+
                         # Use refine port to fix the failures
                         refine_result = self._refine.refine_from_failures(
                             test_file=test_file,
@@ -1958,6 +2125,12 @@ The test expectations appear correct, but the production code is not behaving as
                                 self._config.max_total_minutes * 60
                             ),  # Convert minutes to seconds
                         )
+
+                        if (
+                            iteration_deadline is not None
+                            and asyncio.get_event_loop().time() > iteration_deadline
+                        ):
+                            return await timeout_abort("refine", failure_output)
 
                         # Update tracking metadata from refine result
                         last_fix_instructions = refine_result.get("fix_instructions")
@@ -2295,7 +2468,15 @@ The test expectations appear correct, but the production code is not behaving as
                                 backoff_time,
                                 iteration + 1,
                             )
-                            await asyncio.sleep(backoff_time)
+                            abort_result = await self._sleep_with_iteration_timeout(
+                                backoff_time,
+                                iteration_deadline,
+                                current_stage="backoff_wait",
+                                failure_output=failure_output,
+                                timeout_abort=timeout_abort,
+                            )
+                            if abort_result is not None:
+                                return abort_result
 
                     except Exception as e:
                         logger.warning(

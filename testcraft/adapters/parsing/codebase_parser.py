@@ -410,6 +410,7 @@ class CodebaseParser:
                             "module": alias.name,
                             "alias": alias.asname,
                             "line": node.lineno,
+                            "level": 0,
                         }
                     )
             elif isinstance(node, ast.ImportFrom):
@@ -421,6 +422,7 @@ class CodebaseParser:
                             "name": alias.name,
                             "alias": alias.asname,
                             "line": node.lineno,
+                            "level": node.level or 0,
                         }
                     )
 
@@ -577,29 +579,9 @@ class CodebaseParser:
         """Determine if a module is an external dependency."""
         base_module = module_name.split(".")[0]
 
-        # Check if it's in sys.modules (indicates it's loaded/available)
-        if base_module in sys.modules:
-            return True
+        if base_module in sys.builtin_module_names:
+            return False
 
-        # Try to find the module spec
-        try:
-            spec = importlib.util.find_spec(base_module)
-            if spec is not None:
-                # Check if it's a standard library module by checking origin
-                if spec.origin and "site-packages" not in spec.origin:
-                    return True
-        except (ImportError, AttributeError):
-            pass
-
-        # Check project root for requirements or pyproject.toml
-        try:
-            project_root = self._find_project_root(file_path.parent)
-            if self._is_in_requirements(base_module, project_root):
-                return True
-        except Exception:
-            pass
-
-        # Fallback to heuristics
         stdlib_modules = {
             "os",
             "sys",
@@ -664,7 +646,6 @@ class CodebaseParser:
             "bz2",
             "lzma",
             "zipimport",
-            "imp",
             "importlib",
             "pkgutil",
             "modulefinder",
@@ -691,125 +672,48 @@ class CodebaseParser:
             "cgi",
         }
 
-        common_third_party = {
-            "pytest",
-            "numpy",
-            "pandas",
-            "requests",
-            "flask",
-            "django",
-            "fastapi",
-            "pydantic",
-            "sqlalchemy",
-            "click",
-            "rich",
-            "typer",
-            "httpx",
-            "aiohttp",
-            "uvicorn",
-            "gunicorn",
-            "celery",
-            "redis",
-            "jinja2",
-            "markupsafe",
-            "werkzeug",
-            "itsdangerous",
-            "blinker",
-            "alembic",
-            "marshmallow",
-            "apispec",
-            "connexion",
-            "tornado",
-            "sanic",
-            "bottle",
-            "cherrypy",
-            "web",
-            "pyramid",
-            "zope",
-            "twisted",
-            "gevent",
-            "grequests",
-            "tqdm",
-            "colorama",
-            "termcolor",
-            "blessed",
-            "curses",
-            "pygame",
-            "kivy",
-            "tkinter",
-            "wx",
-            "pyqt",
-            "pyside",
-            "pillow",
-            "opencv",
-            "scikit",
-            "image",
-            "scipy",
-            "matplotlib",
-            "seaborn",
-            "plotly",
-            "bokeh",
-            "altair",
-            "folium",
-            "geopandas",
-            "shapely",
-            "fiona",
-            "rasterio",
-            "pyproj",
-            "cartopy",
-            "networkx",
-            "igraph",
-            "graph",
-            "toolz",
-            "cytoolz",
-            "more",
-            "itertools",
-            "boltons",
-            "python",
-            "dateutil",
-            "pytz",
-            "babel",
-            "mako",
-            "chameleon",
-            "lxml",
-            "beautifulsoup4",
-            "html5lib",
-            "bleach",
-            "markdown",
-            "mistune",
-            "docutils",
-            "sphinx",
-            "mkdocs",
-            "pelican",
-            "hugo",
-            "jekyll",
-            "git",
-            "dulwich",
-            "gitpython",
-            "paramiko",
-            "scp",
-            "fabric",
-            "invoke",
-            "pexpect",
-            "sh",
-            "plumbum",
-            "fire",
-            "docopt",
-            "argh",
-            "cement",
-            "cliff",
-            "cmd2",
-            "prompt",
-            "toolkit",
-            "questionary",
-            "inquirer",
-            "pyinquirer",
-            "cookiecutter",
-            "copier",
-            "time",
-        }
+        if base_module in stdlib_modules:
+            return False
 
-        return base_module in stdlib_modules or base_module in common_third_party
+        project_root: Path | None = None
+        try:
+            project_root = self._find_project_root(file_path.parent)
+        except Exception:
+            project_root = None
+
+        spec = None
+        try:
+            spec = importlib.util.find_spec(base_module)
+        except (ImportError, AttributeError):
+            spec = None
+
+        if spec:
+            origin = getattr(spec, "origin", None)
+            if origin and origin != "built-in":
+                try:
+                    origin_path = Path(origin).resolve()
+                except Exception:
+                    origin_path = None
+
+                if origin_path:
+                    if any(
+                        part in {"site-packages", "dist-packages"}
+                        for part in origin_path.parts
+                    ):
+                        return True
+                    if project_root and project_root in origin_path.parents:
+                        return False
+                    if "lib/python" in origin_path.as_posix():
+                        return False
+
+        if project_root:
+            try:
+                if self._is_in_requirements(base_module, project_root):
+                    return True
+            except Exception:
+                pass
+
+        return False
 
     def _find_project_root(self, start_path: Path) -> Path:
         """Find the project root by looking for pyproject.toml or requirements.txt."""

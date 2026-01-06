@@ -83,7 +83,13 @@ uv run pytest tests/test_evaluation/     # Evaluation tests
 
 # Run CLI tests
 uv run pytest tests/test_cli/ -v
+
+# Run end-to-end CLI workflow (requires network + live LLM credentials)
+# Default provider: TESTCRAFT_E2E_PROVIDER=openai (override with TESTCRAFT_E2E_PROVIDER / TESTCRAFT_E2E_MODEL)
+OPENAI_API_KEY=... uv run pytest tests/e2e/test_cli_end_to_end.py
 ```
+
+> The E2E CLI workflow hits live LLM providers and will fail without network access and valid API keys. Set `TESTCRAFT_E2E_PROVIDER` and `TESTCRAFT_E2E_MODEL` (if you need a specific deployment) to match the credentials you export. Evaluation pipelines are covered by the dedicated integration tests under `tests/test_evaluation/`.
 
 ### Development Tools
 

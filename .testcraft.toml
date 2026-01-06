@@ -17,5 +17,5 @@ llm_judge_enabled = false
 
 [llm]
 default_provider = "openai"
-openai_model = "gpt-4"
+openai_model = "gpt-4.1"
 temperature = 0.1

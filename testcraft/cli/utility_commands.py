@@ -1,6 +1,7 @@
 """Utility commands for the TestCraft CLI."""
 
 import asyncio
+import os
 import sys
 from pathlib import Path
 from typing import Any
@@ -8,11 +9,24 @@ from typing import Any
 import click
 from rich.console import Console
 
-from ..adapters.io.ui_rich import RichUIAdapter
+from ..adapters.io.rich_cli import get_theme
+from ..adapters.io.ui_rich import RichUIAdapter, UIStyle
 from .config_init import ConfigInitializer
 
 # Initialize Rich console and UI components
-console = Console()
+_ENV_UI = os.getenv("TESTCRAFT_UI", "").lower()
+
+
+def _detect_default_ui_style() -> UIStyle:
+    if _ENV_UI in {style.value for style in UIStyle}:
+        return UIStyle(_ENV_UI)
+    if os.getenv("CI") == "true" or not sys.stdout.isatty():
+        return UIStyle.MINIMAL
+    return UIStyle.CLASSIC
+
+
+_DEFAULT_UI_STYLE = _detect_default_ui_style()
+console = Console(theme=get_theme(_DEFAULT_UI_STYLE.value))
 ui = RichUIAdapter(console)
 
 
@@ -20,34 +34,30 @@ def add_utility_commands(app: click.Group) -> None:
     """Add utility commands to the main CLI app."""
 
     @app.command()
-    @click.option(
-        "--format",
-        "-f",
-        "output_format",
-        type=click.Choice(["toml", "yaml", "json"], case_sensitive=False),
-        default="toml",
-        help="Configuration format",
-    )
     @click.option("--minimal", is_flag=True, help="Generate minimal configuration")
     @click.option(
         "--output", "-o", type=click.Path(path_type=Path), help="Output file path"
     )
     @click.pass_context
-    def init_config(
-        ctx: click.Context, output_format: str, minimal: bool, output: Path | None
-    ) -> None:
-        """Initialize configuration file with guided setup."""
+    def init_config(ctx: click.Context, minimal: bool, output: Path | None) -> None:
+        """Initialize configuration file with guided setup (TOML only)."""
         try:
             initializer = ConfigInitializer(ui)
 
             # Create configuration file
             config_file = initializer.create_config_file(
-                format_type=output_format, minimal=minimal, output_path=output
+                format_type="toml", minimal=minimal, output_path=output
             )
 
             ui.display_success(
                 f"Configuration file created: {config_file}",
                 "Configuration Initialized",
+            )
+
+            # Inform user that TOML is enforced
+            ui.display_info(
+                "Config is generated as TOML (.testcraft.toml). Other formats are no longer supported by init-config.",
+                "TOML Only",
             )
 
             # Offer to run guided setup
@@ -191,7 +201,7 @@ def add_utility_commands(app: click.Group) -> None:
     @app.command()
     @click.option("--reload", is_flag=True, help="Force reload from storage")
     @click.option(
-        "--persist", is_flag=True, help="Persist state after sync", default=True
+        "--persist/--no-persist", help="Persist state after sync", default=True
     )
     @click.pass_context
     def sync_state(ctx: click.Context, reload: bool, persist: bool) -> None:

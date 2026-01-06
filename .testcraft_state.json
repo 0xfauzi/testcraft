@@ -32,7 +32,14 @@
   },
   "last_generation_run": {
     "config_used": {
-      "batch_size": 5,
+      "batch_size": 1,
+      "context_budgets": {
+        "directory_tree": {
+          "include_py_only": true,
+          "max_depth": 4,
+          "max_entries_per_dir": 200
+        }
+      },
       "context_categories": {
         "callgraph": true,
         "contracts": true,
@@ -48,21 +55,26 @@
         "usage_examples": true
       },
       "context_enrichment": {
+        "enable_callgraph": true,
         "enable_comprehensive_fixtures": true,
+        "enable_coverage_hints": true,
         "enable_db_boundary_detection": true,
         "enable_env_detection": true,
+        "enable_error_paths": true,
         "enable_http_boundary_detection": true,
         "enable_side_effect_detection": true,
-        "max_env_vars": 20,
-        "max_fixtures": 15
+        "enable_usage_examples": true
       },
       "coverage_threshold": 0.8,
-      "disable_ruff_format": false,
+      "disable_ruff_format": true,
       "enable_context": true,
-      "enable_refinement": true,
+      "enable_refinement": false,
       "enable_streaming": false,
-      "immediate_refinement": true,
-      "keep_failed_writes": false,
+      "enable_symbol_resolution": true,
+      "immediate_refinement": false,
+      "keep_failed_writes": true,
+      "max_plan_retries": 2,
+      "max_refine_retries": 3,
       "max_refine_workers": 2,
       "max_refinement_iterations": 3,
       "prompt_budgets": {
@@ -85,6 +97,10 @@
       },
       "refine_on_first_failure_only": true,
       "refinement_backoff_sec": 0.2,
+      "symbol_resolution": {
+        "allow_runtime_imports": false,
+        "runtime_timeout_sec": 10.0
+      },
       "test_framework": "pytest"
     },
     "coverage_improvement": {
@@ -102,10 +118,10 @@
       "successful_generations": 1,
       "total_files_processed": 1
     },
-    "last_run_timestamp": 793113.26958975,
+    "last_run_timestamp": 3680.435970708,
     "refinement_summary": {
       "successful_refinements": 0,
-      "total_files_refined": 1
+      "total_files_refined": 0
     }
   },
   "metadata": {

@@ -293,6 +293,11 @@ class BedrockAdapter(LLMPort):
         if not isinstance(test_framework, str) or not test_framework.strip():
             raise BedrockError("test_framework must be a non-empty string")
 
+        custom_system_prompt = kwargs.pop("custom_system_prompt", None)
+        custom_user_prompt = kwargs.pop("custom_user_prompt", None)
+        return_raw = kwargs.pop("return_raw", False)
+        _ = kwargs.pop("response_format", None)
+
         # Calculate optimal max_tokens for this specific request
         input_length = self.token_calculator.estimate_input_tokens(
             code_content + (context or "")
@@ -305,6 +310,8 @@ class BedrockAdapter(LLMPort):
         system_message = self.prompt_registry.get_system_prompt(
             prompt_type="llm_test_generation", test_framework=test_framework
         )
+        if custom_system_prompt is not None:
+            system_message = custom_system_prompt
 
         additional_context = {"context": context} if context else {}
         user_content = self.prompt_registry.get_user_prompt(
@@ -313,6 +320,8 @@ class BedrockAdapter(LLMPort):
             additional_context=additional_context,
             test_framework=test_framework,
         )
+        if custom_user_prompt is not None:
+            user_content = custom_user_prompt
 
         def call() -> dict[str, Any]:
             return self._invoke_chat(
@@ -326,6 +335,12 @@ class BedrockAdapter(LLMPort):
         try:
             result = with_retries(call, retries=self.max_retries)
             content = result.get("content", "")
+            if return_raw:
+                return {
+                    "raw": content,
+                    "usage": result.get("usage"),
+                    "metadata": result.get("metadata"),
+                }
 
             # Parse JSON response
             parsed = parse_json_response(content)

@@ -12,12 +12,13 @@ import threading
 from pathlib import Path
 from typing import Any
 
-from ....adapters.io.file_discovery import FileDiscoveryService
+from ....adapters.io.file_discovery import FileDiscoveryError, FileDiscoveryService
 from ....adapters.parsing.test_mapper import TestMapper
 from ....domain.models import TestGenerationPlan
 from ....ports.parser_port import ParserPort
 from ....ports.telemetry_port import TelemetryPort
 from .state_discovery import GenerateUseCaseError
+from .structure import ModulePathDeriver
 
 logger = logging.getLogger(__name__)
 
@@ -64,6 +65,52 @@ class PlanBuilder:
         # Map plan object id to plan_id for lookup (object_id -> plan_id)
         self._plan_object_to_id: dict[int, int] = {}
 
+    def _validate_candidate_path(self, file_path: Path) -> Path:
+        """Ensure candidate file is eligible based on discovery configuration."""
+
+        try:
+            resolved_path = file_path.resolve()
+        except OSError as exc:
+            raise GenerateUseCaseError(
+                f"Failed to resolve source file {file_path}: {exc}"
+            ) from exc
+
+        project_root = self._current_project_path
+        discovery_root: Path | None = None
+        if project_root is not None:
+            try:
+                discovery_root = project_root.resolve()
+            except OSError as exc:
+                raise GenerateUseCaseError(
+                    f"Failed to resolve project root {project_root}: {exc}"
+                ) from exc
+
+        try:
+            filtered = self._file_discovery.filter_existing_files(
+                [resolved_path], discovery_root
+            )
+        except FileDiscoveryError as exc:
+            raise GenerateUseCaseError(
+                f"File {resolved_path} failed discovery validation: {exc}"
+            ) from exc
+
+        if not filtered:
+            raise GenerateUseCaseError(
+                f"File {resolved_path} is excluded by discovery configuration"
+            )
+
+        resolved_path = Path(filtered[0])
+
+        if discovery_root is not None:
+            try:
+                resolved_path.relative_to(discovery_root)
+            except ValueError as exc:
+                raise GenerateUseCaseError(
+                    f"File {resolved_path} is outside the project root {discovery_root}"
+                ) from exc
+
+        return resolved_path
+
     def set_project_context(
         self, project_path: Path, test_files: list[str] | None = None
     ):
@@ -99,13 +146,15 @@ class PlanBuilder:
 
             try:
                 for file_path in discovered_files:
+                    validated_path = self._validate_candidate_path(file_path)
+
                     # Check if file needs test generation
                     needs_processing = self._file_needs_processing(
-                        file_path, coverage_data
+                        validated_path, coverage_data
                     )
 
                     if needs_processing:
-                        files_to_process.append(file_path)
+                        files_to_process.append(validated_path)
 
                 span.set_attribute("files_selected", len(files_to_process))
                 return files_to_process
@@ -134,7 +183,8 @@ class PlanBuilder:
 
             try:
                 for file_path in files_to_process:
-                    plan = self._create_generation_plan_for_file(file_path)
+                    validated_path = self._validate_candidate_path(file_path)
+                    plan = self._create_generation_plan_for_file(validated_path)
                     if plan is not None:  # Only add valid plans
                         plans.append(plan)
 
@@ -342,6 +392,17 @@ class PlanBuilder:
             # Get current coverage for this file (simplified)
             coverage_before = None  # Would implement file-specific coverage lookup
 
+            module_path: str | None = None
+            try:
+                module_info = ModulePathDeriver.derive_module_path(
+                    file_path, self._current_project_path
+                )
+                module_path = module_info.get("module_path")
+            except Exception as module_error:
+                logger.debug(
+                    "Module path derivation failed for %s: %s", file_path, module_error
+                )
+
             # Create unique plan ID and increment counter
             with self._cache_lock:
                 PlanBuilder._plan_counter += 1
@@ -351,6 +412,9 @@ class PlanBuilder:
                 elements_to_test=elements,
                 existing_tests=existing_tests,
                 coverage_before=coverage_before,
+                file_path=file_path,
+                project_root=self._current_project_path,
+                module_path=module_path,
             )
 
             # Record source file path and plan object mapping for this plan

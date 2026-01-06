@@ -59,6 +59,7 @@ class RefineAdapter:
         self.reject_identical = guardrails.get("reject_identical", True)
         self.validate_syntax = guardrails.get("validate_syntax", True)
         self.format_on_refine = guardrails.get("format_on_refine", True)
+        self.iteration_timeout_sec = float(self.config.iteration_timeout_sec)
 
     def refine_from_failures(
         self,
@@ -119,6 +120,7 @@ class RefineAdapter:
 
         for iteration in range(1, max_iterations + 1):
             iteration_start_time = time.time()
+            iteration_start_time = time.time()
             llm_made_changes = False
 
             # Check total timeout
@@ -144,6 +146,7 @@ class RefineAdapter:
                         try:
                             current_content = test_path.read_text(encoding="utf-8")
                             previous_content = current_content
+                            initial_mtime = current_mtime
                             continue
                         except Exception as e:
                             return self._build_standard_response(
@@ -338,6 +341,11 @@ class RefineAdapter:
                             "refined_content_length", len(refined_content)
                         )
 
+                try:
+                    initial_mtime = test_path.stat().st_mtime
+                except Exception:
+                    initial_mtime = None
+
             except Exception as e:
                 if self.telemetry_port:
                     with self.telemetry_port.create_child_span(
@@ -349,11 +357,12 @@ class RefineAdapter:
                     e, validation_result, current_content, "write", iteration
                 )
 
-            # Check iteration timeout (30 seconds per iteration max)
-            if time.time() - iteration_start_time > 30:
+            # Check iteration timeout (configurable per iteration)
+            if time.time() - iteration_start_time > self.iteration_timeout_sec:
                 logger.warning(
-                    "Iteration %d exceeded 30 second timeout, moving to next iteration",
+                    "Iteration %d exceeded %.1f second timeout, moving to next iteration",
                     iteration,
+                    self.iteration_timeout_sec,
                 )
 
             # Re-run pytest to verify fixes

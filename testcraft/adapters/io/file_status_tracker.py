@@ -8,11 +8,12 @@ UI system to provide live status updates with granular details.
 
 import asyncio
 import logging
+import os
 import time
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
-from threading import Lock
+from threading import Event, Lock, Thread
 from typing import Any
 
 from rich.layout import Layout
@@ -57,6 +58,19 @@ _VALID_TRANSITIONS = {
 }
 
 
+_DEFAULT_PROGRESS_BY_STATUS: dict[FileStatus, float] = {
+    FileStatus.WAITING: 0.0,
+    FileStatus.ANALYZING: 10.0,
+    FileStatus.GENERATING: 35.0,
+    FileStatus.WRITING: 55.0,
+    FileStatus.TESTING: 75.0,
+    FileStatus.REFINING: 90.0,
+    FileStatus.COMPLETED: 100.0,
+    FileStatus.FAILED: 100.0,
+    FileStatus.SKIPPED: 100.0,
+}
+
+
 @dataclass
 class FileProcessingState:
     """Detailed state information for a single file."""
@@ -91,6 +105,10 @@ class FileProcessingState:
     tests_generated: int = 0
     lines_of_code: int = 0
     coverage_improvement: float = 0.0
+
+    # Rollback tracking
+    rollbacks: int = 0
+    rollback_reasons: list[str] = field(default_factory=list)
 
     # Current operation details
     current_operation: str = ""
@@ -148,6 +166,8 @@ class FileStatusTracker:
         self._layout: Layout | None = None
         self._is_running = False
         self._display_task: asyncio.Task | None = None
+        self._display_thread: Thread | None = None
+        self._thread_stop_event: Event | None = None
 
         # Progress tracking
         self._overall_progress: Progress | None = None
@@ -168,6 +188,12 @@ class FileStatusTracker:
         self._consecutive_errors = 0
         self._last_error_time = 0
 
+        # Optional status filtering (env override)
+        filter_env = os.getenv("TESTCRAFT_STATUS_FILTER")
+        self._status_filter: set[FileStatus] | None = (
+            self._parse_status_filter(filter_env) if filter_env else None
+        )
+
     def initialize_files(self, file_paths: list[str]) -> None:
         """Initialize tracking for a list of files."""
         with self._lock:
@@ -186,6 +212,31 @@ class FileStatusTracker:
         """Validate if a state transition is allowed."""
         valid_next_states = _VALID_TRANSITIONS.get(current, set())
         return new in valid_next_states
+
+    def _parse_status_filter(self, filter_value: str | None) -> set[FileStatus] | None:
+        """Parse a comma-separated list of statuses into a filter set."""
+        if not filter_value:
+            return None
+        statuses: set[FileStatus] = set()
+        for token in filter_value.split(","):
+            normalized = token.strip().upper()
+            if not normalized:
+                continue
+            # Allow both enum names and value strings
+            try:
+                statuses.add(FileStatus[normalized])
+                continue
+            except KeyError:
+                pass
+            try:
+                statuses.add(FileStatus(normalized.lower()))
+            except ValueError:
+                self._logger.debug("Ignoring unknown status filter token: %s", token)
+        return statuses or None
+
+    def set_status_filter(self, statuses: set[FileStatus] | None) -> None:
+        """Update which statuses should be rendered in live tables."""
+        self._status_filter = statuses or None
 
     def _start_generation_phase(self, file_state: FileProcessingState) -> None:
         """Start the generation phase for a file."""
@@ -296,7 +347,7 @@ class FileStatusTracker:
             # No split for main - just files list
             self._layout["main"].update(Layout(name="files"))
         else:
-            # Classic two-column layout
+            # Classic two-column layout with dedicated insights rail
             self._layout.split_column(
                 Layout(name="header", size=3),
                 Layout(name="main", ratio=1),
@@ -305,7 +356,11 @@ class FileStatusTracker:
 
             self._layout["main"].split_row(
                 Layout(name="files", ratio=3),
-                Layout(name="stats", ratio=1),
+                Layout(name="sidebar", ratio=2),
+            )
+            self._layout["sidebar"].split_column(
+                Layout(name="stats", size=7),
+                Layout(name="insights", ratio=1),
             )
 
         # Initialize clean header
@@ -315,21 +370,44 @@ class FileStatusTracker:
 
         # Start live display with appropriate refresh rate
         refresh_rate = 2 if self.minimal_mode else 3
-        # In minimal mode, prefer transient live so nothing persists
         self._live_display = Live(
             self._layout,
             console=self.console,
             refresh_per_second=refresh_rate,
-            transient=True if self.minimal_mode else False,
+            transient=False,
         )
         self._live_display.start()
 
-        # Start update loop and store task reference
-        self._display_task = asyncio.create_task(self._update_display_loop())
+        # Start update loop using the active event loop when available, otherwise
+        # fall back to a background thread. This prevents runtime errors when the
+        # CLI invokes live tracking before an asyncio loop exists.
+        try:
+            loop = asyncio.get_running_loop()
+            if loop.is_running():
+                self._display_task = loop.create_task(self._update_display_loop())
+                self._display_thread = None
+                self._thread_stop_event = None
+                return
+        except RuntimeError:
+            # No running loop - we'll use a dedicated thread instead.
+            pass
+
+        self._thread_stop_event = Event()
+        self._display_thread = Thread(
+            target=self._run_update_loop_in_thread,
+            name="FileStatusTracker",
+            daemon=True,
+        )
+        self._display_thread.start()
 
     async def stop_live_tracking(self) -> None:
         """Stop the live status display."""
         self._is_running = False
+
+        try:
+            summary_snapshot = self._get_display_snapshot()
+        except Exception:
+            summary_snapshot = None
 
         # Cancel the display task if it exists
         if self._display_task and not self._display_task.done():
@@ -338,10 +416,25 @@ class FileStatusTracker:
                 await self._display_task
             except asyncio.CancelledError:
                 pass  # Expected when cancelling
+        self._display_task = None
+
+        # Signal background thread (if any) to stop and wait for it to exit.
+        if self._thread_stop_event:
+            self._thread_stop_event.set()
+        if self._display_thread and self._display_thread.is_alive():
+            try:
+                await asyncio.to_thread(self._display_thread.join, 1.0)
+            except Exception:
+                pass
+        self._display_thread = None
+        self._thread_stop_event = None
 
         if self._live_display:
             self._live_display.stop()
             self._live_display = None
+
+        if summary_snapshot:
+            self._render_summary_output(summary_snapshot)
 
     def update_file_status(
         self,
@@ -385,7 +478,14 @@ class FileStatusTracker:
             file_state.last_update = time.time()
             file_state.current_operation = operation
             file_state.current_step = step
-            file_state.progress_percentage = progress
+            if progress > 0.0:
+                file_state.progress_percentage = progress
+            else:
+                default_progress = self._default_progress_for(status)
+                if default_progress is not None:
+                    file_state.progress_percentage = max(
+                        file_state.progress_percentage, default_progress
+                    )
 
             # Update phase-specific information using new methods
             if status == FileStatus.GENERATING:
@@ -418,6 +518,21 @@ class FileStatusTracker:
             for key, value in kwargs.items():
                 if hasattr(file_state, key):
                     setattr(file_state, key, value)
+
+    def _default_progress_for(self, status: FileStatus) -> float | None:
+        """Return default progress percentage for a status if defined."""
+
+        return _DEFAULT_PROGRESS_BY_STATUS.get(status)
+
+    def _truncate_reason(self, text: str, limit: int = 120) -> str:
+        """Truncate rollback reasons for compact console summaries."""
+
+        clean_text = (text or "").strip()
+        if not clean_text:
+            return ""
+        if len(clean_text) <= limit:
+            return clean_text
+        return f"{clean_text[: limit - 3]}..."
 
     def update_generation_result(
         self,
@@ -453,6 +568,15 @@ class FileStatusTracker:
                 if errors:
                     file_state.test_errors.extend(errors)
 
+    def record_rollback(self, file_path: str, reason: str) -> None:
+        """Record that a rollback occurred for a file."""
+        with self._lock:
+            if file_path in self._files:
+                file_state = self._files[file_path]
+                file_state.rollbacks += 1
+                if reason:
+                    file_state.rollback_reasons.append(reason)
+
     def get_summary_stats(self) -> dict[str, Any]:
         """Get summary statistics for all files."""
         with self._lock:
@@ -470,6 +594,7 @@ class FileStatusTracker:
 
             total_tests = sum(f.tests_generated for f in self._files.values())
             total_pytest_runs = sum(f.pytest_runs for f in self._files.values())
+            total_rollbacks = sum(f.rollbacks for f in self._files.values())
 
             return {
                 "total_files": total_files,
@@ -481,6 +606,7 @@ class FileStatusTracker:
                 "avg_duration": avg_duration,
                 "total_tests_generated": total_tests,
                 "total_pytest_runs": total_pytest_runs,
+                "total_rollbacks": total_rollbacks,
                 "files_per_minute": (completed + failed) / max(total_duration / 60, 1),
             }
 
@@ -501,6 +627,8 @@ class FileStatusTracker:
             0.5 if self.minimal_mode else 0.33
         )  # 2 Hz for minimal, 3 Hz for classic
         while self._is_running:
+            if self._thread_stop_event and self._thread_stop_event.is_set():
+                break
             try:
                 self._update_display()
                 await asyncio.sleep(sleep_time)
@@ -517,6 +645,20 @@ class FileStatusTracker:
                     self._consecutive_errors += 1
                     self._last_error_time = int(current_time)
                 continue
+
+    def _run_update_loop_in_thread(self) -> None:
+        """Run the async update loop inside a dedicated thread."""
+
+        async def runner() -> None:
+            try:
+                await self._update_display_loop()
+            except asyncio.CancelledError:
+                pass
+
+        try:
+            asyncio.run(runner())
+        except Exception as exc:  # pragma: no cover - defensive logging
+            self._logger.debug("Live display thread exited: %s", exc)
 
     def _update_display(self) -> None:
         """Update the live display with current file status."""
@@ -544,6 +686,8 @@ class FileStatusTracker:
             if not self.minimal_mode:
                 stats_panel = self._create_stats_panel_from_snapshot(snapshot)
                 self._layout["stats"].update(stats_panel)
+                insights_panel = self._create_insights_panel_from_snapshot(snapshot)
+                self._layout["insights"].update(insights_panel)
 
             # Update footer with overall progress
             footer_content = self._create_footer_content_from_snapshot(snapshot)
@@ -565,15 +709,14 @@ class FileStatusTracker:
             border_style="border",
             show_lines=False,
             expand=True,
-            box=None,  # Remove box for cleaner look
+            box=None,
         )
 
-        # Use lowercase headers for consistency (especially in minimal mode)
-        table.add_column("file", style="primary", width=30)
-        table.add_column("status", justify="center", width=12)
-        table.add_column("progress", justify="center", width=15)
-        table.add_column("tests", justify="center", width=8)
-        table.add_column("time", justify="center", width=8)
+        table.add_column("file", style="primary", ratio=4, overflow="fold")
+        table.add_column("status", justify="left", ratio=3, overflow="fold")
+        table.add_column("progress", justify="left", ratio=3)
+        table.add_column("tests", justify="center", ratio=1)
+        table.add_column("time", justify="center", ratio=1)
 
         # Sort files by status and name
         files_to_show = []
@@ -584,9 +727,16 @@ class FileStatusTracker:
         # Show recent/active files first
         files_to_show.sort(key=lambda f: (f.is_complete(), f.last_update), reverse=True)
 
+        if self._status_filter:
+            files_to_show = [
+                state for state in files_to_show if state.status in self._status_filter
+            ]
+
         # Show fewer files in minimal mode (top 10), more in classic (12)
         max_files = 10 if self.minimal_mode else 12
+        displayed_any = False
         for file_state in files_to_show[:max_files]:
+            displayed_any = True
             file_name = Path(file_state.file_path).name
 
             # Minimal status display
@@ -594,22 +744,9 @@ class FileStatusTracker:
                 file_state.status
             )
 
-            # Clean progress indicator
-            if file_state.progress_percentage > 0:
-                progress_dots = "●" * int(
-                    file_state.progress_percentage / 25
-                )  # 4 dots max
-                progress_empty = "○" * (4 - len(progress_dots))
-                if file_state.status == FileStatus.COMPLETED:
-                    progress_display = "[success]●●●●[/]"
-                elif file_state.status == FileStatus.FAILED:
-                    progress_display = "[error]○○○○[/]"
-                else:
-                    progress_display = (
-                        f"[accent]{progress_dots}[/][muted]{progress_empty}[/]"
-                    )
-            else:
-                progress_display = "[muted]○○○○[/]"
+            progress_display = self._render_progress_bar(
+                file_state.progress_percentage / 100.0, file_state.status
+            )
 
             # Minimal tests display
             tests_display = (
@@ -617,6 +754,8 @@ class FileStatusTracker:
                 if file_state.tests_generated > 0
                 else "—"
             )
+            if file_state.pytest_runs:
+                tests_display = f"{tests_display} [{file_state.pytest_runs}×]"
 
             # Clean duration
             duration = file_state.get_duration()
@@ -626,12 +765,31 @@ class FileStatusTracker:
                 mins, secs = divmod(duration, 60)
                 duration_display = f"{int(mins)}m{secs:02.0f}s"
 
+            phase_hint = file_state.current_operation or file_state.current_step
+            if phase_hint:
+                status_text = f"{status_text} · {phase_hint}"
+            elif (
+                file_state.status in {FileStatus.TESTING, FileStatus.REFINING}
+                and file_state.pytest_runs
+            ):
+                status_text = f"{status_text} · {file_state.pytest_runs} runs"
+
             table.add_row(
                 file_name,
                 f"[{status_color}]{status_text}[/]",
                 progress_display,
                 tests_display,
                 f"[muted]{duration_display}[/]",
+            )
+
+        if not displayed_any:
+            filter_note = "matching filter" if self._status_filter else "available"
+            table.add_row(
+                f"[muted]No files {filter_note}[/]",
+                "",
+                "",
+                "",
+                "",
             )
 
         return table
@@ -648,6 +806,32 @@ class FileStatusTracker:
             table.add_column("file", style="primary")
             return table
 
+    def _render_progress_bar(self, progress: float, status: FileStatus) -> str:
+        """Render a 10-slot bar with percentage for the footer and tables."""
+        clamped = max(0.0, min(progress, 1.0))
+        slots = 10
+        filled = int(round(clamped * slots))
+        bar_filled = "█" * filled
+        bar_empty = "░" * (slots - filled)
+        if status == FileStatus.COMPLETED:
+            bar = "[success]" + ("█" * slots) + "[/]"
+        elif status == FileStatus.FAILED:
+            bar = "[error]" + ("░" * slots) + "[/]"
+        else:
+            bar = f"[accent]{bar_filled}[/][muted]{bar_empty}[/]"
+        return f"{bar} [muted]{clamped * 100:>3.0f}%[/]"
+
+    @staticmethod
+    def _latest_error_for_state(state: FileProcessingState) -> str | None:
+        """Extract the most relevant error message from a file state."""
+        if state.test_errors:
+            return state.test_errors[-1]
+        if state.generation_error:
+            return state.generation_error
+        if state.write_error:
+            return state.write_error
+        return None
+
     def _create_stats_panel_from_snapshot(self, snapshot: dict[str, Any]) -> Panel:
         """Create the clean, minimal statistics panel from snapshot data."""
         total_files = len(snapshot["files"])
@@ -657,19 +841,72 @@ class FileStatusTracker:
 
         total_tests = sum(f.tests_generated for f in snapshot["files"].values())
         success_rate = completed / max(total_files, 1)
+        elapsed = max(time.time() - snapshot["start_time"], 1.0)
+        throughput = (completed + failed) / (elapsed / 60.0)
 
         content_lines = [
             f"[success]done[/] {completed}",
             f"[error]failed[/] {failed}",
             f"[status_working]active[/] {in_progress}",
             "",
-            f"tests {total_tests}",
-            f"rate {success_rate:.0%}",
+            f"[primary]tests[/] {total_tests}",
+            f"[primary]rate[/] {success_rate:.0%}",
+            f"[primary]throughput[/] {throughput:.1f}/min",
         ]
+
+        if self._status_filter:
+            filter_names = ", ".join(
+                sorted(s.name.lower() for s in self._status_filter)
+            )
+            content_lines.append("")
+            content_lines.append(f"[muted]filter[/] {filter_names}")
 
         return Panel(
             "\n".join(content_lines),
             title="stats",
+            border_style="border",
+            padding=(1, 1),
+        )
+
+    def _create_insights_panel_from_snapshot(self, snapshot: dict[str, Any]) -> Panel:
+        """Highlight failing or stalled files to direct attention."""
+        now = time.time()
+        stalled_threshold = 120.0  # seconds without updates
+        stalled: list[tuple[float, FileProcessingState]] = []
+        failures: list[FileProcessingState] = []
+
+        for state in snapshot["files"].values():
+            if state.status == FileStatus.FAILED:
+                failures.append(state)
+            elif not state.is_complete():
+                if now - state.last_update > stalled_threshold:
+                    stalled.append((now - state.last_update, state))
+
+        lines: list[str] = []
+        if failures:
+            lines.append("[error]failed[/] files:")
+            for state in sorted(failures, key=lambda s: s.get_duration(), reverse=True)[
+                :3
+            ]:
+                reason = self._latest_error_for_state(state) or "no error info"
+                file_name = Path(state.file_path).name
+                lines.append(f"  {file_name} — {reason}")
+            lines.append("")
+
+        if stalled:
+            lines.append("[status_working]stalled[/] files:")
+            for _, state in sorted(stalled, key=lambda item: item[0], reverse=True)[:3]:
+                idle_time = now - state.last_update
+                file_name = Path(state.file_path).name
+                lines.append(f"  {file_name} — idle {idle_time:.0f}s")
+            lines.append("")
+
+        if not lines:
+            lines.append("[muted]All systems nominal.[/]")
+
+        return Panel(
+            "\n".join(line for line in lines if line is not None),
+            title="insights",
             border_style="border",
             padding=(1, 1),
         )
@@ -690,11 +927,12 @@ class FileStatusTracker:
 
         if total_files > 0:
             overall_progress = total_processed / total_files
-            # Simple progress dots - use 10 dots for minimal, 10 for classic too
-            dot_count = 10
-            progress_dots = "●" * int(overall_progress * dot_count)
-            progress_empty = "○" * (dot_count - len(progress_dots))
-            progress_text = f"[accent]{progress_dots}[/][muted]{progress_empty}[/] {total_processed}/{total_files}"
+            status_for_bar = (
+                FileStatus.COMPLETED
+                if total_processed == total_files
+                else FileStatus.TESTING
+            )
+            progress_text = f"{self._render_progress_bar(overall_progress, status_for_bar)} {total_processed}/{total_files}"
         else:
             progress_text = "[muted]starting...[/]"
 
@@ -705,7 +943,17 @@ class FileStatusTracker:
             mins, secs = divmod(elapsed, 60)
             time_text = f"{int(mins)}m{secs:02.0f}s"
 
-        footer_text = f"progress {progress_text}  •  {time_text}"
+        footer_parts = [f"progress {progress_text}", time_text]
+        if self._status_filter:
+            filter_names = ",".join(
+                s.name.lower()
+                for s in sorted(self._status_filter, key=lambda x: x.name)
+            )
+            footer_parts.append(f"filter {filter_names}")
+        else:
+            footer_parts.append("filter all (set TESTCRAFT_STATUS_FILTER)")
+
+        footer_text = "  •  ".join(footer_parts)
 
         return Panel(footer_text, border_style="border", padding=(0, 1), title=None)
 
@@ -733,6 +981,117 @@ class FileStatusTracker:
         }
 
         return status_map.get(status, ("unknown", "muted"))
+
+    def _render_summary_output(self, snapshot: dict[str, Any]) -> None:
+        """Print a concise recap once live tracking stops."""
+        total_files = len(snapshot["files"])
+        completed = snapshot["completed_count"]
+        failed = snapshot["failed_count"]
+        elapsed = time.time() - snapshot["start_time"]
+
+        def _format_elapsed(seconds: float) -> str:
+            if seconds < 1:
+                return f"{seconds * 1000:.0f}ms"
+            if seconds < 60:
+                return f"{seconds:.1f}s"
+            mins, secs = divmod(seconds, 60)
+            return f"{int(mins)}m{secs:02.0f}s"
+
+        states = list(snapshot["files"].values())
+        total_rollbacks = sum(state.rollbacks for state in states)
+        completed_states = [
+            state for state in states if state.status == FileStatus.COMPLETED
+        ]
+        completed_durations = [state.get_duration() for state in completed_states]
+        avg_duration = (
+            sum(completed_durations) / len(completed_durations)
+            if completed_durations
+            else 0.0
+        )
+        slowest_entry = (
+            max(completed_states, key=lambda s: s.get_duration())
+            if completed_states
+            else None
+        )
+
+        summary_parts = [f"done {completed}/{total_files}", f"failed {failed}"]
+        if total_rollbacks:
+            summary_parts.append(f"rollbacks {total_rollbacks}")
+        if avg_duration:
+            summary_parts.append(f"avg {_format_elapsed(avg_duration)}")
+        summary_parts.append(f"time {_format_elapsed(elapsed)}")
+        summary_line = " • ".join(summary_parts)
+
+        if self.minimal_mode:
+            self.console.print(summary_line)
+        else:
+            body_lines = [f"[success]{completed} completed[/]"]
+            if failed:
+                body_lines.append(f"[error]{failed} failed[/]")
+            in_progress = sum(
+                1 for f in snapshot["files"].values() if not f.is_complete()
+            )
+            if in_progress:
+                body_lines.append(f"[status_working]{in_progress} unfinished[/]")
+            body_lines.append(f"[muted]{_format_elapsed(elapsed)} elapsed[/]")
+            if avg_duration:
+                body_lines.append(
+                    f"[muted]{_format_elapsed(avg_duration)} avg per completed file[/]"
+                )
+            if slowest_entry:
+                body_lines.append(
+                    f"[muted]slowest {Path(slowest_entry.file_path).name} "
+                    f"{_format_elapsed(slowest_entry.get_duration())}[/]"
+                )
+            if total_rollbacks:
+                plural = "s" if total_rollbacks != 1 else ""
+                body_lines.append(
+                    f"[warning]{total_rollbacks} rollback{plural} recorded[/]"
+                )
+            panel = Panel(
+                "\n".join(body_lines),
+                title="[title]run summary[/]",
+                border_style="border_success",
+                padding=(1, 1),
+            )
+            self.console.print(panel)
+
+        if failed:
+            self.console.print("[error]Failures[/]:")
+            failures = [
+                state
+                for state in snapshot["files"].values()
+                if state.status == FileStatus.FAILED
+            ]
+            for state in sorted(failures, key=lambda s: s.get_duration(), reverse=True):
+                reason = self._latest_error_for_state(state) or "unknown error"
+                file_name = Path(state.file_path).name
+                self.console.print(f"  {file_name}: {reason}")
+        else:
+            self.console.print("[muted]No failures detected. Great job![/]")
+
+        if total_rollbacks:
+            self.console.print("[warning]Rollbacks[/]:")
+            rollback_states = [state for state in states if state.rollbacks]
+            for state in sorted(
+                rollback_states,
+                key=lambda s: (s.rollbacks, s.get_duration()),
+                reverse=True,
+            )[:5]:
+                latest_reason = (
+                    state.rollback_reasons[-1] if state.rollback_reasons else ""
+                )
+                summary_reason = self._truncate_reason(latest_reason)
+                plural = "s" if state.rollbacks != 1 else ""
+                self.console.print(
+                    f"  {Path(state.file_path).name}: {state.rollbacks} rollback{plural}"
+                    + (f" – {summary_reason}" if summary_reason else "")
+                )
+
+        if not self._status_filter:
+            self.console.print(
+                "[muted]Tip:[/] set [code]TESTCRAFT_STATUS_FILTER=active,failed[/] to focus the dashboard on critical files."
+            )
 
 
 # Context manager for easy usage

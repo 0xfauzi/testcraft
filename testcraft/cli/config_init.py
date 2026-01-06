@@ -34,10 +34,10 @@ class ConfigInitializer:
         output_path: Path | None = None,
     ) -> Path:
         """
-        Create a configuration file in the specified format.
+        Create a configuration file (TOML only).
 
         Args:
-            format_type: Format to use ('toml', 'yaml', 'json')
+            format_type: Ignored unless 'toml'. Other values are mapped to 'toml'.
             minimal: Whether to create minimal configuration
             output_path: Custom output path
 
@@ -45,16 +45,21 @@ class ConfigInitializer:
             Path to created configuration file
         """
         try:
+            # Enforce TOML-only generation
+            requested_format = (format_type or "toml").lower()
+            if requested_format != "toml":
+                logger.info(
+                    "init-config: requested format '%s' is not supported; generating TOML instead",
+                    requested_format,
+                )
+            format_type = "toml"
+
             # Determine output file path
             if output_path:
                 config_file = output_path
             else:
-                extensions = {
-                    "toml": ".testcraft.toml",
-                    "yaml": ".testcraft.yml",
-                    "json": ".testcraft.json",
-                }
-                config_file = Path(extensions.get(format_type, ".testcraft.toml"))
+                extensions = {"toml": ".testcraft.toml"}
+                config_file = Path(extensions[format_type])
 
             # Check if file already exists
             if config_file.exists():
@@ -67,11 +72,11 @@ class ConfigInitializer:
                     )
                     return config_file
 
-            # Generate configuration content
+            # Generate configuration content (TOML only)
             if minimal:
-                content = self._generate_minimal_config(format_type)
+                content = self._generate_minimal_config("toml")
             else:
-                content = self._generate_comprehensive_config(format_type)
+                content = self._generate_comprehensive_config("toml")
 
             # Write configuration file
             with open(config_file, "w", encoding="utf-8") as f:
@@ -137,15 +142,9 @@ class ConfigInitializer:
         return self._format_config_content(minimal_config, format_type)
 
     def _generate_comprehensive_config(self, format_type: str) -> str:
-        """Generate comprehensive configuration with comments from current models."""
-        if format_type == "toml":
-            return self._generate_dynamic_toml_config()
-        elif format_type == "yaml":
-            return self._generate_dynamic_yaml_config()
-        elif format_type == "json":
-            return self._generate_dynamic_json_config()
-        else:
-            raise ConfigInitializationError(f"Unsupported format: {format_type}")
+        """Generate comprehensive configuration with comments from current models (TOML only)."""
+        # Always generate TOML; other formats are deprecated for init-config
+        return self._generate_dynamic_toml_config()
 
     def _generate_toml_config(self) -> str:
         """DEPRECATED: Generate comprehensive TOML configuration with all available options.
@@ -535,6 +534,19 @@ prompt_version = ""               # Specific prompt version (empty = latest)
             config, toml_lines, "", "TestCraft Configuration"
         )
 
+        # Add notes for currently unused/deprecated knobs to keep template truthful
+        toml_lines.extend(
+            [
+                "",
+                "# Notes:",
+                "# - generation.merge.strategy/formatter are currently non-functional; writer performs AST merge/formatting.",
+                "# - generation.test_runner.* is not invoked by the generation pipeline.",
+                "# - coverage.minimum_* and coverage.regenerate_if_below are not enforced unless coverage command uses them;",
+                "#   coverage use case records them for reporting and suggestions only.",
+                "# - telemetry.backend/enabled control adapter selection; when disabled, NoOp is used.",
+            ]
+        )
+
         # Add credential information at the end
         toml_lines.extend(
             [
@@ -686,9 +698,21 @@ prompt_version = ""               # Specific prompt version (empty = latest)
                     # Format dict properly for TOML
                     dict_items = []
                     for k, v in field_value.items():
+                        # Skip None values in inline dicts (TOML doesn't support null)
+                        if v is None:
+                            continue
                         if isinstance(v, str):
                             escaped_v = v.replace('"', '\\"')
                             dict_items.append(f'"{k}" = "{escaped_v}"')
+                        elif isinstance(v, bool):
+                            # TOML requires lowercase true/false
+                            dict_items.append(f'"{k}" = {str(v).lower()}')
+                        elif isinstance(v, dict):
+                            # Nested dict in inline table - convert to empty if empty
+                            if v:
+                                # Skip complex nested dicts in inline tables
+                                continue
+                            dict_items.append(f'"{k}" = {{}}')
                         else:
                             dict_items.append(f'"{k}" = {v}')
                     if dict_items:

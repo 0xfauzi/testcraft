@@ -5,9 +5,7 @@ This module defines the interface for user interface operations,
 including progress display and results presentation.
 """
 
-from typing import Any
-
-from typing_extensions import Protocol
+from typing import Any, Protocol
 
 
 class UIPort(Protocol):

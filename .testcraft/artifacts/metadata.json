@@ -1,0 +1,41 @@
+{
+  "generation_plan_20251020_081836_016683": {
+    "artifact_id": "generation_plan_20251020_081836_016683",
+    "artifact_type": "generation_plan",
+    "timestamp": "2025-10-20T08:18:36.016853+00:00",
+    "file_path": "generation_plan/generation_plan_20251020_081836_016683.json",
+    "size_bytes": 705,
+    "tags": [
+      "planning",
+      "accepted"
+    ],
+    "description": "Plan for module",
+    "expires_at": null
+  },
+  "generation_plan_20251020_082311_830500": {
+    "artifact_id": "generation_plan_20251020_082311_830500",
+    "artifact_type": "generation_plan",
+    "timestamp": "2025-10-20T08:23:11.830690+00:00",
+    "file_path": "generation_plan/generation_plan_20251020_082311_830500.json",
+    "size_bytes": 705,
+    "tags": [
+      "planning",
+      "accepted"
+    ],
+    "description": "Plan for module",
+    "expires_at": null
+  },
+  "generation_plan_20251020_083310_780492": {
+    "artifact_id": "generation_plan_20251020_083310_780492",
+    "artifact_type": "generation_plan",
+    "timestamp": "2025-10-20T08:33:10.780709+00:00",
+    "file_path": "generation_plan/generation_plan_20251020_083310_780492.json",
+    "size_bytes": 705,
+    "tags": [
+      "planning",
+      "accepted"
+    ],
+    "description": "Plan for module",
+    "expires_at": null
+  }
+}

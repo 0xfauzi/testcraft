@@ -66,7 +66,7 @@ class BatchExecutor:
 
                 # Initialize all files in status tracker
                 if self._status_tracker:
-                    file_paths = [plan.file_path for plan in plans]
+                    file_paths = [str(plan.file_path) for plan in plans]
                     for file_path in file_paths:
                         async with self._lock:
                             self._status_tracker.update_file_status(
@@ -86,7 +86,7 @@ class BatchExecutor:
                         for plan in batch:
                             async with self._lock:
                                 self._status_tracker.update_file_status(
-                                    plan.file_path,
+                                    str(plan.file_path),
                                     FileStatus.ANALYZING,
                                     operation="Starting generation",
                                     step="Preparing for LLM generation",
@@ -105,7 +105,7 @@ class BatchExecutor:
                             plan = batch[j]
                             if hasattr(result, "success") and result.success:
                                 self._status_tracker.update_generation_result(
-                                    plan.file_path,
+                                    str(plan.file_path),
                                     success=True,
                                     tests_generated=getattr(
                                         result, "tests_generated", 0
@@ -119,7 +119,7 @@ class BatchExecutor:
                                     result, "error_message", "Generation failed"
                                 )
                                 self._status_tracker.update_generation_result(
-                                    plan.file_path, success=False, error=error_msg
+                                    str(plan.file_path), success=False, error=error_msg
                                 )
 
                 span.set_attribute("total_generated", len(generation_results))
@@ -149,7 +149,7 @@ class BatchExecutor:
                     for plan in plans:
                         async with self._lock:
                             self._status_tracker.update_file_status(
-                                plan.file_path,
+                                str(plan.file_path),
                                 FileStatus.FAILED,
                                 operation="Generation failed",
                                 step=f"Batch execution error: {str(e)}",
@@ -179,7 +179,7 @@ class BatchExecutor:
             if self._status_tracker:
                 async with self._lock:
                     self._status_tracker.update_file_status(
-                        plan.file_path,
+                        str(plan.file_path),
                         FileStatus.GENERATING,
                         operation="LLM Generation",
                         step="Sending request to language model",
@@ -200,7 +200,7 @@ class BatchExecutor:
                 logger.warning("Generation failed for plan %d: %s", i, result)
                 generation_results.append(
                     GenerationResult(
-                        file_path=batch[i].file_path,
+                        file_path=str(batch[i].file_path),
                         content=None,
                         success=False,
                         error_message=str(result),
@@ -218,7 +218,7 @@ class BatchExecutor:
 
                         generation_results.append(
                             GenerationResult(
-                                file_path=batch[i].file_path,
+                                file_path=str(batch[i].file_path),
                                 content=result.get("content"),
                                 success=success_flag,
                                 error_message=error_message,
@@ -232,7 +232,7 @@ class BatchExecutor:
                         )
                         generation_results.append(
                             GenerationResult(
-                                file_path=batch[i].file_path,
+                                file_path=str(batch[i].file_path),
                                 content=None,
                                 success=False,
                                 error_message="Invalid generation result structure",
@@ -262,7 +262,7 @@ class BatchExecutor:
             if self._status_tracker:
                 async with self._lock:
                     self._status_tracker.update_file_status(
-                        plan.file_path,
+                        str(plan.file_path),
                         FileStatus.GENERATING,
                         operation="LLM Processing",
                         step="Generating test code with AI",
@@ -276,7 +276,7 @@ class BatchExecutor:
                 async with self._lock:
                     if hasattr(result, "success") and result.success:
                         self._status_tracker.update_file_status(
-                            plan.file_path,
+                            str(plan.file_path),
                             FileStatus.WRITING,
                             operation="Writing Tests",
                             step="Saving generated test file",
@@ -284,7 +284,7 @@ class BatchExecutor:
                         )
                     else:
                         self._status_tracker.update_file_status(
-                            plan.file_path,
+                            str(plan.file_path),
                             FileStatus.FAILED,
                             operation="Generation Failed",
                             step=getattr(result, "error_message", "Unknown error"),
@@ -297,7 +297,7 @@ class BatchExecutor:
             if self._status_tracker:
                 async with self._lock:
                     self._status_tracker.update_file_status(
-                        plan.file_path,
+                        str(plan.file_path),
                         FileStatus.FAILED,
                         operation="Generation Error",
                         step=f"Exception: {str(e)}",

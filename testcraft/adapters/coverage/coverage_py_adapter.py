@@ -8,7 +8,9 @@ following established adapter patterns from the LLM adapters.
 from __future__ import annotations
 
 import logging
-import subprocess
+import os
+import time
+import warnings
 from pathlib import Path
 from typing import Any
 
@@ -45,6 +47,12 @@ class CoveragePyAdapter:
             import coverage
 
             self._coverage_module = coverage
+            try:
+                from coverage.exceptions import CoverageWarning
+
+                self._coverage_warning = CoverageWarning
+            except Exception:  # pragma: no cover - defensive fallback
+                self._coverage_warning = None
         except ImportError as e:
             raise ImportError(
                 "coverage.py is required but not installed. "
@@ -52,6 +60,8 @@ class CoveragePyAdapter:
             ) from e
 
         self._last_method = "coverage.py"
+        self._last_data_file: str | None = None
+        self._last_source_dirs: list[str] = []
 
     def measure_coverage(
         self,
@@ -60,15 +70,20 @@ class CoveragePyAdapter:
         **kwargs: Any,
     ) -> dict[str, CoverageResult]:
         """
-        Measure coverage for source files by running tests.
+        Measure coverage for source files by running tests in-process.
 
-        Uses subprocess to run pytest with coverage enabled.
-        Follows pytest_refiner.py execution patterns.
+        Runs pytest.main() within the same process while coverage is active,
+        ensuring accurate coverage data capture. Supports aggregation across runs.
 
         Args:
             source_files: List of source file paths to measure
-            test_files: Optional list of test files to run
-            **kwargs: Additional parameters (timeout, config overrides, etc.)
+            test_files: Optional list of test files to run (None = no test execution)
+            **kwargs: Additional parameters:
+                - include: Source directories for coverage measurement
+                - omit: Patterns to exclude from coverage
+                - data_dir: Directory for coverage data files
+                - aggregate: Combine coverage across multiple runs
+                - pytest_args: Arguments for pytest execution
 
         Returns:
             Dictionary mapping file paths to CoverageResult objects
@@ -81,13 +96,28 @@ class CoveragePyAdapter:
             # Resolve all paths upfront
             resolved_sources = [str(Path(f).resolve()) for f in source_files]
 
+            # Determine configuration from kwargs
+            include_dirs: list[str] | None = kwargs.get("include")
+            omit_patterns: list[str] | None = kwargs.get("omit")
+            data_dir_str: str = kwargs.get("data_dir", ".artifacts/coverage")
+            aggregate: bool = bool(kwargs.get("aggregate", False))
+            pytest_args: list[str] = kwargs.get(
+                "pytest_args", ["-xvs"]
+            )  # can be extended by CLI
+
+            data_dir = Path(data_dir_str)
+            data_dir.mkdir(parents=True, exist_ok=True)
+            data_file = str(data_dir / f".coverage.{int(time.time())}")
+
             # Determine source directories (for coverage.py source parameter)
             source_dirs = list({str(Path(f).parent) for f in resolved_sources})
+            if include_dirs:
+                # Allow caller to override sources explicitly
+                source_dirs = list({str(Path(p).resolve()) for p in include_dirs})
 
-            # Create coverage instance with proper configuration
-            cov = self._coverage_module.Coverage(
-                source=source_dirs,
-                omit=[
+            # Default omit patterns if not provided
+            if not omit_patterns:
+                omit_patterns = [
                     "*/tests/*",
                     "*/test_*.py",
                     "*_test.py",
@@ -95,51 +125,81 @@ class CoveragePyAdapter:
                     "*/venv/*",
                     "*/site-packages/*",
                     "*/.tox/*",
-                ],
+                ]
+
+            # Create coverage instance with proper configuration
+            cov = self._coverage_module.Coverage(
+                data_file=data_file,
+                source=source_dirs,
+                omit=omit_patterns,
                 branch=True,  # Enable branch coverage
                 config_file=False,  # Don't load .coveragerc to avoid conflicts
             )
 
             # Start coverage measurement
-            cov.start()
+            with warnings.catch_warnings():
+                if self._coverage_warning:
+                    warnings.simplefilter("ignore", self._coverage_warning)
+                cov.start()
 
-            # Run pytest if test files provided (follows pytest_refiner pattern)
-            if test_files:
+                # Run pytest within the same process so coverage captures executed code
+                if test_files is not None:
+                    try:
+                        import pytest  # type: ignore
+
+                        test_paths = [str(Path(f).resolve()) for f in test_files]
+                        if test_paths:
+                            # Compose pytest args (user-provided args come after our defaults)
+                            args = test_paths + pytest_args
+                            ret = pytest.main(args)
+                            logger.debug(f"Pytest exit code: {ret}")
+                    except ImportError as e:
+                        logger.warning(f"pytest is not available: {e}")
+                    except Exception as e:
+                        logger.warning(f"Test execution failed: {e}")
+
+                # Stop and save coverage data for this run
+                cov.stop()
+                cov.save()
+
+            # Optionally aggregate prior runs
+            analyzer_data_file = data_file
+            if aggregate:
                 try:
-                    # Run tests with subprocess (isolated execution)
-                    test_paths = [str(Path(f).resolve()) for f in test_files]
-                    cmd = ["pytest", "-xvs"] + test_paths
+                    # Find all prior coverage data files (exclude current and combined)
+                    current_filename = Path(data_file).name
+                    existing = [
+                        str((data_dir / f).resolve())
+                        for f in os.listdir(data_dir)
+                        if f.startswith(".coverage")
+                        and f != current_filename
+                        and f != ".coverage.combined"
+                    ]
+                    # Include current run in aggregation
+                    existing.append(data_file)
 
-                    result = subprocess.run(
-                        cmd,
-                        capture_output=True,
-                        text=True,
-                        timeout=kwargs.get("timeout", 300),
-                    )
-
-                    logger.debug(f"Pytest exit code: {result.returncode}")
-
-                except subprocess.TimeoutExpired:
-                    logger.warning("Test execution timed out")
+                    if len(existing) > 1:
+                        # Multiple runs to aggregate
+                        combined_path = str(data_dir / ".coverage.combined")
+                        comb = self._coverage_module.Coverage(data_file=combined_path)
+                        comb.combine(existing, strict=False)
+                        comb.save()
+                        analyzer_data_file = combined_path
+                        logger.debug(f"Aggregated {len(existing)} coverage runs")
                 except Exception as e:
-                    logger.warning(f"Test execution failed: {e}")
+                    logger.warning(f"Coverage combine failed: {e}")
 
-            # Stop coverage measurement
-            cov.stop()
-            cov.save()
+            # Analyze results from the selected data file (current or combined)
+            analyzer = self._coverage_module.Coverage(data_file=analyzer_data_file)
+            analyzer.load()
 
-            # Build results dictionary
-            results = {}
+            results: dict[str, CoverageResult] = {}
             for source_file in resolved_sources:
                 try:
-                    # Get coverage analysis for this file
-                    analysis = cov.analysis2(source_file)
-
-                    # analysis returns: (filename, executed_lines, missing_lines, excluded_lines)
+                    analysis = analyzer.analysis2(source_file)
                     executed_lines = set(analysis[1]) if len(analysis) > 1 else set()
                     missing_lines = list(analysis[2]) if len(analysis) > 2 else []
 
-                    # Calculate line coverage
                     total_executable_lines = len(executed_lines) + len(missing_lines)
                     line_coverage = (
                         len(executed_lines) / total_executable_lines
@@ -147,11 +207,9 @@ class CoveragePyAdapter:
                         else 0.0
                     )
 
-                    # Get branch coverage
-                    branch_coverage = line_coverage * 0.85  # Conservative estimate
+                    branch_coverage = line_coverage * 0.85
                     try:
-                        # Get branch data if available
-                        branch_data = cov.get_data().arcs(source_file)
+                        branch_data = analyzer.get_data().arcs(source_file)
                         if branch_data:
                             executed_arcs: set[tuple[int, int]] = set(branch_data)
                             total_branches = len(branch_data)
@@ -165,9 +223,7 @@ class CoveragePyAdapter:
                         logger.debug(
                             f"Branch coverage unavailable for {source_file}: {e}"
                         )
-                        # Use estimate
 
-                    # Create CoverageResult (reusing domain model)
                     results[source_file] = CoverageResult(
                         line_coverage=line_coverage,
                         branch_coverage=branch_coverage,
@@ -178,18 +234,19 @@ class CoveragePyAdapter:
                     logger.warning(
                         f"Failed to get coverage analysis for {source_file}: {e}"
                     )
-                    # Return zero coverage on error (graceful degradation)
                     results[source_file] = CoverageResult(
                         line_coverage=0.0, branch_coverage=0.0, missing_lines=[]
                     )
+
+            # Record last used metadata for reporting
+            self._last_data_file = analyzer_data_file
+            self._last_source_dirs = source_dirs
 
             logger.debug(f"Successfully measured coverage for {len(results)} files")
             return results
 
         except Exception as e:
-            # Wrap external error (pattern from llm/common.py)
             logger.error(f"Coverage measurement failed: {e}")
-            # Return empty dict on failure (coverage_evaluator pattern line 71-78)
             return {}
 
     def get_coverage_summary(
@@ -286,8 +343,24 @@ class CoveragePyAdapter:
                 },
                 indent=2,
             )
-        elif output_format == "html":
-            report_content = self._generate_html_report(coverage_data, summary)
+        elif output_format == "xml":
+            # Generate coverage.py native XML report to file
+            xml_output = kwargs.get("xml_output")
+            data_dir_str: str = kwargs.get("data_dir", ".artifacts/coverage")
+            data_dir = Path(data_dir_str)
+            data_dir.mkdir(parents=True, exist_ok=True)
+            if xml_output is None:
+                xml_output = str(data_dir / "coverage.xml")
+
+            data_file: str | None = kwargs.get("data_file") or self._last_data_file
+            try:
+                cov = self._coverage_module.Coverage(data_file=data_file)
+                cov.load()
+                cov.xml_report(outfile=str(xml_output))
+                report_content = str(xml_output)
+            except Exception as e:
+                logger.warning(f"Failed to generate XML coverage report: {e}")
+                report_content = ""
         else:
             logger.warning(f"Unknown output format '{output_format}', using detailed")
             report_content = self._generate_detailed_report(coverage_data, summary)
@@ -400,54 +473,9 @@ class CoveragePyAdapter:
     def _generate_html_report(
         self, coverage_data: dict[str, CoverageResult], summary: dict[str, Any]
     ) -> str:
-        """Generate simple HTML report."""
-        html_rows = []
-        for file_path, result in sorted(coverage_data.items()):
-            color = (
-                "green"
-                if result.line_coverage >= 0.8
-                else "orange"
-                if result.line_coverage >= 0.5
-                else "red"
-            )
-            html_rows.append(
-                f'<tr style="color: {color}">'
-                f"<td>{Path(file_path).name}</td>"
-                f"<td>{result.line_coverage:.1%}</td>"
-                f"<td>{result.branch_coverage:.1%}</td>"
-                f"<td>{len(result.missing_lines)}</td>"
-                f"</tr>"
-            )
-
-        return f"""<!DOCTYPE html>
-<html>
-<head>
-    <title>Coverage Report</title>
-    <style>
-        body {{ font-family: monospace; margin: 20px; }}
-        table {{ border-collapse: collapse; width: 100%; }}
-        th, td {{ border: 1px solid #ddd; padding: 8px; text-align: left; }}
-        th {{ background-color: #f2f2f2; }}
-    </style>
-</head>
-<body>
-    <h1>Coverage Report</h1>
-    <p>Overall Line Coverage: {summary["overall_line_coverage"]:.1%}</p>
-    <p>Overall Branch Coverage: {summary["overall_branch_coverage"]:.1%}</p>
-    <p>Files Covered: {summary["files_covered"]}</p>
-
-    <h2>Per-File Coverage</h2>
-    <table>
-        <tr>
-            <th>File</th>
-            <th>Line Coverage</th>
-            <th>Branch Coverage</th>
-            <th>Missing Lines</th>
-        </tr>
-        {"".join(html_rows)}
-    </table>
-</body>
-</html>"""
+        """Deprecated: HTML output is not exposed via CLI (kept for internal use)."""
+        # Preserve existing method to avoid breaking imports; prefer XML via coverage.py
+        return self._generate_detailed_report(coverage_data, summary)
 
 
 class NoOpCoverageAdapter:

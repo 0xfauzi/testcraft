@@ -151,8 +151,11 @@ class EnhancedUIAdapter(RichUIAdapter):
         # Minimal mode: use ephemeral status only; Classic: use persistent progress
         if self.ui_style == UIStyle.MINIMAL:
             status = Status(
-                f"{operation_name}...", console=self.console, spinner="dots"
+                f"{operation_name}…",
+                console=self.console,
+                spinner="dots",
             )
+            timeline: list[tuple[float, str]] = []
         else:
             progress = Progress(
                 SpinnerColumn(),
@@ -172,21 +175,49 @@ class EnhancedUIAdapter(RichUIAdapter):
             )
 
         class OperationTracker:
-            def __init__(self, progress_instance, task_id, ui_adapter) -> None:
+            def __init__(
+                self,
+                progress_instance,
+                task_id,
+                ui_adapter,
+                *,
+                status_indicator: Status | None = None,
+                timeline_ref: list[tuple[float, str]] | None = None,
+                operation_start: float = 0.0,
+                total_steps_expected: int = 0,
+            ) -> None:
                 self.progress = progress_instance
                 self.task_id = task_id
                 self.ui = ui_adapter
                 self.current_step = 0
+                self.status_indicator = status_indicator
+                self.timeline = timeline_ref if timeline_ref is not None else []
+                self.operation_start = operation_start or time.time()
+                self.total_steps = total_steps_expected
+
+            def _update_status_message(self, message: str) -> None:
+                """Update minimal status spinner text safely."""
+                if not self.status_indicator:
+                    return
+                try:
+                    self.status_indicator.update(message)
+                except Exception:
+                    # Status update is best-effort; ignore rendering failures
+                    pass
 
             def advance_step(self, description: str = "", increment: int = 1):
                 """Advance to the next step with optional description."""
                 self.current_step += increment
                 if self.ui.ui_style == UIStyle.MINIMAL:
-                    # Update ephemeral status text only; no persisted progress line
+                    step_label = (
+                        description
+                        if description
+                        else f"Step {self.current_step}/{max(self.total_steps, 1)}"
+                    )
+                    timestamp = time.time()
                     if description:
-                        self.ui.console.log(
-                            f"{description}"
-                        ) if False else None  # no-op placeholder
+                        self.timeline.append((timestamp, description))
+                    self._update_status_message(f"{operation_name}: {step_label}")
                 else:
                     if description:
                         self.progress.update(
@@ -200,17 +231,30 @@ class EnhancedUIAdapter(RichUIAdapter):
                     self.progress.update(
                         self.task_id, description=f"[cyan]{description}[/]"
                     )
+                else:
+                    self._update_status_message(f"{operation_name}: {description}")
 
             def log_progress(self, message: str, level: str = "info"):
                 """Log progress with rich formatting."""
                 if hasattr(self.ui, "logger"):
                     log_func = getattr(self.ui.logger, level, self.ui.logger.info)
                     log_func(f"[bold cyan]{operation_name}:[/] {message}")
+                if self.ui.ui_style == UIStyle.MINIMAL:
+                    timestamp = time.time()
+                    self.timeline.append((timestamp, message))
 
         try:
             if self.ui_style == UIStyle.MINIMAL:
                 with status:
-                    tracker = OperationTracker(None, None, self)
+                    tracker = OperationTracker(
+                        None,
+                        None,
+                        self,
+                        status_indicator=status,
+                        timeline_ref=timeline,
+                        operation_start=self._operation_start_times[operation_name],
+                        total_steps_expected=total_steps,
+                    )
                     yield tracker
                     # Status is transient; nothing persisted
                     duration = time.time() - self._operation_start_times[operation_name]
@@ -219,6 +263,10 @@ class EnhancedUIAdapter(RichUIAdapter):
                         "steps": total_steps,
                         "avg_step_time": duration / max(total_steps, 1),
                     }
+                    if tracker.timeline:
+                        self._render_minimal_timeline(
+                            operation_name, tracker.timeline, tracker.operation_start
+                        )
             else:
                 with progress:
                     tracker = OperationTracker(progress, main_task, self)
@@ -261,6 +309,29 @@ class EnhancedUIAdapter(RichUIAdapter):
     ):
         """Display a clean, minimal table showing file processing progress."""
 
+        def _clean_phase_hint(raw: Any) -> str | None:
+            if not raw:
+                return None
+            text = str(raw).strip()
+            return text if text else None
+
+        def _format_percentage(value: float) -> str:
+            return f"{max(0.0, min(value, 1.0)) * 100:>3.0f}%"
+
+        def _render_progress_bar(value: float, status: str) -> str:
+            clamped = max(0.0, min(value, 1.0))
+            slots = 10
+            filled = int(round(clamped * slots))
+            bar = "█" * filled
+            empty = "░" * (slots - filled)
+            if status == "completed":
+                bar = "[success]" + ("█" * slots) + "[/]"
+            elif status == "failed":
+                bar = "[error]" + ("░" * slots) + "[/]"
+            else:
+                bar = f"[accent]{bar}[/][muted]{empty}[/]"
+            return f"{bar} [muted]{_format_percentage(clamped)}[/]"
+
         def _create_and_display_table():
             # Input validation
             if not isinstance(files_data, list):
@@ -273,6 +344,7 @@ class EnhancedUIAdapter(RichUIAdapter):
             if not files_data:
                 return  # Nothing to display
 
+            console_width = getattr(self.console.size, "width", 120)
             table = Table(
                 title=f"[title]{title}[/]",
                 show_header=True,
@@ -282,14 +354,22 @@ class EnhancedUIAdapter(RichUIAdapter):
                 show_lines=False,
                 expand=True,
                 box=None,  # Remove box for cleaner look
+                pad_edge=False,
             )
 
-            # Minimal columns
-            table.add_column("File", style="primary", width=35)
-            table.add_column("Status", justify="center", width=12)
-            table.add_column("Progress", justify="center", width=15)
-            table.add_column("Tests", justify="center", width=8)
-            table.add_column("Time", justify="center", width=8)
+            # Responsive columns (use ratios rather than fixed widths)
+            max_file_width = max(24, console_width - 80)
+            table.add_column(
+                "File",
+                style="primary",
+                ratio=5,
+                overflow="fold",
+                max_width=max_file_width,
+            )
+            table.add_column("Status", justify="left", ratio=4, overflow="fold")
+            table.add_column("Progress", justify="left", ratio=4)
+            table.add_column("Tests", justify="center", ratio=1)
+            table.add_column("Time", justify="center", ratio=1)
 
             for file_data in files_data:
                 # Defensive dict access with validation
@@ -316,21 +396,8 @@ class EnhancedUIAdapter(RichUIAdapter):
                 else:
                     status_display = "[muted]waiting[/]"
 
-                # Simple progress dots
-                progress_val = file_data.get("progress", 0.0)
-                if status == "completed":
-                    progress_display = "[success]●●●●[/]"
-                elif status == "failed":
-                    progress_display = "[error]○○○○[/]"
-                elif progress_val > 0:
-                    dots = min(
-                        4, max(0, int(progress_val * 4))
-                    )  # 4 dots max, ensure 0-4 range
-                    filled = "●" * dots
-                    empty = "○" * (4 - dots)
-                    progress_display = f"[accent]{filled}[/][muted]{empty}[/]"
-                else:
-                    progress_display = "[muted]○○○○[/]"
+                progress_val = float(file_data.get("progress", 0.0) or 0.0)
+                progress_display = _render_progress_bar(progress_val, status)
 
                 # Minimal tests display
                 tests_count = file_data.get("tests_generated", 0)
@@ -347,6 +414,12 @@ class EnhancedUIAdapter(RichUIAdapter):
                 else:
                     duration_display = "—"
 
+                phase_hint = _clean_phase_hint(
+                    file_data.get("phase")
+                ) or _clean_phase_hint(file_data.get("current_operation"))
+                if phase_hint:
+                    status_display = f"{status_display} [muted]· {phase_hint}[/]"
+
                 table.add_row(
                     file_name,
                     status_display,
@@ -359,6 +432,30 @@ class EnhancedUIAdapter(RichUIAdapter):
 
         # Wrap the entire operation in safe_execute
         self._safe_execute("display_file_progress_table", _create_and_display_table)
+
+    def _render_minimal_timeline(
+        self,
+        operation_name: str,
+        events: list[tuple[float, str]],
+        start_time: float,
+    ) -> None:
+        """Render a concise timeline for minimal terminals after operations finish."""
+        if not events:
+            return
+        baseline = start_time if start_time else events[0][0]
+        lines = []
+        for timestamp, description in events:
+            delta = max(0.0, timestamp - baseline)
+            lines.append(f"[muted]{delta:>5.1f}s[/] {description}")
+
+        timeline_body = "\n".join(lines)
+        panel = Panel(
+            timeline_body,
+            title=f"[title]{operation_name.lower()} timeline[/]",
+            border_style="border",
+            padding=(0, 1),
+        )
+        self.console.print(panel)
 
     def display_metrics_panel(
         self, metrics: dict[str, Any], title: str = "Performance Metrics"
@@ -436,23 +533,16 @@ class EnhancedUIAdapter(RichUIAdapter):
             if not isinstance(summary_data, dict):
                 return
 
-            # Simple success message
-            main_message = summary_data.get(
-                "message", "Operation completed successfully!"
-            )
-            self.display_success(main_message, "success")
+            message = summary_data.get("message") or "Operation completed successfully!"
+            self.display_success(message, "Success")
 
-            # Minimal metrics display
-            if "metrics" in summary_data:
-                metrics = summary_data.get("metrics")
-                if isinstance(metrics, dict):
-                    self.display_metrics_panel(metrics, "metrics")
+            metrics_dict = summary_data.get("metrics")
+            if isinstance(metrics_dict, dict) and metrics_dict:
+                self._render_success_narrative(summary_data, metrics_dict)
 
-            # Clean file results if available
-            if "files_processed" in summary_data:
-                files_processed = summary_data.get("files_processed")
-                if isinstance(files_processed, list):
-                    self.display_file_progress_table(files_processed, "results")
+            files_processed = summary_data.get("files_processed")
+            if isinstance(files_processed, list) and files_processed:
+                self.display_file_progress_table(files_processed, "results")
 
         self._safe_execute("display_success_summary", _create_and_display_summary)
 
@@ -463,6 +553,91 @@ class EnhancedUIAdapter(RichUIAdapter):
         else:
             # Return self for classic rendering using existing methods
             return self
+
+    def _render_success_narrative(
+        self, summary_data: dict[str, Any], metrics: dict[str, Any]
+    ) -> None:
+        """Render a narrative recap of the generation workflow."""
+
+        def _format_duration(seconds: float | None) -> str:
+            if seconds is None:
+                return ""
+            if seconds < 60:
+                return f"{seconds:.1f}s"
+            mins, secs = divmod(seconds, 60)
+            return f"{int(mins)}m{secs:.0f}s"
+
+        header_parts: list[str] = []
+        files_processed = summary_data.get("files_processed")
+        if isinstance(files_processed, list):
+            header_parts.append(f"{len(files_processed)} files")
+
+        total_tests = summary_data.get("tests_generated")
+        if total_tests is None and isinstance(files_processed, list):
+            total_tests = sum(
+                int(item.get("tests_generated", 0))
+                for item in files_processed
+                if isinstance(item, dict)
+            )
+        if isinstance(total_tests, (int, float)):
+            header_parts.append(f"{int(total_tests)} tests")
+
+        coverage_delta = (summary_data.get("coverage_delta") or {}).get(
+            "line_coverage_delta"
+        )
+        if isinstance(coverage_delta, (int, float)) and coverage_delta:
+            header_parts.append(f"Δcov {coverage_delta:+.1%}")
+
+        stage_lines: list[str] = []
+        total_duration = summary_data.get("total_duration")
+        for index, (stage_name, stage_metrics) in enumerate(metrics.items(), start=1):
+            if not isinstance(stage_metrics, dict):
+                continue
+            pretty_name = stage_name.replace("_", " ").title()
+            stage_parts: list[str] = []
+            duration = stage_metrics.get("duration")
+            if isinstance(duration, (int, float)):
+                total_duration = (
+                    total_duration + duration if total_duration else duration
+                )
+                stage_parts.append(_format_duration(float(duration)))
+            items = stage_metrics.get("items_processed")
+            if isinstance(items, (int, float)):
+                stage_parts.append(f"{int(items)} items")
+            success_rate = stage_metrics.get("success_rate")
+            if isinstance(success_rate, (int, float)):
+                stage_parts.append(f"{success_rate:.0%} success")
+            extra = stage_metrics.get("notes")
+            if extra:
+                stage_parts.append(str(extra))
+
+            metrics_line = " • ".join(part for part in stage_parts if part)
+            if metrics_line:
+                stage_lines.append(
+                    f"[primary]{index}. {pretty_name}[/] — {metrics_line}"
+                )
+            else:
+                stage_lines.append(f"[primary]{index}. {pretty_name}[/]")
+
+        if stage_lines:
+            header_text = " • ".join(header_parts)
+            if total_duration:
+                header_text = (
+                    f"{header_text} • {_format_duration(float(total_duration))}"
+                    if header_text
+                    else _format_duration(float(total_duration))
+                )
+            body = "\n".join(stage_lines)
+            if header_text:
+                body = f"[muted]{header_text}[/]\n{body}"
+
+            panel = Panel(
+                body,
+                title="[title]workflow recap[/]",
+                border_style="border_success",
+                padding=(1, 1),
+            )
+            self.console.print(panel)
 
 
 class MinimalRenderer:
@@ -524,6 +699,12 @@ class MinimalRenderer:
             # Determine final status
             final_success = success and refine_success
 
+            error_message = None
+            if hasattr(gen_result, "error_message"):
+                error_message = gen_result.error_message
+            else:
+                error_message = gen_result.get("error_message")
+
             file_data = {
                 "file_path": file_path,
                 "status": "completed" if final_success else "failed",
@@ -532,13 +713,19 @@ class MinimalRenderer:
                 if refine_result
                 else (5 if success else 0),
                 "duration": refine_result.get("duration", 0) if refine_result else 0,
+                "coverage": refine_result.get("final_coverage")
+                if refine_result
+                else None,
+                "success": final_success,
+                "error": error_message or refine_result.get("error")
+                if refine_result
+                else None,
             }
             files_data.append(file_data)
 
-        # Compact table with no title, lowercase headers, minimal styling
-        # Only show table for multi-file runs; single-file stays summary-only
-        if files_data and len(files_data) > 1:
+        if files_data:
             self._render_compact_table(files_data, console)
+            self._render_file_hints(files_data, console)
 
     def _render_compact_table(self, files_data: list[dict[str, Any]], console: Console):
         """Render a compact table with minimal styling."""
@@ -556,12 +743,13 @@ class MinimalRenderer:
             # For table creation, just return early on error since it's not critical
             return
 
-        # Lowercase headers
-        table.add_column("file", style="primary", width=35)
-        table.add_column("status", justify="center", width=12)
-        table.add_column("progress", justify="center", width=15)
-        table.add_column("tests", justify="center", width=8)
-        table.add_column("time", justify="center", width=8)
+        # Lowercase headers with responsive sizing
+        table.add_column("file", style="primary", ratio=5, overflow="fold")
+        table.add_column("status", justify="left", ratio=3, overflow="fold")
+        table.add_column("progress", justify="left", ratio=4)
+        table.add_column("tests", justify="center", ratio=1)
+        table.add_column("cov", justify="center", ratio=1)
+        table.add_column("time", justify="center", ratio=1)
 
         for file_data in files_data:
             # Defensive dict access with validation
@@ -588,25 +776,18 @@ class MinimalRenderer:
             else:
                 status_display = "[muted]waiting[/]"
 
-            # Simple progress dots (4 dots max)
-            progress_val = file_data.get("progress", 0.0)
-            if status == "completed":
-                progress_display = "[success]●●●●[/]"
-            elif status == "failed":
-                progress_display = "[error]○○○○[/]"
-            elif progress_val > 0:
-                dots = min(
-                    4, max(0, int(progress_val * 4))
-                )  # 4 dots max, ensure 0-4 range
-                filled = "●" * dots
-                empty = "○" * (4 - dots)
-                progress_display = f"[accent]{filled}[/][muted]{empty}[/]"
-            else:
-                progress_display = "[muted]○○○○[/]"
+            progress_val = float(file_data.get("progress", 0.0) or 0.0)
+            progress_display = self._format_progress_bar(progress_val, status)
 
             # Minimal tests display
             tests_count = file_data.get("tests_generated", 0)
             tests_display = str(tests_count) if tests_count > 0 else "—"
+
+            coverage_score = file_data.get("coverage")
+            if isinstance(coverage_score, (int, float)) and coverage_score > 0:
+                coverage_display = f"{coverage_score:.0%}"
+            else:
+                coverage_display = "—"
 
             # Clean duration
             duration = file_data.get("duration", 0)
@@ -619,15 +800,54 @@ class MinimalRenderer:
             else:
                 duration_display = "—"
 
-                table.add_row(
-                    file_name,
-                    status_display,
-                    progress_display,
-                    tests_display,
-                    f"[muted]{duration_display}[/]",
-                )
+            table.add_row(
+                file_name,
+                status_display,
+                progress_display,
+                tests_display,
+                coverage_display,
+                f"[muted]{duration_display}[/]",
+            )
 
-            console.print(table)
+        console.print(table)
+
+    @staticmethod
+    def _format_progress_bar(progress: float, status: str) -> str:
+        """Render a consistent 10-slot progress bar with percentage."""
+        clamped = max(0.0, min(progress, 1.0))
+        slots = 10
+        filled = int(round(clamped * slots))
+        bar_filled = "█" * filled
+        bar_empty = "░" * (slots - filled)
+        if status == "completed":
+            bar = "[success]" + ("█" * slots) + "[/]"
+        elif status == "failed":
+            bar = "[error]" + ("░" * slots) + "[/]"
+        else:
+            bar = f"[accent]{bar_filled}[/][muted]{bar_empty}[/]"
+        return f"{bar} [muted]{clamped * 100:>3.0f}%[/]"
+
+    def _render_file_hints(
+        self, files_data: list[dict[str, Any]], console: Console
+    ) -> None:
+        """Suggest next-step actions for generated or failed files."""
+        hints: list[str] = []
+        for entry in files_data:
+            file_path = str(entry.get("file_path", "")).strip()
+            if not file_path:
+                continue
+            if entry.get("success", False):
+                hints.append(f"open {file_path}  # review generated tests")
+            else:
+                error_hint = entry.get("error") or entry.get("failure_reason")
+                if error_hint:
+                    hints.append(f"inspect {file_path}  # {error_hint}")
+                else:
+                    hints.append(f"retry {file_path}")
+
+        if hints:
+            actions = "\n".join(f"[muted]›[/] {hint}" for hint in hints)
+            console.print(actions)
 
 
 class DashboardManager:

@@ -21,9 +21,6 @@ dependencies = [
     # HTTP and async support
     "httpx>=0.24.0", # Modern HTTP client for async support
     "aiofiles>=23.0.0", # Async file operations
-    "textual>=6.1.0",
-    "textual-dev>=1.7.0",
-    "textual-web>=0.4.2",
     # Coverage measurement
     "coverage>=7.4.0", # Code coverage measurement
 ]
@@ -53,6 +50,7 @@ dev = [
     "pytest-asyncio>=0.23.7",
     "anyio>=4.10.0",
     "pytest-cov>=6.3.0",
+    "pexpect>=4.9.0",
     "ruff>=0.12.12",
     "pre-commit>=4.3.0",
 ]
@@ -60,6 +58,15 @@ dev = [
 [tool.ruff]
 target-version = "py311"
 line-length = 88
+extend-exclude = [
+    "tests/",
+    "testcraft/adapters/textual/",
+    "tmp_weather_project/",
+    "tmp_test_case/",
+    "build/",
+]
+
+[tool.ruff.lint]
 select = [
     "E",  # pycodestyle errors
     "W",  # pycodestyle warnings
@@ -73,8 +80,14 @@ ignore = [
     "E501",  # line too long, handled by formatter
     "B008",  # do not perform function calls in argument defaults
 ]
+extend-ignore = [
+    "UP038", # allow tuple isinstance until we refactor
+    "B023",  # loop variable binding in legacy closures
+    "B007",  # unused loop control vars in legacy flows
+    "B017",  # broad Exception asserts in legacy tests
+]
 
-[tool.ruff.per-file-ignores]
+[tool.ruff.lint.per-file-ignores]
 "__init__.py" = ["F401"]
 
 [tool.mypy]
@@ -91,6 +104,8 @@ warn_unused_ignores = true
 warn_no_return = true
 warn_unreachable = true
 strict_equality = true
+ignore_missing_imports = true
+exclude = "^(testcraft/adapters/textual/|tests/|tmp_|build/|testcraft/prompts/|scripts/)"
 
 [[tool.mypy.overrides]]
 module = "tests.*"
@@ -105,6 +120,9 @@ markers = [
     "asyncio: marks tests as async (deselect with '-m \"not asyncio\"')",
     "slow: marks tests as slow (deselect with '-m \"not slow\"')",
     "integration: marks tests as integration tests",
+    "live_service: marks tests that require live provider connectivity",
+    "fake_service: marks tests that exercise fake/offline adapters",
+    "utility: marks utility-command focused scenarios",
 ]
 addopts = [
     "--strict-markers",

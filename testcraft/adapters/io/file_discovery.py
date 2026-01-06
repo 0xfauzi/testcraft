@@ -566,14 +566,37 @@ class FileDiscoveryService:
         # Only check directories relative to the project path, not absolute path
         if project_path is not None:
             try:
-                relative_path = file_path.relative_to(project_path)
-                if any(
-                    part in self.exclude_dirs_set for part in relative_path.parts[:-1]
-                ):  # Exclude filename part
-                    return False
+                file_resolved = file_path.resolve()
+                project_resolved = project_path.resolve()
+                relative_path = file_resolved.relative_to(project_resolved)
+                parts = list(relative_path.parts[:-1])  # exclude filename
+                # Treat some names as soft excludes to avoid excluding real source trees
+                soft_excludes = {
+                    "lib",
+                    "lib64",
+                    "bin",
+                    "Scripts",
+                    "include",
+                    "share",
+                    "local",
+                    "Lib",
+                }
+                for part in parts:
+                    if part in self.exclude_dirs_set:
+                        if part in soft_excludes:
+                            # Only exclude if this subtree clearly belongs to a virtual env/system area
+                            env_root = project_resolved / part
+                            if (env_root / "pyvenv.cfg").exists() or (
+                                env_root / "site-packages"
+                            ).exists():
+                                return False
+                            # Otherwise don't exclude by name alone
+                            continue
+                        # Exclude standard hard excludes
+                        return False
             except ValueError:
-                # File is not under project path, exclude it
-                return False
+                # Path resolution mismatch (e.g., macOS /private) — do not exclude solely for this; continue checks
+                pass
         else:
             # No project context - only check immediate directory name
             parent_name = file_path.parent.name
@@ -599,11 +622,31 @@ class FileDiscoveryService:
         # Check if any part of the path is in exclude_dirs
         dir_name = dir_path.name
         if dir_name in self.exclude_dirs_set:
-            # Do not exclude standard test directories during test discovery
-            if for_tests and dir_name in {"tests", "test"}:
-                pass
+            # Allow common project library dirs unless this is clearly a venv/system dir
+            soft_excludes = {
+                "lib",
+                "lib64",
+                "bin",
+                "Scripts",
+                "include",
+                "share",
+                "local",
+                "Lib",
+            }
+            if dir_name in soft_excludes:
+                # Only exclude if this looks like a virtual environment root
+                parent = dir_path.parent
+                if (parent / "pyvenv.cfg").exists() or (
+                    dir_path / "site-packages"
+                ).exists():
+                    return True
+                # Otherwise, do not exclude by name alone
             else:
-                return True
+                # Do not exclude standard test directories during test discovery
+                if for_tests and dir_name in {"tests", "test"}:
+                    pass
+                else:
+                    return True
 
         # Check for patterns that might match directories
         dir_str = str(dir_path)
@@ -618,7 +661,6 @@ class FileDiscoveryService:
             or dir_name.endswith(".egg-info")
             or dir_name.endswith(".dist-info")
             or dir_name == "site-packages"
-            or dir_name in {"lib", "lib64", "bin", "Scripts", "include", "share"}
         ):
             return True
 

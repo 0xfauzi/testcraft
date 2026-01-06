@@ -5,9 +5,7 @@ This module defines the interface for prompt management operations,
 including system prompts, user prompts, and schema generation.
 """
 
-from typing import Any
-
-from typing_extensions import Protocol
+from typing import Any, Protocol
 
 
 class PromptPort(Protocol):

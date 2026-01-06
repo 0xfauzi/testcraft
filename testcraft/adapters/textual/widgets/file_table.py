@@ -32,6 +32,7 @@ class FileTable(DataTable):
         ("Status", "status"),
         ("Progress", "progress"),
         ("Tests", "tests"),
+        ("Rollbacks", "rollbacks"),
         ("Duration", "duration"),
         ("Error", "error"),
     ]
@@ -70,6 +71,7 @@ class FileTable(DataTable):
         tests_generated: int = 0,
         duration: float = 0.0,
         error: str | None = None,
+        rollbacks: int = 0,
     ) -> None:
         """Update the status of a file in the table."""
         self._file_data[file_path] = {
@@ -77,6 +79,7 @@ class FileTable(DataTable):
             "status": status,
             "progress": progress,
             "tests": tests_generated,
+            "rollbacks": rollbacks,
             "duration": duration,
             "error": error or "",
         }
@@ -128,7 +131,7 @@ class FileTable(DataTable):
             value = file_data.get(sort_key, "")
 
             # Handle numeric values
-            if sort_key in ["progress", "tests", "duration"]:
+            if sort_key in ["progress", "tests", "duration", "rollbacks"]:
                 try:
                     return float(value)
                 except (ValueError, TypeError):
@@ -146,6 +149,7 @@ class FileTable(DataTable):
         progress = file_data.get("progress", 0.0)
         tests = file_data.get("tests", 0)
         duration = file_data.get("duration", 0.0)
+        rollbacks = file_data.get("rollbacks", 0)
         error = file_data.get("error", "")
 
         # Format file path (show just filename for space)
@@ -173,11 +177,14 @@ class FileTable(DataTable):
         # Format error (truncate if too long)
         error_display = error[:20] + "..." if len(error) > 20 else error
 
+        rollbacks_display = str(rollbacks) if rollbacks else "-"
+
         return [
             file_display,
             status.title(),
             progress_display,
             tests_display,
+            rollbacks_display,
             duration_display,
             error_display,
         ]

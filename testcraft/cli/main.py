@@ -1,9 +1,14 @@
 """Main CLI entry point for TestCraft."""
 
+from __future__ import annotations
+
 import asyncio
 import logging
 import os
+import pathlib
 import sys
+from collections.abc import Iterable
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -17,15 +22,21 @@ from ..adapters.io.enhanced_logging import (
     setup_enhanced_logging,
 )
 from ..adapters.io.enhanced_ui import EnhancedUIAdapter
+from ..adapters.io.file_discovery import FileDiscoveryError
 from ..adapters.io.rich_cli import RichCliComponents, get_theme
 from ..adapters.io.ui_rich import UIStyle
 from ..application.environment.preflight import EnvironmentValidator
+from ..application.generation.services.context_assembler import ContextAssembler
+from ..application.generation.services.context_pack import ContextPackBuilder
+from ..application.generation.services.llm_orchestrator import LLMOrchestrator
 from ..config.loader import ConfigLoader, ConfigurationError
 from ..config.models import TestCraftConfig
 from .commands.models import add_model_commands
 from .dependency_injection import DependencyError, create_dependency_container
 from .evaluation_commands import add_evaluation_commands
 from .utility_commands import add_utility_commands
+
+logger = logging.getLogger(__name__)
 
 
 def detect_ui_style(ui_flag: str | None) -> UIStyle:
@@ -252,6 +263,16 @@ def app(
     help="Maximum concurrent pytest/refine workers",
 )
 @click.option(
+    "--manual-fix-on-fail",
+    is_flag=True,
+    help="Trigger manual-fix guidance automatically when refinement fails",
+)
+@click.option(
+    "--auto-accept-fixes",
+    is_flag=True,
+    help="Auto-accept manual-fix recommendation without prompt",
+)
+@click.option(
     "--keep-failed-writes",
     is_flag=True,
     help="Keep test files that fail to write or have syntax errors",
@@ -278,6 +299,16 @@ def app(
     default=3,
     help="Maximum retries for REFINE stage with symbol resolution (default: 3)",
 )
+@click.option(
+    "--plan-first",
+    is_flag=True,
+    help="Generate and review plan before test generation",
+)
+@click.option(
+    "--auto-accept-plan",
+    is_flag=True,
+    help="Auto-accept plan without interactive review (overrides config)",
+)
 @click.pass_context
 def generate(
     ctx: click.Context,
@@ -288,14 +319,24 @@ def generate(
     force: bool,
     immediate: bool,
     max_refine_workers: int,
+    manual_fix_on_fail: bool,
+    auto_accept_fixes: bool,
     keep_failed_writes: bool,
     disable_ruff: bool,
     enable_symbol_resolution: bool,
     max_plan_retries: int,
     max_refine_retries: int,
+    plan_first: bool,
+    auto_accept_plan: bool,
 ) -> None:
     """Generate tests for Python source files."""
     operation_logger = get_operation_logger("generate")
+    run_start: datetime | None = None
+
+    try:
+        project_path = project_path.resolve()
+    except OSError:
+        project_path = project_path.absolute()
 
     try:
         with operation_logger.operation_context(
@@ -315,6 +356,8 @@ def generate(
                 # In dry-run mode, skip environment preflight and any generation work
                 # to allow offline planning without requiring LLM credentials.
                 return
+
+            run_start = datetime.now()
 
             # Preflight environment validation before doing anything expensive
             # Determine if coverage tools should be present: enable when the project is not using the placeholder adapter
@@ -343,6 +386,285 @@ def generate(
             # Get use case from container (after preflight passes)
             generate_usecase = ctx.obj.container["generate_usecase"]
 
+            writer_adapter = ctx.obj.container.get("writer_adapter")
+            if writer_adapter and hasattr(writer_adapter, "set_project_root"):
+                writer_adapter.set_project_root(project_path)
+            if hasattr(generate_usecase, "set_project_root"):
+                generate_usecase.set_project_root(project_path)
+            llm_adapter = ctx.obj.container.get("llm_adapter")
+
+            # Surface when the router is operating in offline/no-op mode
+            if llm_adapter and hasattr(llm_adapter, "ensure_adapter"):
+                try:
+                    llm_adapter.ensure_adapter()
+                except Exception as exc:  # pragma: no cover - defensive logging
+                    operation_logger.debug(
+                        "LLM adapter initialization check failed: %s", exc
+                    )
+
+            if llm_adapter and hasattr(llm_adapter, "provider_status"):
+                try:
+                    provider_status = llm_adapter.provider_status()  # type: ignore[attr-defined]
+                except Exception as exc:  # pragma: no cover - defensive logging
+                    operation_logger.debug("LLM provider status unavailable: %s", exc)
+                    provider_status = None
+
+                if provider_status and provider_status.get("status") == "noop":
+                    provider_name = provider_status.get("provider", "unknown")
+                    reason = provider_status.get("reason") or "provider unavailable"
+                    ctx.obj.ui.display_warning(
+                        f"LLM provider '{provider_name}' unavailable ({reason}); "
+                        "running in offline stub mode. No real tests will be generated.",
+                        "LLM Offline",
+                    )
+                    operation_logger.warning(
+                        "LLM provider '%s' unavailable (%s); using offline mode",
+                        provider_name,
+                        reason,
+                    )
+
+            planning_cfg: dict[str, Any] = {}
+            if ctx.obj.config:
+                if isinstance(ctx.obj.config, dict):
+                    planning_cfg = ctx.obj.config.get("planning", {}) or {}
+                else:
+                    try:
+                        planning_model = getattr(ctx.obj.config, "planning", None)
+                        if planning_model is not None:
+                            planning_cfg = planning_model.model_dump()
+                    except AttributeError:
+                        planning_cfg = {}
+
+            planning_enabled = planning_cfg.get("enabled", True)
+            should_run_planning = planning_enabled or plan_first
+
+            # Execute planning workflow when enabled (default) or explicitly requested
+            if should_run_planning:
+                operation_logger.info(
+                    "🔍 [cyan]Planning workflow starting[/] - plan must be reviewed before generation"
+                )
+
+                try:
+                    # Get planning use case from container
+                    plan_usecase = ctx.obj.container.get("plan_usecase")
+
+                    if not plan_usecase:
+                        ctx.obj.ui.display_warning(
+                            "Planning use case not available in container, skipping planning",
+                            "Planning Warning",
+                        )
+                    else:
+                        # Build planning request from target files
+                        from ..application.generation.services.context_pack import (
+                            ContextPackBuilder,
+                        )
+                        from ..domain.models import PlanningRequest
+
+                        planning_target: Path | None = None
+
+                        discovery_service = ctx.obj.container.get("file_discovery")
+
+                        def _select_planning_candidate(
+                            paths: Iterable[pathlib.Path],
+                        ) -> pathlib.Path | None:
+                            for raw_path in paths:
+                                candidate_path = (
+                                    raw_path
+                                    if isinstance(raw_path, pathlib.Path)
+                                    else pathlib.Path(raw_path)
+                                )
+
+                                if discovery_service is not None:
+                                    try:
+                                        filtered = (
+                                            discovery_service.filter_existing_files(
+                                                [candidate_path], project_path
+                                            )
+                                        )
+                                    except FileDiscoveryError as filter_error:
+                                        operation_logger.debug(
+                                            "Planning candidate %s rejected by discovery filter: %s",
+                                            candidate_path,
+                                            filter_error,
+                                        )
+                                        continue
+
+                                    if not filtered:
+                                        operation_logger.debug(
+                                            "Planning candidate %s excluded by discovery configuration",
+                                            candidate_path,
+                                        )
+                                        continue
+
+                                    candidate_path = pathlib.Path(filtered[0])
+                                else:
+                                    # Best-effort exclusion when discovery container is unavailable
+                                    path_parts = set(candidate_path.parts)
+                                    if {".venv", "venv", "site-packages"}.intersection(
+                                        path_parts
+                                    ):
+                                        operation_logger.debug(
+                                            "Planning candidate %s skipped due to virtual environment heuristic",
+                                            candidate_path,
+                                        )
+                                        continue
+
+                                try:
+                                    return candidate_path.resolve()
+                                except OSError:
+                                    return candidate_path.absolute()
+
+                            return None
+
+                        if target_files:
+                            preliminary = target_files[0]
+                            planning_target = _select_planning_candidate([preliminary])
+                        else:
+                            planning_target = None
+                            try:
+                                if discovery_service is not None:
+                                    discovered = (
+                                        discovery_service.discover_source_files(
+                                            project_path
+                                        )
+                                    )
+                                    planning_target = _select_planning_candidate(
+                                        pathlib.Path(path) for path in discovered
+                                    )
+                            except FileDiscoveryError as discovery_error:
+                                operation_logger.debug(
+                                    "Automatic planning target discovery failed: %s",
+                                    discovery_error,
+                                )
+                            except Exception as discovery_error:  # pragma: no cover - unexpected errors
+                                operation_logger.debug(
+                                    "Automatic planning target discovery failed unexpectedly: %s",
+                                    discovery_error,
+                                )
+
+                            if planning_target is None:
+                                try:
+                                    planning_target = _select_planning_candidate(
+                                        project_path.rglob("*.py")
+                                    )
+                                except Exception as glob_error:
+                                    operation_logger.debug(
+                                        "Fallback planning target search failed: %s",
+                                        glob_error,
+                                    )
+
+                        if not planning_target or not planning_target.is_file():
+                            if ctx.obj.ui:
+                                ctx.obj.ui.display_warning(
+                                    "No Python source file found for planning; skipping planning step",
+                                    "Planning Skipped",
+                                )
+                            operation_logger.warning(
+                                "Skipping planning workflow: no valid source file available (project_path=%s)",
+                                project_path,
+                            )
+                        else:
+                            # Create planning request
+                            planning_request = PlanningRequest(
+                                target_file=planning_target,
+                                target_object="module",  # For now, plan at module level
+                                project_root=project_path,
+                                prompt_customization=None,
+                            )
+
+                            # Build context pack for planning (prefer DI-wired builder)
+                            context_pack_builder = ctx.obj.container.get(
+                                "context_pack_builder"
+                            )
+                            if not context_pack_builder:
+                                context_pack_builder = ContextPackBuilder(
+                                    file_discovery_service=discovery_service
+                                )
+                            try:
+                                context_pack = context_pack_builder.build_context_pack(
+                                    target_file=planning_target,
+                                    target_object="module",
+                                    project_root=project_path,
+                                )
+                            except ValueError as build_error:
+                                ctx.obj.ui.display_error(
+                                    f"Planning failed: {build_error}", "Planning Failed"
+                                )
+                                operation_logger.error(
+                                    "Context pack building failed: %s", build_error
+                                )
+                                sys.exit(1)
+
+                            if not context_pack:
+                                ctx.obj.ui.display_error(
+                                    "Failed to build context pack for planning",
+                                    "Planning Failed",
+                                )
+                                operation_logger.error(
+                                    "💥 Context pack building failed"
+                                )
+                                sys.exit(1)
+
+                            # Override auto_accept config if flag is set
+                            if auto_accept_plan:
+                                plan_usecase._config["planning"] = (
+                                    plan_usecase._config.get("planning", {})
+                                )
+                                plan_usecase._config["planning"]["auto_accept"] = True
+                                operation_logger.info(
+                                    "⚡ [yellow]Auto-accept plan enabled[/] - skipping interactive review"
+                                )
+                            elif not planning_cfg.get("auto_accept", False):
+                                plan_usecase._config["planning"] = (
+                                    plan_usecase._config.get("planning", {})
+                                )
+                                plan_usecase._config["planning"]["auto_accept"] = False
+
+                            # Execute planning workflow
+                            operation_logger.info(
+                                "🧠 [cyan]Generating test plan via orchestrator[/]"
+                            )
+                            planning_result = asyncio.run(
+                                plan_usecase.execute_planning_workflow(
+                                    planning_request, context_pack
+                                )
+                            )
+
+                            # Check if plan was accepted
+                            if not planning_result.accepted:
+                                ctx.obj.ui.display_info(
+                                    "Plan rejected, aborting test generation",
+                                    "Planning Complete",
+                                )
+                                operation_logger.info(
+                                    "⚠️ [yellow]Plan rejected by user[/]"
+                                )
+                                return
+
+                            ctx.obj.ui.display_success(
+                                f"Plan accepted (ID: {planning_result.plan_option.plan_id[:12]}...)",
+                                "Planning Complete",
+                            )
+                            operation_logger.info(
+                                f"✓ [green]Plan accepted[/] - proceeding with generation (plan_id={planning_result.plan_option.plan_id[:8]})"
+                            )
+
+                except Exception as e:
+                    import traceback
+
+                    traceback.print_exc()
+                    ctx.obj.ui.display_error(
+                        f"Planning workflow failed: {e}", "Planning Error"
+                    )
+                    operation_logger.error(f"💥 Planning workflow failed: {e}")
+                    if ctx.obj.verbose:
+                        import traceback
+
+                        ctx.obj.ui.display_info(
+                            traceback.format_exc(), "Debug Information"
+                        )
+                    sys.exit(1)
+
             # Configure generation parameters
             config_overrides = {
                 "batch_size": batch_size,
@@ -356,6 +678,11 @@ def generate(
                 "enable_symbol_resolution": enable_symbol_resolution,
                 "max_plan_retries": max_plan_retries,
                 "max_refine_retries": max_refine_retries,
+                # Manual-fix integration
+                "manual_fix": {
+                    "on_fail": manual_fix_on_fail,
+                    "auto_accept": auto_accept_fixes,
+                },
             }
 
             operation_logger.info(
@@ -450,9 +777,16 @@ def generate(
 
                     tracker.advance_step("Processing results", 1)
 
+            cost_summary = _collect_cost_summary(
+                ctx.obj.container, run_start, operation_logger
+            )
+            if cost_summary is not None:
+                results["cost_summary"] = cost_summary
+
             # Display results using enhanced UI components
             if results.get("success"):
                 _display_generation_results(results, ctx.obj.ui)
+                _display_cost_summary(cost_summary, ctx.obj.ui)
                 operation_logger.performance_summary(
                     "test_generation",
                     {
@@ -472,6 +806,7 @@ def generate(
                 ctx.obj.ui.display_error_with_suggestions(
                     error_msg, suggestions, "Generation Failed"
                 )
+                _display_cost_summary(cost_summary, ctx.obj.ui)
                 operation_logger.error(f"💥 Generation failed: {error_msg}")
                 sys.exit(1)
 
@@ -485,6 +820,11 @@ def generate(
             f"Test generation failed: {e}", suggestions, "Generation Error"
         )
         operation_logger.error_with_context("Test generation failed", e, suggestions)
+        if run_start:
+            cost_summary = _collect_cost_summary(
+                ctx.obj.container, run_start, operation_logger
+            )
+            _display_cost_summary(cost_summary, ctx.obj.ui)
         sys.exit(1)
 
 
@@ -551,10 +891,30 @@ def analyze(
     "--format",
     "-o",
     "output_format",
-    type=click.Choice(["detailed", "summary", "json"], case_sensitive=False),
+    type=click.Choice(["detailed", "summary", "json", "xml"], case_sensitive=False),
     multiple=True,
     default=["detailed"],
     help="Output format",
+)
+@click.option(
+    "--output-dir",
+    type=click.Path(path_type=Path),
+    default=Path(".artifacts/coverage"),
+    help="Output directory for coverage artifacts (XML)",
+)
+@click.option(
+    "--include",
+    "-I",
+    "include_patterns",
+    multiple=True,
+    help="Include specific source directories (can be used multiple times)",
+)
+@click.option(
+    "--omit",
+    "-O",
+    "omit_patterns",
+    multiple=True,
+    help="Omit patterns from coverage (can be used multiple times)",
 )
 @click.pass_context
 def coverage(
@@ -563,6 +923,9 @@ def coverage(
     source_files: tuple[Path, ...],
     test_files: tuple[Path, ...],
     output_format: tuple[str, ...],
+    output_dir: Path,
+    include_patterns: tuple[str, ...],
+    omit_patterns: tuple[str, ...],
 ) -> None:
     """Measure and report code coverage."""
     try:
@@ -570,7 +933,17 @@ def coverage(
         coverage_usecase = ctx.obj.container["coverage_usecase"]
 
         # Configure parameters
-        config_overrides = {"output_formats": list(output_format)}
+        config_overrides = {
+            "output_formats": list(output_format),
+            "data_dir": str(output_dir),
+            # xml_output will be derived inside adapter; we pass directory
+        }
+
+        # Add include/omit if provided
+        if include_patterns:
+            config_overrides["include"] = list(include_patterns)
+        if omit_patterns:
+            config_overrides["omit"] = list(omit_patterns)
 
         with ctx.obj.ui.create_status_spinner("Measuring code coverage..."):
             # Run coverage measurement asynchronously
@@ -599,6 +972,398 @@ def coverage(
             import traceback
 
             ctx.obj.ui.display_info(traceback.format_exc(), "Debug Information")
+        sys.exit(1)
+
+
+@app.command()
+@click.argument(
+    "project_path", type=click.Path(exists=True, path_type=Path), default="."
+)
+@click.option(
+    "--target-file",
+    "target_file",
+    type=click.Path(path_type=Path),
+    required=True,
+    help="Single source file to plan for (Class.method or function via --target-object)",
+)
+@click.option(
+    "--target-object",
+    "target_object",
+    type=str,
+    required=True,
+    help="Target object (e.g., 'Class.method' or 'function')",
+)
+@click.option(
+    "--output",
+    "output_path",
+    type=click.Path(path_type=Path),
+    default=Path(".artifacts/plan.json"),
+    help="Output file path for the plan JSON",
+)
+@click.option(
+    "--max-plan-retries",
+    type=int,
+    default=2,
+    help="Maximum retries for PLAN stage (overrides config)",
+)
+@click.option(
+    "--disable-gates/--enable-gates",
+    "disable_gates",
+    default=None,
+    help="Disable or enable quality gates for the session (None = leave as config)",
+)
+@click.pass_context
+def plan(
+    ctx: click.Context,
+    project_path: Path,
+    target_file: Path,
+    target_object: str,
+    output_path: Path,
+    max_plan_retries: int,
+    disable_gates: bool | None,
+) -> None:
+    """Run PLAN stage only and emit structured plan JSON."""
+    run_start: datetime | None = None
+    try:
+        if ctx.obj.dry_run:
+            ctx.obj.ui.display_info("DRY RUN: Skipping PLAN execution", "Dry Run Mode")
+            return
+
+        run_start = datetime.now()
+
+        # Resolve dependencies from container
+        generate_usecase = ctx.obj.container["generate_usecase"]
+        llm_adapter = ctx.obj.container.get("llm_adapter")
+
+        if llm_adapter and hasattr(llm_adapter, "ensure_adapter"):
+            try:
+                llm_adapter.ensure_adapter()
+            except Exception as exc:  # pragma: no cover - defensive logging
+                logger.debug("LLM adapter initialization check failed: %s", exc)
+
+        if llm_adapter and hasattr(llm_adapter, "provider_status"):
+            try:
+                provider_status = llm_adapter.provider_status()  # type: ignore[attr-defined]
+            except Exception as exc:  # pragma: no cover - defensive logging
+                logger.debug("LLM provider status unavailable: %s", exc)
+                provider_status = None
+
+            if provider_status and provider_status.get("status") == "noop":
+                provider_name = provider_status.get("provider", "unknown")
+                reason = provider_status.get("reason") or "provider unavailable"
+                ctx.obj.ui.display_warning(
+                    f"LLM provider '{provider_name}' unavailable ({reason}); "
+                    "planning will use offline stubs.",
+                    "LLM Offline",
+                )
+                logger.warning(
+                    "LLM provider '%s' unavailable (%s); planning running in offline mode",
+                    provider_name,
+                    reason,
+                )
+
+        # Build ContextPack for target
+        context_assembler = ContextAssembler(
+            context_port=ctx.obj.container["context_adapter"],
+            parser_port=ctx.obj.container["parser_adapter"],
+            config=ctx.obj.config.model_dump(),
+        )
+        context_pack_builder = ContextPackBuilder(
+            context_assembler=context_assembler,
+            file_discovery_service=ctx.obj.container.get("file_discovery"),
+        )
+
+        try:
+            context_pack = context_pack_builder.build_context_pack(
+                target_file=target_file,
+                target_object=target_object,
+                project_root=project_path,
+            )
+        except ValueError as build_error:
+            ctx.obj.ui.display_error(f"Planning failed: {build_error}", "PLAN Failed")
+            sys.exit(1)
+
+        if context_pack is None:
+            ctx.obj.ui.display_error(
+                "Failed to build ContextPack for planning", "PLAN Failed"
+            )
+            sys.exit(1)
+
+        # Create orchestrator with overrides
+        orchestrator: LLMOrchestrator = (
+            generate_usecase._llm_orchestrator
+        )  # reuse wiring
+        # Apply retry override if provided
+        try:
+            orchestrator._max_plan_retries = max(0, int(max_plan_retries))
+        except Exception:
+            pass
+
+        # Optionally override quality gates toggle in usecase config
+        if disable_gates is not None:
+            try:
+                generate_usecase._config["enable_quality_gates"] = not disable_gates
+            except Exception:
+                pass
+
+        with ctx.obj.ui.create_status_spinner("Running PLAN stage..."):
+            plan_result = orchestrator.plan_stage(
+                context_pack=context_pack, project_root=project_path
+            )
+
+        cost_summary = _collect_cost_summary(ctx.obj.container, run_start, logger)
+        _display_cost_summary(cost_summary, ctx.obj.ui)
+
+        # Ensure output directory
+        try:
+            output_path.parent.mkdir(parents=True, exist_ok=True)
+        except Exception:
+            pass
+
+        # Write JSON plan
+        import json as _json
+
+        with open(output_path, "w", encoding="utf-8") as f:
+            f.write(_json.dumps(plan_result, ensure_ascii=False, indent=2))
+
+        ctx.obj.ui.display_success(f"PLAN written to {output_path}", "Plan Complete")
+        if ctx.obj.verbose:
+            ctx.obj.ui.console.print(
+                _json.dumps(plan_result, ensure_ascii=False, indent=2)
+            )
+
+    except Exception as e:
+        ctx.obj.ui.display_error(f"PLAN failed: {e}", "Plan Error")
+        if ctx.obj.verbose:
+            import traceback
+
+            ctx.obj.ui.display_info(traceback.format_exc(), "Debug Information")
+        if run_start:
+            cost_summary = _collect_cost_summary(ctx.obj.container, run_start, logger)
+            _display_cost_summary(cost_summary, ctx.obj.ui)
+        sys.exit(1)
+
+
+@app.command("manual-fix")
+@click.argument(
+    "project_path", type=click.Path(exists=True, path_type=Path), default="."
+)
+@click.option(
+    "--target-file",
+    "target_file",
+    type=click.Path(path_type=Path),
+    required=True,
+    help="Source file containing the target under test",
+)
+@click.option(
+    "--target-object",
+    "target_object",
+    type=str,
+    required=True,
+    help="Target object (e.g., 'Class.method' or 'function')",
+)
+@click.option(
+    "--trace-excerpt",
+    "trace_excerpt",
+    type=str,
+    required=False,
+    default="",
+    help="Optional traceback excerpt indicating the suspected product bug",
+)
+@click.option(
+    "--notes",
+    type=str,
+    required=False,
+    default="",
+    help="Additional notes for the manual fix prompt",
+)
+@click.option(
+    "--output",
+    "output_path",
+    type=click.Path(path_type=Path),
+    default=Path(".artifacts/manual_fix.json"),
+    help="Output file path for the manual-fix response JSON",
+)
+@click.option(
+    "--auto-accept-fixes",
+    is_flag=True,
+    help="Auto-accept manual-fix recommendation without prompt",
+)
+@click.pass_context
+def manual_fix(
+    ctx: click.Context,
+    project_path: Path,
+    target_file: Path,
+    target_object: str,
+    trace_excerpt: str,
+    notes: str,
+    output_path: Path,
+    auto_accept_fixes: bool,
+) -> None:
+    """Run MANUAL FIX stage to produce failing test + bug note for real bug scenarios."""
+    run_start: datetime | None = None
+    try:
+        if ctx.obj.dry_run:
+            ctx.obj.ui.display_info(
+                "DRY RUN: Skipping MANUAL FIX execution", "Dry Run Mode"
+            )
+            return
+
+        run_start = datetime.now()
+
+        # Build ContextPack for target
+        context_assembler = ContextAssembler(
+            context_port=ctx.obj.container["context_adapter"],
+            parser_port=ctx.obj.container["parser_adapter"],
+            config=ctx.obj.config.model_dump(),
+        )
+        context_pack_builder = ContextPackBuilder(
+            context_assembler=context_assembler,
+            file_discovery_service=ctx.obj.container.get("file_discovery"),
+        )
+        try:
+            context_pack = context_pack_builder.build_context_pack(
+                target_file=target_file,
+                target_object=target_object,
+                project_root=project_path,
+            )
+        except ValueError as build_error:
+            ctx.obj.ui.display_error(
+                f"Manual-fix setup failed: {build_error}", "Manual Fix Failed"
+            )
+            sys.exit(1)
+        if context_pack is None:
+            ctx.obj.ui.display_error(
+                "Failed to build ContextPack for manual-fix", "Manual Fix Failed"
+            )
+            sys.exit(1)
+
+        # Use dedicated use case for manual-fix
+        try:
+            from ..application.manual_fix_usecase import ManualFixGuidanceUseCase
+            from ..domain.manual_fix import ManualFixRequest
+        except Exception as e:
+            ctx.obj.ui.display_error(
+                f"Missing manual-fix components: {e}", "Manual Fix Error"
+            )
+            sys.exit(1)
+
+        # Build use case from container wiring
+        orchestrator: LLMOrchestrator = ctx.obj.container[
+            "generate_usecase"
+        ]._llm_orchestrator
+        context_assembler = ContextAssembler(
+            context_port=ctx.obj.container["context_adapter"],
+            parser_port=ctx.obj.container["parser_adapter"],
+            config=ctx.obj.config.model_dump(),
+        )
+        context_pack_builder = ContextPackBuilder(
+            context_assembler=context_assembler,
+            file_discovery_service=ctx.obj.container.get("file_discovery"),
+        )
+
+        # Simple CLI presenter using UI adapter
+        class _CliPresenter:
+            def __init__(self, ui):
+                self.ui = ui
+
+            def present(self, recommendation, *, dry_run: bool = False) -> bool:
+                self.ui.display_info(
+                    "A manual-fix recommendation is ready (failing test + bug note).",
+                    "Manual Fix Guidance",
+                )
+                self.ui.console.print(f"Hash: {recommendation.recommendation_hash}")
+                self.ui.console.print(
+                    "Preview: writing Markdown artifact on acceptance..."
+                )
+                if dry_run:
+                    return False
+                return click.confirm(
+                    "Accept and persist manual-fix artifact?", default=False
+                )
+
+        presenter = _CliPresenter(ctx.obj.ui)
+
+        # Override auto-accept from flag if provided
+        cfg = ctx.obj.config.model_dump().copy()
+        try:
+            cfg.setdefault("manual_fix", {})
+            if auto_accept_fixes:
+                cfg["manual_fix"]["auto_accept"] = True
+        except Exception:
+            pass
+
+        usecase = ManualFixGuidanceUseCase(
+            llm_orchestrator=orchestrator,
+            parser_port=ctx.obj.container["parser_adapter"],
+            context_assembler=context_assembler,
+            context_pack_builder=context_pack_builder,
+            telemetry_port=ctx.obj.container["telemetry_adapter"],
+            presenter=presenter,
+            config=cfg,
+        )
+
+        req = ManualFixRequest(
+            project_root=project_path,
+            target_file=target_file,
+            target_object=target_object,
+            trace_excerpt=trace_excerpt,
+            notes=notes,
+        )
+
+        with ctx.obj.ui.create_status_spinner("Running MANUAL FIX stage..."):
+            import asyncio as _asyncio
+
+            mf_result = _asyncio.run(usecase.run(req))
+
+        cost_summary = _collect_cost_summary(ctx.obj.container, run_start, logger)
+
+        if not mf_result.accepted:
+            ctx.obj.ui.display_info(
+                "Manual-fix not accepted or no recommendation.", "Manual Fix"
+            )
+            _display_cost_summary(cost_summary, ctx.obj.ui)
+            sys.exit(0)
+
+        # Optionally write JSON sidecar if --output provided
+        try:
+            output_path.parent.mkdir(parents=True, exist_ok=True)
+        except Exception:
+            pass
+
+        import json as _json
+
+        with open(output_path, "w", encoding="utf-8") as f:
+            f.write(
+                _json.dumps(
+                    {
+                        "accepted": mf_result.accepted,
+                        "artifact_path": str(mf_result.artifact_path)
+                        if mf_result.artifact_path
+                        else None,
+                        "hash": mf_result.recommendation.recommendation_hash
+                        if mf_result.recommendation
+                        else None,
+                    },
+                    ensure_ascii=False,
+                    indent=2,
+                )
+            )
+
+        ctx.obj.ui.display_success(
+            f"Manual fix artifact: {mf_result.artifact_path}", "Manual Fix Complete"
+        )
+        _display_cost_summary(cost_summary, ctx.obj.ui)
+
+    except Exception as e:
+        ctx.obj.ui.display_error(f"Manual fix failed: {e}", "Manual Fix Error")
+        if ctx.obj.verbose:
+            import traceback
+
+            ctx.obj.ui.display_info(traceback.format_exc(), "Debug Information")
+        if run_start:
+            cost_summary = _collect_cost_summary(ctx.obj.container, run_start, logger)
+            _display_cost_summary(cost_summary, ctx.obj.ui)
         sys.exit(1)
 
 
@@ -648,64 +1413,16 @@ def status(
 
 
 @app.command()
-@click.option("--web", is_flag=True, help="Launch TUI in web browser mode")
-@click.option(
-    "--port", type=int, default=8080, help="Port for web mode (default: 8080)"
-)
+@click.option("--web", is_flag=True, help="(deprecated) web mode placeholder")
+@click.option("--port", type=int, default=8080, help="(deprecated) port for web mode")
 @click.pass_context
 def tui(ctx: click.Context, web: bool, port: int) -> None:
-    """Launch TestCraft's interactive Terminal User Interface (TUI)."""
-    try:
-        from ..adapters.textual.app import TestCraftTextualApp
-
-        if web:
-            # Web mode using textual-web
-            try:
-                import importlib.util
-
-                if importlib.util.find_spec("textual_web") is None:
-                    raise ImportError("textual_web not available")
-
-                ctx.obj.ui.display_info(
-                    f"Launching TestCraft TUI in web browser on port {port}...",
-                    "Web Mode",
-                )
-
-                # Create the app
-                app = TestCraftTextualApp()
-
-                # Launch in web mode
-                # Note: textual-web integration would go here
-                # For now, fall back to regular terminal mode
-                ctx.obj.ui.display_warning(
-                    "Web mode not fully implemented yet, launching in terminal mode",
-                    "Fallback",
-                )
-                app.run()
-
-            except ImportError:
-                ctx.obj.ui.display_error(
-                    "textual-web not available. Install with: pip install textual-web",
-                    "Missing Dependency",
-                )
-                sys.exit(1)
-        else:
-            # Terminal mode
-            ctx.obj.ui.display_info("Launching TestCraft TUI...", "Terminal Mode")
-
-            # Create and run the Textual app
-            app = TestCraftTextualApp()
-            app.run()
-
-    except KeyboardInterrupt:
-        ctx.obj.ui.display_info("TUI session ended by user", "Goodbye")
-    except Exception as e:
-        ctx.obj.ui.display_error(f"TUI launch failed: {e}", "TUI Error")
-        if ctx.obj.verbose:
-            import traceback
-
-            ctx.obj.ui.display_info(traceback.format_exc(), "Debug Information")
-        sys.exit(1)
+    """Inform users that the legacy Textual TUI has been retired."""
+    ctx.obj.ui.display_warning(
+        "The interactive Textual TUI is no longer available. Use the standard CLI commands instead.",
+        "TUI Unavailable",
+    )
+    sys.exit(1)
 
 
 # ============================================================================
@@ -792,6 +1509,86 @@ def _display_immediate_mode_results(
             f"Coverage improved by {coverage_delta['line_coverage_delta']:.1%}",
             "Coverage Improvement",
         )
+
+
+def _collect_cost_summary(
+    container: dict[str, Any] | None,
+    run_start: datetime | None,
+    logger_obj: Any | None = None,
+) -> dict[str, Any] | None:
+    """Collect cost summary from the configured cost adapter."""
+    if container is None or run_start is None:
+        return None
+
+    cost_adapter = container.get("cost_adapter")
+    if not cost_adapter:
+        return None
+
+    try:
+        summary = cost_adapter.get_summary(
+            start_time=run_start, end_time=datetime.now()
+        )
+    except TypeError:
+        summary = cost_adapter.get_summary()
+    except Exception as exc:  # pragma: no cover - defensive logging
+        if logger_obj:
+            logger_obj.debug("Cost summary unavailable: %s", exc)
+        return None
+
+    if not isinstance(summary, dict):
+        return None
+
+    usage_stats = summary.get("usage_stats", {}) or {}
+
+    total_cost_raw = summary.get("total_cost", 0) or 0
+    try:
+        total_cost = float(total_cost_raw)
+    except (TypeError, ValueError):
+        total_cost = 0.0
+
+    def _to_int(value: Any) -> int:
+        try:
+            return int(value or 0)
+        except (TypeError, ValueError):
+            return 0
+
+    total_tokens = _to_int(usage_stats.get("total_tokens"))
+    total_calls = _to_int(usage_stats.get("total_api_calls"))
+
+    return {
+        "total_cost": total_cost,
+        "total_tokens": total_tokens,
+        "total_api_calls": total_calls,
+    }
+
+
+def _display_cost_summary(
+    cost_summary: dict[str, Any] | None, ui_adapter: EnhancedUIAdapter | None
+) -> None:
+    """Display cost usage summary via the appropriate UI."""
+    if not ui_adapter:
+        return
+
+    if not cost_summary:
+        message = "Cost: unavailable • Tokens: n/a • API calls: n/a"
+        if ui_adapter.ui_style == UIStyle.MINIMAL:
+            ui_adapter.console.print(message)
+        else:
+            ui_adapter.display_warning(message, "Usage Summary")
+        return
+
+    total_cost = float(cost_summary.get("total_cost", 0.0) or 0.0)
+    total_tokens = int(cost_summary.get("total_tokens", 0) or 0)
+    total_calls = int(cost_summary.get("total_api_calls", 0) or 0)
+
+    message = (
+        f"Cost: ${total_cost:.4f} • Tokens: {total_tokens} • API calls: {total_calls}"
+    )
+
+    if ui_adapter.ui_style == UIStyle.MINIMAL:
+        ui_adapter.console.print(message)
+    else:
+        ui_adapter.display_info(message, "Usage Summary")
 
 
 def _display_legacy_mode_results(
@@ -893,6 +1690,17 @@ def _display_coverage_results(
             "Coverage Summary",
         )
 
+    # Display report file paths if generated
+    reports = results.get("reports", {})
+    for format_name, report_data in reports.items():
+        if format_name == "xml":
+            report_path = report_data.get("report_content", "")
+            if report_path and Path(report_path).exists():
+                ui_adapter.display_success(
+                    f"XML report: {report_path}",
+                    "Report Generated",
+                )
+
 
 def _display_status_results(
     results: dict[str, Any],
@@ -929,7 +1737,7 @@ def _display_status_results(
 
     # Display history if available
     if history:
-        ui_adapter.console.print("\n[bold]Recent Activity:[/]")
+        ui_adapter.console.print("\n[bold]Generation history:[/]")
         for entry in history[:limit]:
             timestamp = entry.get("timestamp", 0)
             if timestamp:
@@ -941,6 +1749,8 @@ def _display_status_results(
                     f"{entry.get('entry_type', 'unknown')}: "
                     f"{entry.get('status', 'unknown')}"
                 )
+    else:
+        ui_adapter.display_info("No generation history available", "Generation History")
 
     # Display statistics if available
     if statistics:
@@ -956,6 +1766,10 @@ def _display_status_results(
 
         if stats_info:
             ui_adapter.display_info("\n".join(stats_info), "Summary Statistics")
+        else:
+            ui_adapter.display_info("No statistics available", "Summary Statistics")
+    else:
+        ui_adapter.display_info("No statistics available", "Summary Statistics")
 
 
 # Add evaluation commands

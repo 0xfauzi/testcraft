@@ -239,11 +239,16 @@ class ImportResolver:
             "/private",
             "/var",
         }
-        current_str = str(current.resolve())
+        current_resolved = current.resolve()
+        current_str = str(current_resolved)
 
         # Check if we're in any system directory
         for system_dir in system_dirs:
-            if current_str.startswith(system_dir):
+            if system_dir == "/":
+                # Skip bare root; every absolute path starts with "/"
+                continue
+            system_path = Path(system_dir)
+            if current_resolved == system_path:
                 return True
 
         # Prevent access to user home directories
@@ -259,11 +264,17 @@ class ImportResolver:
 
         # Stop if we're in temp directories but have gone above them
         if any(part.startswith("tmp") for part in parts):
-            # If original_start was in a temp dir, don't go above temp dirs
+            # If original_start was in a temp dir, ensure we stay within the same temp scope
             orig_parts = list(original_start.parts)
-            if any(part.startswith("tmp") for part in orig_parts) and not any(
-                part.startswith("tmp") for part in parts[-3:]
-            ):
+            orig_tmp_markers = {part for part in orig_parts if part.startswith("tmp")}
+            if orig_tmp_markers:
+                current_tmp_markers = {part for part in parts if part.startswith("tmp")}
+                if not orig_tmp_markers.issubset(current_tmp_markers):
+                    return True
+        else:
+            # Original lived under a temp dir but current path no longer does
+            orig_parts = list(original_start.parts)
+            if any(part.startswith("tmp") for part in orig_parts):
                 return True
 
         # Prevent excessive directory traversal (more than 10 levels up from original)
@@ -328,6 +339,16 @@ class ImportResolver:
         if canonical_import and "." in canonical_import:
             return True  # Has package-like import structure
 
+        # Allow namespace packages rooted under known source roots (e.g., tests/src)
+        for source_root in packaging_info.source_roots:
+            try:
+                rel_path = file_abs.relative_to(source_root.resolve())
+            except ValueError:
+                continue
+
+            if rel_path.parts and len(rel_path.parts) >= 1:
+                return True
+
         return False
 
     def _resolve_canonical_import(
@@ -351,6 +372,21 @@ class ImportResolver:
                 )
                 if corrected_import:
                     return corrected_import
+
+            if "." not in canonical_import:
+                try:
+                    rel_path = file_path.resolve().relative_to(project_root.resolve())
+                    module_parts = list(rel_path.parts)
+                    if module_parts[-1].endswith(".py"):
+                        module_parts[-1] = module_parts[-1][:-3]
+                    if module_parts[-1] == "__init__":
+                        module_parts = module_parts[:-1]
+                    if module_parts and module_parts[0] == "src":
+                        module_parts = module_parts[1:]
+                    if module_parts:
+                        canonical_import = ".".join(module_parts)
+                except Exception:  # pragma: no cover - defensive
+                    pass
 
             return canonical_import
 
@@ -456,12 +492,14 @@ class ImportResolver:
         # Try each source root to find the best match
         best_import = None
 
+        project_root_resolved = project_root.resolve()
+
         for source_root in source_roots:
             root_abs = source_root.resolve()
 
             # Check if file is under this source root
             try:
-                file_abs.relative_to(root_abs)
+                rel_path_from_root = file_abs.relative_to(root_abs)
             except ValueError:
                 continue
 
@@ -499,18 +537,50 @@ class ImportResolver:
                     break
 
             if package_parts:
-                # Add the module name (file without .py extension)
                 module_name = file_abs.stem
                 if module_name != "__init__":
                     package_parts.append(module_name)
 
                 import_path = ".".join(package_parts)
 
-                # Prefer shorter import paths (closer to actual package roots)
                 if best_import is None or len(import_path.split(".")) < len(
                     best_import.split(".")
                 ):
                     best_import = import_path
+                continue
+
+            # Fallback to namespace-style resolution (handles tests/src layouts)
+            module_parts = list(rel_path_from_root.parts)
+            if not module_parts:
+                continue
+
+            if module_parts[-1].endswith(".py"):
+                module_parts[-1] = module_parts[-1][:-3]
+
+            if module_parts[-1] == "__init__":
+                module_parts = module_parts[:-1]
+
+            if not module_parts:
+                continue
+
+            prefix_parts: list[str] = []
+            try:
+                rel_source_root = root_abs.relative_to(project_root_resolved)
+                prefix_parts = list(rel_source_root.parts)
+            except ValueError:
+                prefix_parts = []
+
+            if prefix_parts and prefix_parts[0] == "src":
+                prefix_parts = prefix_parts[1:]
+
+            import_path = ".".join(prefix_parts + module_parts)
+            if not import_path:
+                continue
+
+            if best_import is None or len(import_path.split(".")) < len(
+                best_import.split(".")
+            ):
+                best_import = import_path
 
         return best_import
 

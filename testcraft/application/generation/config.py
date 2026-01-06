@@ -44,6 +44,10 @@ class GenerationConfig:
             "enable_symbol_resolution": True,  # Enable missing_symbols resolution loop
             "max_plan_retries": 2,  # Maximum retries for PLAN stage with symbol resolution
             "max_refine_retries": 3,  # Maximum retries for REFINE stage with symbol resolution
+            "symbol_resolution": {
+                "allow_runtime_imports": False,
+                "runtime_timeout_sec": 10.0,
+            },
             # Context enrichment feature flags and budgets
             "context_categories": {
                 "snippets": True,
@@ -156,12 +160,21 @@ class GenerationConfig:
                     context_budgets["directory_tree"]
                 )
 
+        if "symbol_resolution" in overrides and isinstance(
+            overrides["symbol_resolution"], dict
+        ):
+            config["symbol_resolution"].update(overrides["symbol_resolution"])
+
         # Only merge keys that are relevant to generation config
         special_keys = {
             "context_categories",
             "prompt_budgets",
             "context_enrichment",
             "context_budgets",
+            "manual_fix",
+            "symbol_resolution",
+            # Preserve nested config blocks used by services
+            "quality",
         }
         valid_generation_keys = {
             "batch_size",
@@ -177,7 +190,21 @@ class GenerationConfig:
             "refine_on_first_failure_only",
             "refinement_backoff_sec",
             "disable_ruff_format",
+            "manual_fix",
         }
+
+        # Preserve quality subtree if provided at top level
+        if "quality" in overrides and isinstance(overrides["quality"], dict):
+            config["quality"] = overrides["quality"]
+
+        # Pull through refine subtree from nested generation config when provided
+        # so downstream services (e.g., PytestRefiner) can consume it directly.
+        if (
+            isinstance(overrides, dict)
+            and isinstance(overrides.get("generation"), dict)
+            and isinstance(overrides["generation"].get("refine"), dict)
+        ):
+            config["refine"] = overrides["generation"]["refine"]
 
         for key, value in overrides.items():
             if key not in special_keys:
@@ -281,6 +308,33 @@ class GenerationConfig:
                 first_failure,
             )
             config["refine_on_first_failure_only"] = True
+
+        symbol_cfg = config.get("symbol_resolution")
+        if not isinstance(symbol_cfg, dict):
+            logger.warning(
+                "Invalid symbol_resolution config %s, using defaults", symbol_cfg
+            )
+            default_symbol_cfg = GenerationConfig.get_default_config()[
+                "symbol_resolution"
+            ].copy()
+            config["symbol_resolution"] = default_symbol_cfg
+            symbol_cfg = config["symbol_resolution"]
+
+        allow_runtime = symbol_cfg.get("allow_runtime_imports", False)
+        if not isinstance(allow_runtime, bool):
+            logger.warning(
+                "Invalid symbol_resolution.allow_runtime_imports %s, using default False",
+                allow_runtime,
+            )
+            symbol_cfg["allow_runtime_imports"] = False
+
+        runtime_timeout = symbol_cfg.get("runtime_timeout_sec", 10.0)
+        if not isinstance(runtime_timeout, (int, float)) or runtime_timeout <= 0:
+            logger.warning(
+                "Invalid symbol_resolution.runtime_timeout_sec %s, using default 10.0",
+                runtime_timeout,
+            )
+            symbol_cfg["runtime_timeout_sec"] = 10.0
 
         # Validate refinement_backoff_sec
         backoff = config.get("refinement_backoff_sec", 0.2)

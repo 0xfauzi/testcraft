@@ -331,8 +331,9 @@ class TextualUIAdapter:
                             file_data.get("status", "pending"),
                             file_data.get("progress", 0.0),
                             file_data.get("tests_generated", 0),
-                            file_data.get("duration", 0.0),
-                            file_data.get("error"),
+                            duration=file_data.get("duration", 0.0),
+                            error=file_data.get("error"),
+                            rollbacks=file_data.get("rollbacks", 0),
                         )
                 except Exception:
                     # Fallback to console if no file table available
@@ -353,6 +354,7 @@ class TextualUIAdapter:
         table.add_column("Status", justify="center")
         table.add_column("Progress", justify="center")
         table.add_column("Tests", justify="center")
+        table.add_column("Rollbacks", justify="center")
         table.add_column("Duration", justify="center")
 
         for file_data in files_data:
@@ -362,6 +364,7 @@ class TextualUIAdapter:
             status = file_data.get("status", "pending")
             progress = file_data.get("progress", 0.0)
             tests = file_data.get("tests_generated", 0)
+            rollbacks = file_data.get("rollbacks", 0)
             duration = file_data.get("duration", 0.0)
 
             # Format status with color
@@ -380,6 +383,7 @@ class TextualUIAdapter:
 
             # Format other columns
             tests_display = str(tests) if tests > 0 else "—"
+            rollbacks_display = str(rollbacks) if rollbacks else "—"
             duration_display = f"{duration:.1f}s" if duration > 0 else "—"
 
             table.add_row(
@@ -387,6 +391,7 @@ class TextualUIAdapter:
                 status_display,
                 progress_display,
                 tests_display,
+                rollbacks_display,
                 duration_display,
             )
 

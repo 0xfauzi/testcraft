@@ -1,0 +1,12 @@
+warning: No `requires-python` value found in the workspace. Defaulting to `>=3.11`.
+============================= test session starts ==============================
+platform darwin -- Python 3.13.2, pytest-8.4.2, pluggy-1.6.0 -- /opt/homebrew/opt/python@3.13/bin/python3.13
+cachedir: .pytest_cache
+rootdir: /Users/wumpinihussein/Documents/code/ai/testcraft/testcraft
+configfile: pyproject.toml
+plugins: cov-7.0.0
+collecting ... ERROR: file or directory not found: tests/e2e/test_cli_end_to_end.py
+
+collected 0 items
+
+============================ no tests ran in 0.01s =============================

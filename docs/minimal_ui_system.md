@@ -55,7 +55,7 @@ done 1/1 • tests 8 • time 12.3s
 
 #### Multi-File Generation
 ```
-done 5/7 • tests 23 • Δcov +15.0% • time 45.3s
+done 5/7 • failed 1 • rollbacks 2 • avg 8.4s • time 45.3s
 
 file                 status  progress  tests  time
 example.py          done    ●●●●      5      8.2s
@@ -72,6 +72,9 @@ For multi-file operations, minimal UI provides:
 - **Top 10 files** displayed (vs 12 in classic)
 - **10-dot progress indicator** in footer
 - **Compact table** with lowercase headers
+- **Summary footer** highlights failures, rollbacks, average runtime, and total elapsed time
+
+**Filtering:** set `TESTCRAFT_STATUS_FILTER=active,failed` to keep the dashboard focused on critical files. Filters apply to both minimal and classic layouts.
 
 ## Performance Benefits
 

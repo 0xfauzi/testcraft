@@ -53,10 +53,10 @@ def _sanitize_text(text: str) -> str:
         "override system prompt",
         "act as system",
     ]
-    lowered = text.lower()
     for phrase in blocked:
-        lowered = lowered.replace(phrase, "")
-    return lowered
+        pattern = re.compile(re.escape(phrase), re.IGNORECASE)
+        text = pattern.sub("", text)
+    return text
 
 
 def _sanitize_code(code: str) -> str:
@@ -165,15 +165,38 @@ class PromptRegistry:
         **kwargs: Any,
     ) -> str:
         template = self._lookup(self._user_templates, prompt_type)
-        # Sanitize additional_context by converting to JSON and sanitizing the string
-        sanitized_context_json = _sanitize_text(
-            _to_pretty_json(additional_context or {})
-        )
+        context_data = additional_context or {}
+        sanitized_context_json = _sanitize_text(_to_pretty_json(context_data))
+
+        def _flatten(prefix: str, value: Any) -> list[tuple[str, Any]]:
+            items: list[tuple[str, Any]] = []
+            if isinstance(value, dict):
+                for key, val in value.items():
+                    next_prefix = f"{prefix}.{key}" if prefix else key
+                    items.extend(_flatten(next_prefix, val))
+            elif isinstance(value, list):
+                items.append((prefix, value))
+            else:
+                items.append((prefix, value))
+            return items
+
+        flattened_context: dict[str, Any] = {}
+        for key, val in _flatten("", context_data):
+            if not key:
+                continue
+            if isinstance(val, (dict, list)):
+                flattened_context[key] = _sanitize_text(_to_pretty_json(val))
+            elif val is None:
+                flattened_context[key] = ""
+            else:
+                flattened_context[key] = _sanitize_text(str(val))
+
         payload = {
             "code_content": _sanitize_code(code_content),
             "additional_context": sanitized_context_json,
             "version": self.version,
         }
+        payload.update(flattened_context)
         payload.update(kwargs)
         return self._render(template, payload)
 
@@ -661,6 +684,10 @@ class PromptRegistry:
             "- Apply rubric consistently regardless of test framework or approach\n"
             "- Focus on functional correctness over stylistic choices\n"
             "- Avoid penalizing valid alternative approaches\n\n"
+            "CALIBRATION GUIDANCE:\n"
+            "- Reserve scores of 5 for exceptional, production-ready quality; 3 represents acceptable baseline\n"
+            "- Use the full 1-5 scale; do not default to 4/5 without strong evidence\n"
+            "- Document any uncertainty in the rationales to aid future calibration reviews\n\n"
             "Do NOT include commentary outside the JSON structure."
         )
 
@@ -691,6 +718,10 @@ class PromptRegistry:
             "• 0.5-0.69: Slight preference, minor differences\n"
             "• 0.3-0.49: Weak preference, marginal differences\n"
             "• 0.0-0.29: Essentially tied, no meaningful difference\n\n"
+            "CALIBRATION GUIDANCE:\n"
+            "- When differences are minimal, prefer `tie` with low confidence rather than overstating certainty\n"
+            "- Only assign `winner` with confidence ≥0.7 when multiple dimensions clearly favour one variant\n"
+            "- Use rationale to highlight trade-offs so human reviewers can audit the decision later\n\n"
             "RESPONSE FORMAT - Return EXACTLY this JSON structure:\n"
             "{{\n"
             '  "winner": "<a|b|tie>",\n'
@@ -972,35 +1003,45 @@ class PromptRegistry:
     # ------------------------
     def _system_prompt_orchestrator_plan_v1(self) -> str:
         return (
-            "You are a senior Python test engineer. You write small, correct, deterministic pytest tests.\n"
-            "Do NOT guess missing symbols. List them.\n\n"
-            "Your task is to create a comprehensive TEST PLAN for the target code.\n"
-            "Analyze the code thoroughly and create a plan that covers:\n"
-            "- Happy path scenarios with typical inputs\n"
-            "- Edge cases and boundary conditions\n"
-            "- Error conditions and exception handling\n"
-            "- Side effects and external dependencies\n"
-            "- Fixtures and mocking requirements\n\n"
-            "IMPORTANT: Use EXACTLY the canonical import provided - do not modify it.\n"
-            "If you need additional symbols, list them in missing_symbols.\n\n"
-            "Output strictly as JSON with no additional commentary."
+            "You are an expert Python test planning architect focused on deterministic pytest suites.\n"
+            "Create precise plans without inventing APIs; record unresolved requirements under missing_symbols instead.\n\n"
+            "Planning directives:\n"
+            "- Analyze the focal code and enriched context to map behaviours and dependencies.\n"
+            "- Prioritise the most critical behaviours first; limit the initial scenario list to those required for business confidence before considering secondary edge cases.\n"
+            "- Identify fixture or mocking needs that align with project conventions.\n"
+            "- Keep proposed mocks lean—favour simple stubs or shared helpers rather than deep side-effect chains when the behaviour under test does not require them.\n"
+            "- Preserve the canonical import exactly as supplied and surface it via import_line.\n"
+            "- Use the dependency metadata to recognise standard-library and third-party helpers; assume they exist unless the focal code relies on a project-specific re-export you cannot locate.\n"
+            "- Treat common runtime singletons (loggers, consoles, global clients) and other conventional helpers from those dependencies as available—do not mark them missing.\n"
+            "- Prefer listing missing_symbols only for repository-defined modules, helpers, or unusual re-exports that are absent from the provided context.\n"
+            "- When the project references a dependency but you need specific source (e.g., a generated helper module), describe that dependency precisely in missing_symbols.\n"
+            "- Make conservative, well-known assumptions about ubiquitous libraries (HTTP clients, ORMs, CLI helpers, schedulers) unless the context contradicts them; avoid blocking on their internals.\n"
+            "- When any other symbol or artifact is unavailable, list it under missing_symbols rather than inventing behaviour.\n\n"
+            "For each plan item, produce a JSON object with the exact keys:\n"
+            '- id: short snake_case identifier (e.g., "happy_path_basic")\n'
+            "- intent: one-sentence objective for the test\n"
+            "- inputs: representative parameters or setup steps (list)\n"
+            "- assertions: concrete behaviour or exception checks (list)\n"
+            "- fixtures: required fixtures/mocks/stubs (list)\n"
+            "- edge_cases: additional branches or boundary notes (list, use [] when none)\n"
+            '- notes: supplemental rationale or sequencing constraints (string, use "" when none)\n\n'
+            'Respond strictly as JSON following {{"plan": [...], "missing_symbols": [...], "import_line": "...", "error": ""}}.\n'
+            "Do not emit commentary outside the JSON payload."
         )
 
     def _system_prompt_orchestrator_generate_v1(self) -> str:
         return (
-            "You are a senior Python test engineer. Output a single runnable pytest module.\n"
-            "Use ONLY the provided canonical import. No network. Use tmp_path for FS.\n"
-            "Keep imports minimal.\n\n"
-            "Requirements:\n"
-            "- Use EXACTLY the canonical import provided\n"
-            "- Prefer pytest parametrization for partitions/boundaries\n"
-            "- Assertions must check behavior (not just 'no exception')\n"
-            "- If side-effects occur, assert on state/IO/logs accordingly\n"
-            "- Name tests `test_<target_simplename>_<behavior>`\n"
-            "- Output ONLY the complete test module in one fenced block\n"
-            "- Follow the approved test plan exactly\n"
-            "- Ensure deterministic behavior\n\n"
-            "Do NOT include any commentary outside the single fenced code block."
+            "You are an expert pytest implementation engineer delivering production-ready, deterministic test modules.\n"
+            "Follow the approved plan precisely while keeping the canonical import unchanged and imports minimal.\n\n"
+            "Implementation directives:\n"
+            "- Emit exactly one runnable pytest module inside a single ```python``` fenced code block with no extra commentary; if you cannot provide the code block, return an explicit error describing why.\n"
+            "- Use the canonical import verbatim; prefer pytest parametrization for logical partitions and boundary values.\n"
+            "- Assert observable behaviour (including side effects, state, IO, or logs) rather than mere absence of exceptions.\n"
+            "- Name tests `test_<target_simplename>_<behavior>` and begin the file with a comment summarizing covered behaviours.\n"
+            "- Enforce deterministic execution (tmp_path for filesystem work, no network, fixed seeds if needed).\n"
+            "- Prefer local mocks or small helper factories over patching entire modules unless the plan justifies broader fixtures; keep fixture scaffolding minimal and reusable.\n"
+            "- Reuse existing fixtures or helpers referenced in the plan/context instead of re-implementing them.\n"
+            "- Implement every scenario in the approved plan; add only safeguards essential for determinism."
         )
 
     def _system_prompt_orchestrator_refine_v1(self) -> str:
@@ -1018,7 +1059,8 @@ class PromptRegistry:
             "- Preserve existing test structure and style\n"
             "- Maintain canonical import exactly as provided\n"
             "- Ensure tests remain deterministic\n\n"
-            "Output the corrected full test module."
+            "Output the corrected full test module inside a single ```python``` fenced code block with no additional commentary; if you cannot provide the block, respond with an explicit error explaining the blocker.\n"
+            "First line must be a python comment beginning with `# Changes:` summarizing the edits you applied."
         )
 
     def _system_prompt_orchestrator_manual_fix_v1(self) -> str:
@@ -1042,7 +1084,9 @@ class PromptRegistry:
             "- Suspected root-cause: Specific file:line if possible\n"
             "- Related methods/tests: Context and related code\n"
             "- Risk/Blast radius: Impact assessment\n"
-            "- Suggested fix sketch: High-level approach\n\n"
+            "- Suggested fix sketch: High-level approach\n"
+            "- Severity: One of [critical, high, medium, low]\n"
+            "- Recommended Fix Location: File:line pointer for engineering follow-up\n\n"
             "The test should use the canonical import and fail clearly until the bug is fixed."
         )
 
@@ -1056,9 +1100,12 @@ class PromptRegistry:
             "- File: {{target.module_file}}\n"
             "- Object: {{target.object}}\n"
             "- Canonical import (USE EXACTLY THIS):\n"
-            "  {{import_map.target_import}}\n\n"
+            "```python\n{{import_map.target_import}}\n```\n\n"
             "FOCAL CODE:\n"
             "```python\n{{focal.source}}\n```\n\n"
+            "FOCAL METADATA:\n"
+            "- is_placeholder: {{focal.is_placeholder}}\n"
+            "- placeholder_reason: {{focal.placeholder_reason}}\n\n"
             "SIGNATURE/DOCSTRING:\n"
             "{{focal.signature}}\n"
             "{{focal.docstring}}\n\n"
@@ -1074,12 +1121,29 @@ class PromptRegistry:
             "{{gwt_snippets.then}}\n\n"
             "REPO CONVENTIONS:\n"
             "{{conventions}}\n\n"
+            "DEPENDENCY METADATA:\n"
+            "External modules: {{dependency_metadata.external_modules}}\n"
+            "Distributions: {{dependency_metadata.distributions}}\n\n"
             "INSTRUCTIONS:\n"
             "1. Produce a TEST PLAN (cases, boundaries, exceptions, side-effects, fixtures/mocks)\n"
             "2. List missing_symbols you need (fully qualified where possible)\n"
-            "3. Confirm the import you will write at the top of the test file\n\n"
+            "3. Confirm the import you will write at the top of the test file\n"
+            '4. If the focal metadata indicates a placeholder or the focal code is not valid/complete Python, respond with {{\\"plan\\": [], \\"missing_symbols\\": [], \\"import_line\\": \\"{{import_map.target_import}}\\", \\"error\\": \\"insufficient_context\\"}}.\n\n'
+            "Use the dependency metadata above to recognise available modules and helpers; never request missing symbols for canonical logging/console singletons or dependencies already listed there.\n\n"
+            "Each plan entry MUST follow this template (use empty arrays/strings when data is unavailable):\n"
+            "```\n"
+            "{{\n"
+            '  "id": "<short_identifier>",\n'
+            '  "intent": "<one sentence goal>",\n'
+            '  "inputs": ["<input or setup>", "..."],\n'
+            '  "assertions": ["<expected behaviour>", "..."],\n'
+            '  "fixtures": ["<fixture or mock>", "..."],\n'
+            '  "edge_cases": ["<edge branch>", "..."],\n'
+            '  "notes": "<additional rationale>"\n'
+            "}}\n"
+            "```\n\n"
             f"{SAFE_END}\n"
-            'Output strictly as JSON: {{"plan":[...], "missing_symbols":[...], "import_line":"..."}}'
+            'Output strictly as JSON: {{"plan":[...], "missing_symbols":[...], "import_line":"...", "error":"<optional error or empty string>"}}'
         )
 
     def _user_prompt_orchestrator_generate_v1(self) -> str:
@@ -1089,7 +1153,7 @@ class PromptRegistry:
             "STAGE: GENERATE\n"
             "TASK: Generate complete test module from approved plan.\n\n"
             "CANONICAL IMPORT (USE EXACTLY THIS):\n"
-            "{{import_map.target_import}}\n\n"
+            "```python\n{{import_map.target_import}}\n```\n\n"
             "FOCAL CODE:\n"
             "```python\n{{focal.source}}\n```\n\n"
             "RESOLVED DEFINITIONS:\n"
@@ -1098,6 +1162,9 @@ class PromptRegistry:
             "{{property_context_compact}}\n\n"
             "REPO CONVENTIONS:\n"
             "{{conventions}}\n\n"
+            "DEPENDENCY METADATA:\n"
+            "External modules: {{dependency_metadata.external_modules}}\n"
+            "Distributions: {{dependency_metadata.distributions}}\n\n"
             "APPROVED TEST PLAN:\n"
             "{{approved_plan_json}}\n\n"
             "REQUIREMENTS:\n"
@@ -1107,9 +1174,11 @@ class PromptRegistry:
             "- Include proper assertions\n"
             "- Handle side effects appropriately\n"
             "- Name tests descriptively\n"
-            "- Ensure deterministic behavior\n\n"
+            "- Ensure deterministic behavior\n"
+            "- Reuse fixtures/utilities already defined in the project when the plan/context references them\n"
+            "- Begin the module with a comment summarizing covered behaviours (e.g., `# Tests for ...`)\n\n"
             f"{SAFE_END}\n"
-            "Output ONLY the complete test module in one fenced code block."
+            "Output ONLY the complete test module in one ```python``` fenced code block."
         )
 
     def _user_prompt_orchestrator_refine_v1(self) -> str:
@@ -1123,7 +1192,7 @@ class PromptRegistry:
             "FOCAL CODE:\n"
             "```python\n{{focal.source}}\n```\n\n"
             "CANONICAL IMPORT (DO NOT CHANGE):\n"
-            "{{import_map.target_import}}\n\n"
+            "```python\n{{import_map.target_import}}\n```\n\n"
             "EXECUTION FEEDBACK:\n"
             "- Result: {{feedback.result}}\n"
             "- Trace excerpt: {{feedback.trace_excerpt}}\n"
@@ -1140,8 +1209,9 @@ class PromptRegistry:
             "2. Identify minimal changes needed\n"
             "3. Apply targeted fixes\n"
             "4. Ensure no regressions\n\n"
+            "First line of the returned module must be a comment beginning with `# Changes:` summarizing the edits you made.\n\n"
             f"{SAFE_END}\n"
-            "Output the corrected full test module."
+            "Output ONLY the corrected full test module inside a single ```python``` fenced code block."
         )
 
     def _user_prompt_orchestrator_manual_fix_v1(self) -> str:
@@ -1151,7 +1221,7 @@ class PromptRegistry:
             "STAGE: MANUAL FIX\n"
             "TASK: Create failing test and bug report for real product bug.\n\n"
             "CANONICAL IMPORT:\n"
-            "{{import_map.target_import}}\n\n"
+            "```python\n{{import_map.target_import}}\n```\n\n"
             "FOCAL CODE:\n"
             "```python\n{{focal.source}}\n```\n\n"
             "PROPERTY CONTEXT (THEN patterns):\n"
@@ -1165,7 +1235,8 @@ class PromptRegistry:
             "1. Create a deliberately failing test that demonstrates the bug\n"
             "2. The test should PASS once the code is fixed\n"
             "3. Provide detailed BUG NOTE with reproduction steps\n"
-            "4. Suggest potential fix approach\n\n"
+            "4. Suggest potential fix approach\n"
+            "5. Include severity rating (critical/high/medium/low) and recommended fix location (file:line)\n\n"
             f"{SAFE_END}\n"
             "Output two fenced code blocks as specified in system prompt."
         )
@@ -2112,6 +2183,36 @@ class PromptRegistry:
             def __missing__(self, key: str) -> str:  # type: ignore[override]
                 return "{" + key + "}"
 
+        def _resolve_nested(key: str) -> Any:
+            if key in values:
+                return values[key]
+            current: Any = values
+            for part in key.split("."):
+                if isinstance(current, dict):
+                    current = current.get(part)
+                else:
+                    current = getattr(current, part, None)
+                if current is None:
+                    return None
+            return current
+
+        moustache_pattern = re.compile(r"\{\{([a-zA-Z0-9_.]+)\}\}")
+
+        def _replace_moustache(match: re.Match[str]) -> str:
+            raw_value = _resolve_nested(match.group(1))
+            if raw_value is None:
+                return match.group(0)
+            if isinstance(raw_value, (dict, list)):
+                rendered = _to_pretty_json(raw_value)
+            else:
+                rendered = str(raw_value)
+            sanitized = _sanitize_text(rendered)
+            # Escape braces so format_map call below treats them as literals
+            sanitized = sanitized.replace("{", "{{").replace("}", "}}")
+            return sanitized
+
+        rendered_template = moustache_pattern.sub(_replace_moustache, template)
+
         # Convert non-str to strings safely (pretty JSON for dict-like values)
         prepared: dict[str, str] = {}
         for k, v in values.items():
@@ -2121,6 +2222,6 @@ class PromptRegistry:
                 prepared[k] = str(v)
 
         try:
-            return template.format_map(SafeDict(prepared))
+            return rendered_template.format_map(SafeDict(prepared))
         except Exception as exc:
             raise PromptError(f"Failed to render template: {exc}") from exc

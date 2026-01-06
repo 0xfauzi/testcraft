@@ -101,6 +101,11 @@ class StateSyncDiscovery:
 
                 span.set_attribute("files_found", len(files))
 
+                if not files:
+                    raise GenerateUseCaseError(
+                        "No eligible Python source files were found. Adjust discovery patterns or exclusion settings."
+                    )
+
                 # Get trace context once to avoid multiple calls
                 trace_context = span.get_trace_context()
 

@@ -286,6 +286,12 @@ class PackagingDetector:
                 ):
                     source_roots.append(src_dir)
 
+        # Strategy 2b: Namespace-style test directories (tests/src)
+        tests_src_dir = project_root / "tests" / "src"
+        if tests_src_dir.exists() and tests_src_dir.is_dir():
+            if tests_src_dir not in source_roots:
+                source_roots.append(tests_src_dir)
+
         # Strategy 3: Project root as fallback
         if not source_roots:
             source_roots.append(project_root)
@@ -361,6 +367,17 @@ class PackagingDetector:
 
         for source_root in source_roots:
             try:
+                namespace_prefix: list[str] = []
+                try:
+                    rel_root = source_root.resolve().relative_to(project_root.resolve())
+                    namespace_prefix = list(rel_root.parts)
+                except ValueError:
+                    namespace_prefix = []
+
+                # Remove leading "src" for typical src-layout projects
+                if namespace_prefix and namespace_prefix[0] == "src":
+                    namespace_prefix = namespace_prefix[1:]
+
                 # Find all Python files
                 for py_file in source_root.rglob("*.py"):
                     if py_file.name.startswith("."):
@@ -390,6 +407,9 @@ class PackagingDetector:
                     # Build dotted import path
                     import_path = ".".join(module_parts)
 
+                    if namespace_prefix:
+                        import_path = ".".join(namespace_prefix + module_parts)
+
                     # Store mapping
                     abs_file_path = str(py_file.resolve())
                     import_map[abs_file_path] = import_path
@@ -412,6 +432,26 @@ class PackagingDetector:
             project_root: Project root for scanning (optional)
         """
         disallowed = []
+
+        has_namespace_tests_root = False
+        tests_namespace_dir = None
+        if project_root is not None:
+            tests_namespace_dir = project_root / "tests" / "src"
+            if tests_namespace_dir.exists():
+                try:
+                    namespace_resolved = tests_namespace_dir.resolve()
+                except OSError:
+                    namespace_resolved = tests_namespace_dir
+
+                for root in source_roots:
+                    try:
+                        root_resolved = root.resolve()
+                    except OSError:
+                        root_resolved = root
+
+                    if root_resolved == namespace_resolved:
+                        has_namespace_tests_root = True
+                        break
 
         # If src is not a package, disallow "src." imports
         if not src_is_package:
@@ -556,6 +596,9 @@ class PackagingDetector:
                 logger.debug(
                     "Error scanning project root for disallowed prefixes: %s", e
                 )
+
+        if has_namespace_tests_root:
+            disallowed = [prefix for prefix in disallowed if prefix != "tests."]
 
         # Remove duplicates while preserving order
         seen = set()

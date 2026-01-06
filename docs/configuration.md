@@ -9,26 +9,27 @@ This document provides a comprehensive reference for all TestCraft configuration
 3. [Test Style Configuration](#test-style-configuration)
 4. [Coverage Analysis](#coverage-analysis)
 5. [Test Generation](#test-generation)
-6. [Evaluation Harness](#evaluation-harness)
-7. [Environment Management](#environment-management)
-8. [Cost Management](#cost-management)
-9. [Security Settings](#security-settings)
+6. [Planning Workflow](#planning-workflow)
+7. [Evaluation Harness](#evaluation-harness)
+8. [Environment Management](#environment-management)
+9. [Cost Management](#cost-management)
 10. [Quality Analysis](#quality-analysis)
-11. [Prompt Engineering](#prompt-engineering)
-12. [Context Retrieval](#context-retrieval)
-13. [Context Enrichment](#context-enrichment)
-14. [Enhanced Import System](#enhanced-import-system)
-15. [Telemetry & Observability](#telemetry--observability)
-16. [LLM Providers](#llm-providers)
-17. [Environment Variable Overrides](#environment-variable-overrides)
+11. [Enhanced Import System](#enhanced-import-system)
+12. [Telemetry & Observability](#telemetry--observability)
+13. [LLM Providers](#llm-providers)
+14. [Environment Variable Overrides](#environment-variable-overrides)
 
 ## Configuration File Structure
 
+TestCraft uses **TOML format only** for configuration files. The `testcraft init-config` command generates `.testcraft.toml`.
+
 TestCraft looks for configuration files in the following order:
 
-1. `.testcraft.toml` (project-specific)
-2. `pyproject.toml` (in `[tool.testcraft]` section)
+1. `.testcraft.toml` (project-specific, TOML only)
+2. `pyproject.toml` (in `[tool.testcraft]` section, TOML only)
 3. Global configuration in `~/.config/testcraft/config.toml`
+
+**Note**: YAML and JSON formats are deprecated. Use TOML.
 
 ### Example Minimal Configuration
 
@@ -42,7 +43,7 @@ minimum_line_coverage = 80.0
 
 [llm]
 default_provider = "openai"
-openai_model = "o4-mini"
+openai_model = "gpt-4.1"
 ```
 
 ### Example Comprehensive Configuration
@@ -101,7 +102,7 @@ mock_library = "unittest.mock"   # Options: "unittest.mock", "pytest-mock", "aut
 
 ## Coverage Analysis
 
-Configure coverage thresholds and test execution.
+Configure coverage thresholds, measurement, and test execution.
 
 ```toml
 [coverage]
@@ -113,6 +114,20 @@ regenerate_if_below = 60.0         # Regenerate tests if coverage drops below th
 # Additional pytest arguments for coverage runs
 pytest_args = ["-v", "--tb=short"]
 junit_xml = true                   # Enable JUnit XML for all coverage runs
+
+# Coverage measurement options (NEW)
+include = []                       # Explicit source directories for coverage measurement
+omit = [                          # Patterns to omit from coverage
+    "*/tests/*",
+    "*/test_*.py",
+    "*_test.py",
+    "*/.venv/*",
+    "*/venv/*",
+    "*/site-packages/*",
+    "*/.tox/*",
+]
+data_dir = ".artifacts/coverage"   # Directory for coverage data files and reports
+aggregate = true                   # Combine coverage data across multiple runs
 
 # Test runner configuration
 [coverage.runner]
@@ -138,7 +153,52 @@ append_pythonpath = []             # Paths to append to PYTHONPATH
 | `minimum_branch_coverage` | `float` | `70.0` | Minimum acceptable branch coverage |
 | `regenerate_if_below` | `float` | `60.0` | Threshold for test regeneration |
 | `pytest_args` | `List[str]` | `[]` | Additional pytest arguments |
-| `junit_xml` | `bool` | `true` | Generate JUnit XML output |
+| `junit_xml` | `bool` | `true` | Generate JUnit XML output (informational in current pipeline) |
+| `include` | `List[str]` | `[]` | Explicit source directories for measurement |
+| `omit` | `List[str]` | Common exclusions | Patterns to omit from coverage |
+| `data_dir` | `str` | `".artifacts/coverage"` | Directory for coverage artifacts |
+| `aggregate` | `bool` | `true` | Combine coverage across multiple runs |
+
+### Coverage CLI Usage
+
+TestCraft provides a `coverage` command for measuring and reporting code coverage:
+
+```bash
+# Basic usage - measure coverage for entire project
+testcraft coverage .
+
+# Specify source files and tests explicitly
+testcraft coverage . \
+    --source-files src/module.py \
+    --test-files tests/test_module.py
+
+# Generate XML report (useful for CI/CD)
+testcraft coverage . --format xml --output-dir .artifacts/coverage
+
+# Multiple formats at once
+testcraft coverage . --format xml --format json --format detailed
+
+# Filter coverage with include/omit patterns
+testcraft coverage . \
+    --include src/ \
+    --omit "*/migrations/*" \
+    --omit "*/tests/*"
+
+# Combine results from multiple runs (aggregation)
+# Run tests covering different modules, all stored in same output-dir
+testcraft coverage . --test-files tests/test_auth.py --output-dir .coverage-data
+testcraft coverage . --test-files tests/test_api.py --output-dir .coverage-data
+# View combined results
+testcraft coverage . --format xml --output-dir .coverage-data
+```
+
+**Available Formats:**
+- `detailed` - Detailed per-file coverage report (default)
+- `summary` - Concise summary of overall coverage
+- `json` - JSON format for programmatic processing
+- `xml` - Cobertura XML format (for CI/CD integration)
+
+Note: HTML output is intentionally not exposed in the CLI. Prefer XML for CI/CD systems and JSON/text for local inspection.
 
 ## Test Generation
 
@@ -164,7 +224,7 @@ junit_xml = true                   # Generate JUnit XML for failure parsing
 [generation.merge]
 strategy = "append"                # Options: "append", "ast-merge"
 dry_run = false                    # Preview changes without applying
-formatter = "black"                # Code formatter to apply after merge
+formatter = "black"                # Code formatter to apply after merge (informational; current writer manages formatting)
 
 # Test refinement loop (AI-powered test fixing)
 [generation.refine]
@@ -193,7 +253,71 @@ schema_repair_temperature = 0.0              # Temperature for schema repair (0.
 
 # Preflight analysis (NEW)
 enable_preflight_analysis = true             # Enable preflight canonicalization analysis
+
+# LLM Orchestrator configuration
+[generation.orchestrator]
+enable_manual_fix = true                     # Enable MANUAL FIX stage for suspected product bugs
+max_plan_retries = 2                         # Maximum retries for PLAN stage
+max_refine_retries = 3                       # Maximum retries for REFINE stage
+
+# Manual Fix Guidance (NEW - Task 33)
+[manual_fix]
+enable = true                                # Enable manual-fix guidance features
+on_fail = false                              # Auto-trigger after refinement failure (opt-in)
+auto_accept = false                          # Auto-accept recommendations without prompt
+output_dir = ".testcraft/manual_fixes"       # Directory for Markdown artifacts
+model = ""                                   # Override model ID (optional, uses default if empty)
+max_tokens = 8000                            # Max tokens for manual-fix guidance
+temperature = 0.1                            # LLM temperature for manual-fix prompts
+prompt_version = ""                          # Prompt version override (optional)
 ```
+
+Note:
+- The `generation.test_runner.*` block is currently not invoked by the generation pipeline; tests are executed by the refinement subsystem and coverage use case.
+- The `generation.merge.*` options are informational at present; the writer performs AST merge/formatting internally.
+
+### Manual Fix Guidance (NEW - Task 33)
+
+TestCraft includes a Manual Fix Guidance system that triggers when test refinement exhausts all attempts and suspects a production bug. When enabled, it generates:
+
+1. **Deliberately Failing Test**: A pytest module that will pass only after the code bug is fixed
+2. **BUG NOTE**: Detailed Markdown documentation with root cause analysis, reproduction steps, and fix suggestions
+
+**Configuration Options:**
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `enable` | `bool` | `true` | Enable manual-fix guidance features |
+| `on_fail` | `bool` | `false` | Auto-trigger after refinement failure (opt-in for safety) |
+| `auto_accept` | `bool` | `false` | Auto-accept recommendations without user prompt |
+| `output_dir` | `str` | `".testcraft/manual_fixes"` | Directory for Markdown artifacts |
+| `model` | `str?` | `null` | Override LLM model (uses default if not set) |
+| `max_tokens` | `int` | `8000` | Maximum tokens for guidance generation |
+| `temperature` | `float` | `0.1` | LLM temperature (0.0-2.0) |
+| `prompt_version` | `str?` | `null` | Prompt version override (optional) |
+
+**CLI Flags:**
+
+```bash
+# Enable manual-fix trigger on refinement failure
+testcraft generate . --manual-fix-on-fail
+
+# Auto-accept manual-fix recommendations
+testcraft generate . --manual-fix-on-fail --auto-accept-fixes
+
+# Standalone manual-fix command
+testcraft manual-fix . --target-file src/module.py --target-object func \
+  --trace-excerpt "AssertionError: ..." --auto-accept-fixes
+```
+
+**Artifact Structure:**
+
+Artifacts are persisted as Markdown files in `<output_dir>/<target>_<hash>.md` with:
+- Metadata header (target, hash, timestamp, canonical import, model info)
+- Failing test code block (Python)
+- BUG NOTE section (Markdown)
+
+Deduplication is performed by content hash to avoid redundant artifacts.
 
 ### LLM Refinement Reliability Features (NEW)
 
@@ -259,6 +383,21 @@ TestCraft now detects and classifies timeouts in test execution:
 | `parametrize_similar_tests` | `bool` | `true` | Use parametrized tests where appropriate |
 | `max_test_methods_per_class` | `int` | `20` | Limit test methods per class |
 
+### Symbol Resolution Options
+
+Symbol resolution drives the PLAN/REFINE retry loop when the LLM references
+helpers that are missing from the current context. The following settings live
+under `generation`:
+
+- `enable_symbol_resolution` (`bool`, default `true`): toggles the
+  missing-symbol retry loop entirely.
+- `symbol_resolution.allow_runtime_imports` (`bool`, default `false`): when
+  enabled, TestCraft may import the target module in a sandboxed subprocess to
+  resolve dynamically assigned helpers that static parsing cannot find. Leave
+  disabled for projects with import side effects.
+- `symbol_resolution.runtime_timeout_sec` (`float`, default `10.0`): execution
+  timeout for the optional runtime import fallback.
+
 ### Refinement Options Reference (NEW)
 
 | Option | Type | Default | Description |
@@ -272,6 +411,7 @@ TestCraft now detects and classifies timeouts in test execution:
 | `enable_schema_repair` | `bool` | `true` | Enable LLM schema validation and repair |
 | `schema_repair_temperature` | `float` | `0.0` | Temperature for repair prompts |
 | `enable_preflight_analysis` | `bool` | `true` | Enable canonicalization preflight checks |
+| `iteration_timeout_sec` | `float` | `30.0` | Per-iteration timeout for refinement loops |
 
 ### Modular Configuration System
 
@@ -320,6 +460,37 @@ The system validates configuration values and provides sensible defaults for inv
 - `coverage_threshold` must be 0.0-1.0 (default: 0.8)
 - `max_refinement_iterations` must be ≥ 1 (default: 3)
 - Character limits must be reasonable values
+
+## Planning Workflow
+
+Configure the interactive planning workflow for test generation.
+
+```toml
+[planning]
+enabled = true                    # Enable planning stage before test generation
+auto_accept = false               # Auto-accept plans without user interaction
+prompt_template = ""              # Custom prompt template for planning (uses default if empty)
+max_retries = 2                   # Maximum retries for planning stage
+```
+
+### Planning Options Reference
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `enabled` | `bool` | `true` | Enable planning stage before generation |
+| `auto_accept` | `bool` | `false` | Auto-accept plans without interactive review |
+| `prompt_template` | `str?` | `null` | Custom prompt template (optional) |
+| `max_retries` | `int` | `2` | Maximum retries for planning stage |
+
+**CLI Flags:**
+
+```bash
+# Generate with planning workflow
+testcraft generate . --plan-first
+
+# Auto-accept plan without review
+testcraft generate . --plan-first --auto-accept-plan
+```
 
 ## Evaluation Harness
 
@@ -449,35 +620,6 @@ warning_threshold = 1.0            # Warn when request exceeds this cost
 | `daily_limit` | `float` | `50.0` | Daily spending limit (USD) |
 | `per_request_limit` | `float` | `2.0` | Per-request spending limit (USD) |
 
-## Security Settings
-
-Configure security policies and code validation.
-
-```toml
-[security]
-enable_ast_validation = false      # Use AST validation (slower but more secure)
-max_generated_file_size = 50000    # Maximum size for generated test files (bytes)
-block_dangerous_patterns = true    # Block potentially dangerous code patterns
-
-# Patterns to block in generated code
-block_patterns = [
-    "eval\\s*\\(",
-    "exec\\s*\\(",
-    "__import__\\s*\\(",
-    "subprocess\\.",
-    "os\\.system"
-]
-```
-
-### Security Options Reference
-
-| Option | Type | Default | Description |
-|--------|------|---------|-------------|
-| `enable_ast_validation` | `bool` | `false` | Enable AST-based code validation |
-| `max_generated_file_size` | `int` | `50000` | Maximum generated file size |
-| `block_dangerous_patterns` | `bool` | `true` | Block dangerous code patterns |
-| `block_patterns` | `List[str]` | See above | Regex patterns to block |
-
 ## Quality Analysis
 
 Configure mutation testing and quality analysis.
@@ -512,58 +654,6 @@ dataclass_severity = "medium"      # Dataclass mutations typically medium severi
 | `enable_mutation_testing` | `bool` | `true` | Enable mutation testing |
 | `minimum_quality_score` | `float` | `75.0` | Minimum quality threshold |
 | `minimum_mutation_score` | `float` | `80.0` | Minimum mutation score |
-
-## Prompt Engineering
-
-Configure advanced AI prompt optimization.
-
-```toml
-[prompt_engineering]
-use_2025_guidelines = true         # Use latest prompt best practices
-encourage_step_by_step = true      # Include step-by-step reasoning prompts
-use_positive_negative_examples = true # Include positive/negative examples
-minimize_xml_structure = true      # Reduce excessive XML tags in prompts
-decisive_recommendations = true    # Encourage single, strong recommendations
-preserve_uncertainty = false       # Include hedging language (usually false)
-
-# Enhanced 2024-2025 Features
-use_enhanced_reasoning = true      # Use advanced Chain-of-Thought reasoning
-enable_self_debugging = true       # Enable self-debugging and review checkpoints
-use_enhanced_examples = true       # Use detailed examples with reasoning
-enable_failure_strategies = true   # Use failure-specific debugging strategies
-confidence_based_adaptation = true # Adapt prompts based on confidence levels
-track_reasoning_quality = true     # Monitor and track reasoning quality
-```
-
-### Prompt Engineering Options Reference
-
-| Option | Type | Default | Description |
-|--------|------|---------|-------------|
-| `use_2025_guidelines` | `bool` | `true` | Use latest prompt engineering practices |
-| `encourage_step_by_step` | `bool` | `true` | Include step-by-step reasoning |
-| `use_enhanced_reasoning` | `bool` | `true` | Advanced Chain-of-Thought reasoning |
-| `confidence_based_adaptation` | `bool` | `true` | Adapt prompts based on confidence |
-
-## Context Retrieval
-
-Configure context retrieval and processing for code analysis.
-
-```toml
-[context]
-retrieval_settings = {}            # Context retrieval settings
-hybrid_weights = {}                # Weights for hybrid search
-rerank_model = ""                  # Model to use for reranking (empty = none)
-hyde = false                       # Enable HyDE (Hypothetical Document Embeddings)
-```
-
-### Context Options Reference
-
-| Option | Type | Default | Description |
-|--------|------|---------|-------------|
-| `retrieval_settings` | `Dict` | `{}` | Context retrieval configuration |
-| `hybrid_weights` | `Dict` | `{}` | Hybrid search weights |
-| `rerank_model` | `str` | `""` | Reranking model (empty = disabled) |
-| `hyde` | `bool` | `false` | Enable hypothetical document embeddings |
 
 ## Telemetry & Observability
 
@@ -630,21 +720,21 @@ temperature = 0.1                 # Temperature for LLM responses (lower = more 
 
 # OpenAI Configuration
 openai_api_key = ""               # OpenAI API key (or set OPENAI_API_KEY environment variable)
-openai_model = "o4-mini"            # OpenAI model to use for test generation
+openai_model = "gpt-4.1"          # OpenAI model to use for test generation
 openai_base_url = ""              # Custom OpenAI API base URL (optional)
 openai_max_tokens = 12000         # Maximum tokens for OpenAI requests
 openai_timeout = 60.0             # Timeout for OpenAI requests (seconds)
 
 # Anthropic Claude Configuration
 anthropic_api_key = ""            # Anthropic API key (or set ANTHROPIC_API_KEY environment variable)
-anthropic_model = "claude-3-sonnet-20240229" # Anthropic model to use for test generation
+anthropic_model = "claude-sonnet-4" # Anthropic model to use for test generation
 anthropic_max_tokens = 100000     # Maximum tokens for Anthropic requests
 anthropic_timeout = 60.0          # Timeout for Anthropic requests (seconds)
 
 # Azure OpenAI Configuration
 azure_openai_api_key = ""         # Azure OpenAI API key (or set AZURE_OPENAI_API_KEY environment variable)
 azure_openai_endpoint = ""        # Azure OpenAI endpoint URL (or set AZURE_OPENAI_ENDPOINT environment variable)
-azure_openai_deployment = "o4-mini" # Azure OpenAI deployment name
+azure_openai_deployment = "gpt-4.1" # Azure OpenAI deployment name
 azure_openai_api_version = "2024-02-15-preview" # Azure OpenAI API version
 azure_openai_timeout = 60.0       # Timeout for Azure OpenAI requests (seconds)
 
@@ -652,7 +742,7 @@ azure_openai_timeout = 60.0       # Timeout for Azure OpenAI requests (seconds)
 aws_region = ""                   # AWS region for Bedrock (or set AWS_REGION environment variable)
 aws_access_key_id = ""            # AWS access key ID (or set AWS_ACCESS_KEY_ID environment variable)
 aws_secret_access_key = ""        # AWS secret access key (or set AWS_SECRET_ACCESS_KEY environment variable)
-bedrock_model_id = "anthropic.claude-3-haiku-20240307-v1:0" # AWS Bedrock model ID
+bedrock_model_id = "anthropic.claude-3-7-sonnet-v1:0" # AWS Bedrock model ID
 bedrock_timeout = 60.0            # Timeout for Bedrock requests (seconds)
 ```
 
@@ -668,20 +758,24 @@ bedrock_timeout = 60.0            # Timeout for Bedrock requests (seconds)
 ### Supported Models
 
 #### OpenAI Models
-- `gpt-4` (recommended)
+- `gpt-4.1` (default, recommended)
+- `gpt-4`
 - `gpt-4-turbo`
-- `gpt-3.5-turbo`
 - `gpt-4o`
+- `o4-mini`
 
 #### Anthropic Models
+- `claude-sonnet-4` (default, recommended)
 - `claude-3-opus-20240229`
-- `claude-3-sonnet-20240229` (recommended)
+- `claude-3-sonnet-20240229`
 - `claude-3-haiku-20240307`
 
 #### Azure OpenAI Models
 - Use Azure deployment names configured in your Azure OpenAI service
+- Default deployment: `gpt-4.1`
 
 #### AWS Bedrock Models
+- `anthropic.claude-3-7-sonnet-v1:0` (default)
 - `anthropic.claude-3-opus-20240229-v1:0`
 - `anthropic.claude-3-sonnet-20240229-v1:0`
 - `anthropic.claude-3-haiku-20240307-v1:0`
@@ -818,58 +912,6 @@ cp .testcraft.prod.toml .testcraft.toml
 
 For practical usage examples, see the [Advanced Usage Guide](advanced-usage.md) and [Architecture Guide](architecture.md).
 
-## Context Enrichment Flags and Budgets
-
-TestCraft can enrich LLM prompts with additional, size-bounded context. These features are controlled via configuration flags and budgets.
-
-Configuration keys (override in your app config):
-
-```toml
-[context_categories]
-snippets = true
-neighbors = true
-test_exemplars = true
-contracts = true
-deps_config_fixtures = true
-coverage_hints = true
-callgraph = true
-error_paths = true
-usage_examples = true
-pytest_settings = true
-side_effects = true
-path_constraints = true
-
-[prompt_budgets]
-per_item_chars = 1500
-total_chars = 10000
-
-[prompt_budgets.section_caps]
-snippets = 10
-neighbors = 5
-test_exemplars = 5
-contracts = 8
-deps_config_fixtures = 2
-coverage_hints = 3
-callgraph = 3
-error_paths = 3
-usage_examples = 5
-pytest_settings = 1
-side_effects = 1
-path_constraints = 3
-
-[context_budgets.directory_tree]
-max_depth = 4                 # Maximum directory depth for recursive tree (1-10)
-max_entries_per_dir = 200     # Maximum files/dirs per directory (10-1000)
-include_py_only = true        # Only include .py files and directories
-```
-
-Notes:
-- **Prompt budgets** enforce hard caps: per-item character limit and a total prompt cap.
-- **Section caps** limit how many entries from each category are included.
-- **Context budgets** control resource-intensive operations like directory tree building.
-- **Directory tree budgets** prevent performance issues with large codebases.
-- Disable any category by setting its flag to `false`.
-
 ## Enhanced Import System
 
 TestCraft includes an enhanced import system that provides recursive directory trees and authoritative module path derivation to ensure generated tests have correct import statements.
@@ -899,15 +941,19 @@ TestCraft includes an enhanced import system that provides recursive directory t
 
 ### Configuration
 
-```toml
-[context_budgets.directory_tree]
-max_depth = 4                 # Maximum directory depth for recursive tree (1-10)
-max_entries_per_dir = 200     # Maximum files/dirs per directory (10-1000)
-include_py_only = true        # Only include .py files and directories
+Directory tree and usage example features are configured via `context_enrichment`:
 
+```toml
 [context_enrichment]
 enable_usage_examples = true  # Use enhanced module-qualified usage examples
+enable_env_detection = true
+enable_db_boundary_detection = true
+enable_http_boundary_detection = true
+enable_comprehensive_fixtures = true
+enable_side_effect_detection = true
 ```
+
+**Note**: Directory tree depth and entry limits are internal defaults and not user-configurable.
 
 ### How It Works
 
@@ -934,7 +980,7 @@ enable_usage_examples = true  # Use enhanced module-qualified usage examples
 
 ### Telemetry
 
-The system tracks module path derivation success rates:
+The system tracks module path derivation success rates. Telemetry backend is selected by `telemetry.backend` when `telemetry.enabled=true`. If disabled or an unknown backend is set, TestCraft falls back to a no-op telemetry adapter gracefully.
 
 - `module_path_derived_total`: Total attempts
 - `module_path_derived_success`: Successful validations

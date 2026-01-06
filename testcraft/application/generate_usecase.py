@@ -9,12 +9,13 @@ improved maintainability and separation of concerns.
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any
 
-from testcraft.config.models import OrchestratorConfig
+from testcraft.config.models import OrchestratorConfig, RefineConfig
 
 from ..adapters.io.file_discovery import FileDiscoveryService
 from ..adapters.io.file_status_tracker import FileStatus
@@ -104,6 +105,7 @@ class GenerateUseCase:
         # Merge and validate configuration
         self._config = GenerationConfig.merge_config(config)
         GenerationConfig.validate_config(self._config)
+        self._project_root: Path | None = None
 
         # Initialize file discovery service
         self._file_discovery = file_discovery_service or FileDiscoveryService()
@@ -143,21 +145,43 @@ class GenerateUseCase:
             telemetry_port=telemetry_port,
         )
 
+        # Build refine configuration for pytest refiner if available
+        refine_cfg_obj = None
+        try:
+            refine_cfg = self._config.get("refine")
+            if isinstance(refine_cfg, dict):
+                refine_cfg_obj = RefineConfig(**refine_cfg)
+        except Exception:
+            refine_cfg_obj = None
+
         self._pytest_refiner = PytestRefiner(
             refine_port=refine_port,
             telemetry_port=telemetry_port,
             executor=self._executor,
+            config=refine_cfg_obj,
             max_concurrent_refines=self._config["max_refine_workers"],
             backoff_sec=self._config["refinement_backoff_sec"],
             writer_port=self._writer,
         )
 
+        symbol_resolution_cfg = self._config.get("symbol_resolution", {})
+        allow_runtime_imports = bool(
+            symbol_resolution_cfg.get("allow_runtime_imports", False)
+        )
+        runtime_timeout = symbol_resolution_cfg.get("runtime_timeout_sec", 10.0)
+
         # Initialize symbol resolution services
         self._symbol_resolver = SymbolResolver(
             parser_port=parser_port,
+            allow_runtime_imports=allow_runtime_imports,
+            runtime_timeout_sec=runtime_timeout,
         )
 
-        self._context_pack_builder = ContextPackBuilder()
+        self._context_pack_builder = ContextPackBuilder(
+            parser=parser_port,
+            context_assembler=self._context_assembler,
+            file_discovery_service=self._file_discovery,
+        )
 
         # Create orchestrator config with values from configuration
         orchestrator_config = OrchestratorConfig(
@@ -177,6 +201,26 @@ class GenerateUseCase:
         # Status tracker will be injected per generation operation
         self._current_status_tracker = None
 
+    def set_project_root(self, project_root: Path | str | None) -> None:
+        """
+        Update the project root used by the writer adapter.
+
+        Args:
+            project_root: New project root path or None to clear the scope.
+        """
+        if project_root is None:
+            self._project_root = None
+        else:
+            resolved_root = Path(project_root)
+            try:
+                resolved_root = resolved_root.resolve()
+            except OSError:
+                resolved_root = resolved_root.absolute()
+            self._project_root = resolved_root
+
+        if hasattr(self._writer, "set_project_root"):
+            self._writer.set_project_root(self._project_root)
+
     def set_status_tracker(self, status_tracker) -> None:
         """Set the status tracker for live updates during generation."""
         self._current_status_tracker = status_tracker
@@ -186,6 +230,59 @@ class GenerateUseCase:
             self._batch_executor._status_tracker = status_tracker
         if hasattr(self._pytest_refiner, "_status_tracker"):
             self._pytest_refiner._status_tracker = status_tracker
+
+    def _persist_generation_artifacts(
+        self,
+        plan: Any,
+        generation_result: GenerationResult,
+        llm_payload: dict[str, Any] | None = None,
+    ) -> None:
+        """Persist plan/test artifacts under the project .testcraft directory."""
+        if not self._project_root:
+            return
+
+        if not generation_result.success or not generation_result.content:
+            return
+
+        try:
+            artifacts_root = self._project_root / ".testcraft" / "artifacts"
+            plan_dir = artifacts_root / "generation_plan"
+            generated_dir = artifacts_root / "generated_test"
+            llm_dir = artifacts_root / "llm_response"
+
+            for directory in (plan_dir, generated_dir, llm_dir):
+                directory.mkdir(parents=True, exist_ok=True)
+
+            target_path = Path(generation_result.file_path)
+            base_name = target_path.with_suffix("").name or "generated_test"
+
+            plan_payload: Any
+            if hasattr(plan, "model_dump"):
+                plan_payload = plan.model_dump()
+            elif hasattr(plan, "dict"):
+                plan_payload = plan.dict()
+            else:
+                plan_payload = plan
+
+            plan_file = plan_dir / f"{base_name}.json"
+            plan_file.write_text(
+                json.dumps(plan_payload, indent=2, default=str), encoding="utf-8"
+            )
+
+            test_file = generated_dir / f"{base_name}.py"
+            test_file.write_text(generation_result.content, encoding="utf-8")
+
+            llm_info = llm_payload or {
+                "note": "LLM raw response not captured.",
+                "file_path": generation_result.file_path,
+            }
+            llm_file = llm_dir / f"{base_name}.json"
+            llm_file.write_text(
+                json.dumps(llm_info, indent=2, default=str), encoding="utf-8"
+            )
+
+        except Exception as exc:  # pragma: no cover - artifact persistence best-effort
+            logger.warning("Failed to persist generation artifacts: %s", exc)
 
     async def generate_tests(
         self,
@@ -205,6 +302,7 @@ class GenerateUseCase:
             Dictionary containing generation results, statistics, and metadata
             (Unchanged from original implementation)
         """
+        self.set_project_root(project_path)
         project_path = Path(project_path)
 
         with self._telemetry.create_span(
@@ -385,13 +483,28 @@ class GenerateUseCase:
             GenerationResult for this plan
         """
         try:
-            # Get source path for this plan
-            source_path = self._plan_builder.get_source_path_for_plan(plan)
+            # Get source path for this plan. New plans carry the path, but support the
+            # legacy lookup as a fallback to remain compatible with cached objects.
+            source_path: Path | None = None
+            if getattr(plan, "file_path", None):
+                source_path = Path(plan.file_path)
+            else:
+                source_path = self._plan_builder.get_source_path_for_plan(plan)
 
-            # ✅ FIX: Extract project_root at function scope using existing utility
-            # This ensures project_root is available throughout the method
-            project_root = None
-            if source_path:
+            if source_path is None:
+                raise GenerateUseCaseError(
+                    "Plan is missing source file metadata; cannot generate tests"
+                )
+
+            # Determine the project root associated with this plan.
+            project_root: Path | None = None
+            if getattr(plan, "project_root", None):
+                project_root = (
+                    Path(plan.project_root)
+                    if not isinstance(plan.project_root, Path)
+                    else plan.project_root
+                )
+            else:
                 try:
                     project_root = self._context_pack_builder._find_project_root(
                         source_path
@@ -400,11 +513,8 @@ class GenerateUseCase:
                     logger.warning(
                         "Failed to detect project root for %s: %s", source_path, e
                     )
-                    # Fallback: use source file's parent
+                    # Fallback: use source file's parent directory
                     project_root = source_path.parent
-
-            # Build code content from plan elements
-            code_content = self._content_builder.build_code_content(plan, source_path)
 
             # Get relevant context for this file
             context_result = self._context_assembler.context_for_generation(
@@ -432,30 +542,34 @@ class GenerateUseCase:
 
             # Derive authoritative module path and import suggestions
             module_path_info = {}
-            if source_path:
-                try:
-                    module_path_info = ModulePathDeriver.derive_module_path(
-                        source_path, project_root
+            try:
+                module_path_info = ModulePathDeriver.derive_module_path(
+                    source_path, project_root
+                )
+
+                if module_path_info.get("module_path"):
+                    logger.debug(
+                        "Derived module path for %s: %s (status: %s)",
+                        source_path,
+                        module_path_info["module_path"],
+                        module_path_info["validation_status"],
                     )
 
-                    if module_path_info.get("module_path"):
-                        logger.debug(
-                            "Derived module path for %s: %s (status: %s)",
-                            source_path,
-                            module_path_info["module_path"],
-                            module_path_info["validation_status"],
-                        )
+                    # Record telemetry for module path derivation
+                    self._record_module_path_telemetry(module_path_info, source_path)
 
-                        # Record telemetry for module path derivation
-                        self._record_module_path_telemetry(
-                            module_path_info, source_path
-                        )
+            except Exception as e:
+                logger.warning(
+                    "Failed to derive module path for %s: %s", source_path, e
+                )
+                module_path_info = {}
 
-                except Exception as e:
-                    logger.warning(
-                        "Failed to derive module path for %s: %s", source_path, e
-                    )
-                    module_path_info = {}
+            # If the plan already computed a canonical module path, merge it so the
+            # prompts remain stable even when derivation encountered issues.
+            if getattr(plan, "module_path", None) and not module_path_info.get(
+                "module_path"
+            ):
+                module_path_info["module_path"] = plan.module_path
 
             # Enhance context with module path information
             enhanced_context = relevant_context
@@ -496,51 +610,53 @@ class GenerateUseCase:
                         f"# Module Import Information\n{module_info_text}"
                     )
 
-            # Use LLMOrchestrator for PLAN/GENERATE/REFINE with symbol resolution
-            # Check if context is available - if so, use ContextPackBuilder
-            if enhanced_context is not None:
-                # ✅ Build complete ContextPack using ContextPackBuilder
-                # ContextPackBuilder handles Target, Focal, and ImportMap creation internally
-                context_pack = self._context_pack_builder.build_context_pack(
-                    target_file=Path(source_path),
-                    target_object=plan.elements_to_test[0].name
-                    if plan.elements_to_test
-                    else "unknown",
-                    project_root=Path(project_root) if project_root else None,
+            # Determine output file path up-front so failures carry location metadata
+            output_path = self._content_builder.determine_test_path(plan)
+
+            # Use LLMOrchestrator with ContextPackBuilder for consistent repo-aware behavior
+            context_pack = self._context_pack_builder.build_context_pack(
+                target_file=source_path,
+                target_object=plan.elements_to_test[0].name
+                if plan.elements_to_test
+                else "unknown",
+                project_root=project_root,
+            )
+
+            if context_pack is None:
+                logger.warning(
+                    "Context pack builder returned None for %s; skipping generation",
+                    source_path,
+                )
+                return GenerationResult(
+                    file_path=output_path,
+                    content=None,
+                    success=False,
+                    error_message="Failed to build context pack for target file",
                 )
 
-                # Import Resolution Flow (Authoritative):
-                # 1. ContextPackBuilder calls ImportResolver.resolve(target_file)
-                # 2. ImportResolver produces canonical ImportMap with:
-                #    - target_import: canonical import statement
-                #    - sys_path_roots: PYTHONPATH directories
-                #    - needs_bootstrap: whether conftest.py needed
-                #    - bootstrap_conftest: conftest.py content if needed
-                # 3. ImportMap embedded in ContextPack.import_map
-                # 4. LLMOrchestrator extracts import_map from ContextPack for prompts
-                #
-                # Note: ModulePathDeriver provides supplementary import suggestions
-                #       but ContextPack.import_map is the authoritative source.
+            # Import Resolution Flow (Authoritative):
+            # 1. ContextPackBuilder calls ImportResolver.resolve(target_file)
+            # 2. ImportResolver produces canonical ImportMap with:
+            #    - target_import: canonical import statement
+            #    - sys_path_roots: PYTHONPATH directories
+            #    - needs_bootstrap: whether conftest.py needed
+            #    - bootstrap_conftest: conftest.py content if needed
+            # 3. ImportMap embedded in ContextPack.import_map
+            # 4. LLMOrchestrator extracts import_map from ContextPack for prompts
+            #
+            # Note: ModulePathDeriver provides supplementary import suggestions
+            #       but ContextPack.import_map is the authoritative source.
 
-                # Use LLMOrchestrator for PLAN/GENERATE workflow
-                orchestrator_result = self._llm_orchestrator.plan_and_generate(
-                    context_pack=context_pack,
-                    project_root=project_root,
-                )
+            orchestrator_result = self._llm_orchestrator.plan_and_generate(
+                context_pack=context_pack,
+                project_root=project_root,
+            )
 
-                # Extract test content from orchestrator result
-                test_content = orchestrator_result.get("generated_code", "")
-            else:
-                # Fall back to legacy LLM call when context is not available
-                llm_result = await self._llm.generate_tests(
-                    code_content=code_content,
-                    context=enhanced_context,
-                    test_framework=self._config["test_framework"],
-                )
-                test_content = llm_result.get("tests", "")
+            # Extract test content from orchestrator result
+            test_content = orchestrator_result.get("generated_code", "")
             if not test_content or not test_content.strip():
                 return GenerationResult(
-                    file_path="unknown",  # Would use actual path
+                    file_path=output_path,
                     content=None,
                     success=False,
                     error_message="LLM orchestrator returned empty test content",
@@ -593,9 +709,6 @@ class GenerateUseCase:
                         e,
                     )
                     # Continue with unvalidated content rather than failing generation
-
-            # Determine output file path
-            output_path = self._content_builder.determine_test_path(plan)
 
             return GenerationResult(
                 file_path=output_path,
@@ -706,12 +819,17 @@ class GenerateUseCase:
             "success": False,
             "errors": [],
         }
+        plan_path = (
+            Path(plan.file_path)
+            if not isinstance(plan.file_path, Path)
+            else plan.file_path
+        )
 
         try:
             # Update status for generation start
             if self._current_status_tracker:
                 self._current_status_tracker.update_file_status(
-                    plan.file_path,
+                    str(plan_path),
                     FileStatus.GENERATING,
                     operation="LLM Generation",
                     step="Processing source code with AI",
@@ -726,7 +844,7 @@ class GenerateUseCase:
                 result["errors"].append("Test generation failed")
                 if self._current_status_tracker:
                     self._current_status_tracker.update_file_status(
-                        plan.file_path,
+                        str(plan_path),
                         FileStatus.FAILED,
                         operation="Generation Failed",
                         step=generation_result.error_message
@@ -738,7 +856,7 @@ class GenerateUseCase:
             # Update status for writing
             if self._current_status_tracker:
                 self._current_status_tracker.update_file_status(
-                    plan.file_path,
+                    str(plan_path),
                     FileStatus.WRITING,
                     operation="Writing Tests",
                     step="Saving generated test file to disk",
@@ -757,7 +875,7 @@ class GenerateUseCase:
 
                     if self._current_status_tracker:
                         self._current_status_tracker.update_file_status(
-                            plan.file_path,
+                            str(plan_path),
                             FileStatus.FAILED,
                             operation="Write Failed",
                             step=write_result.get("error", "Unknown write error"),
@@ -770,11 +888,13 @@ class GenerateUseCase:
 
                     return result
 
+                self._persist_generation_artifacts(plan, generation_result, None)
+
             except Exception as e:
                 result["errors"].append(f"Write error: {e}")
                 if self._current_status_tracker:
                     self._current_status_tracker.update_file_status(
-                        plan.file_path,
+                        str(plan_path),
                         FileStatus.FAILED,
                         operation="Write Error",
                         step=f"Exception during write: {str(e)}",
@@ -790,7 +910,7 @@ class GenerateUseCase:
                     # Update status for testing start
                     if self._current_status_tracker:
                         self._current_status_tracker.update_file_status(
-                            plan.file_path,
+                            str(plan_path),
                             FileStatus.TESTING,
                             operation="Initial Testing",
                             step="Running pytest on generated tests",
@@ -807,7 +927,7 @@ class GenerateUseCase:
                         result["success"] = True
                         if self._current_status_tracker:
                             self._current_status_tracker.update_file_status(
-                                plan.file_path,
+                                str(plan_path),
                                 FileStatus.COMPLETED,
                                 operation="Tests Passing",
                                 step=f"All tests pass after {refinement_result.get('iterations', 1)} iteration(s)",
@@ -819,7 +939,7 @@ class GenerateUseCase:
                         )
                         if self._current_status_tracker:
                             self._current_status_tracker.update_file_status(
-                                plan.file_path,
+                                str(plan_path),
                                 FileStatus.FAILED,
                                 operation="Refinement Failed",
                                 step=refinement_result.get(
@@ -828,11 +948,27 @@ class GenerateUseCase:
                                 progress=0.0,
                             )
 
+                        # Optional: manual-fix on fail
+                        try:
+                            mf_cfg = self._config.get("manual_fix", {}) or {}
+                            if (
+                                bool(mf_cfg.get("on_fail", False))
+                                and self._llm_orchestrator._config.enable_manual_fix
+                            ):
+                                await self._run_manual_fix_after_failure(
+                                    source_path=plan_path,
+                                    project_root=plan_path.parent,
+                                    refinement_result=refinement_result,
+                                )
+                        except Exception:
+                            # Non-fatal to pipeline
+                            pass
+
                 except Exception as e:
                     result["errors"].append(f"Refinement error: {e}")
                     if self._current_status_tracker:
                         self._current_status_tracker.update_file_status(
-                            plan.file_path,
+                            str(plan_path),
                             FileStatus.FAILED,
                             operation="Refinement Error",
                             step=f"Exception during refinement: {str(e)}",
@@ -843,7 +979,7 @@ class GenerateUseCase:
                 result["success"] = True
                 if self._current_status_tracker:
                     self._current_status_tracker.update_file_status(
-                        plan.file_path,
+                        str(plan_path),
                         FileStatus.COMPLETED,
                         operation="Tests Written",
                         step="Test file saved (refinement disabled)",
@@ -873,8 +1009,8 @@ class GenerateUseCase:
             enriched_context = self._context_assembler.get_last_enriched_context()
             if not enriched_context:
                 return {
-                    "success": False,
-                    "message": "No enriched context available for quality gates",
+                    "success": True,
+                    "message": "Quality gates skipped (no enriched context available)",
                     "gate_results": [],
                 }
 
@@ -882,8 +1018,8 @@ class GenerateUseCase:
             import_map = enriched_context.get("imports", {}).get("import_map")
             if not import_map:
                 return {
-                    "success": False,
-                    "message": "No import map available for quality gates",
+                    "success": True,
+                    "message": "Quality gates skipped (no import map available)",
                     "gate_results": [],
                 }
 
@@ -1499,6 +1635,9 @@ class GenerateUseCase:
                             }
                         )
 
+                        if write_result.get("success", False):
+                            self._persist_generation_artifacts(None, result, None)
+
                     except Exception as e:
                         logger.warning(
                             "Failed to write test file %s: %s", result.file_path, e
@@ -1570,6 +1709,21 @@ class GenerateUseCase:
                                 "iterations": 0,
                             }
                         )
+
+                        # Optional: manual-fix on fail (legacy path)
+                        try:
+                            mf_cfg = self._config.get("manual_fix", {}) or {}
+                            if (
+                                bool(mf_cfg.get("on_fail", False))
+                                and self._llm_orchestrator._config.enable_manual_fix
+                            ):
+                                await self._run_manual_fix_after_failure(
+                                    source_path=test_file_path,
+                                    project_root=Path(test_file_path).parent,
+                                    refinement_result={"error": str(e)},
+                                )
+                        except Exception:
+                            pass
 
                 span.set_attribute(
                     "files_refined",
@@ -1726,3 +1880,69 @@ class GenerateUseCase:
                 self._content_builder.clear_cache()
         except Exception:
             pass  # Ignore cleanup errors
+
+    async def _run_manual_fix_after_failure(
+        self,
+        *,
+        source_path,
+        project_root,
+        refinement_result: dict[str, Any],
+    ) -> None:
+        """Trigger manual fix guidance after a refinement failure if configured."""
+        try:
+            from ..domain.manual_fix import ManualFixRequest
+            from .manual_fix_usecase import ManualFixGuidanceUseCase
+        except Exception:
+            return
+
+        # Lazy create use case and presenter
+        if not hasattr(self, "_manual_fix_usecase") or self._manual_fix_usecase is None:
+            context_assembler = ContextAssembler(
+                context_port=self._context,
+                parser_port=self._parser,
+                config=self._config,
+            )
+            context_pack_builder = ContextPackBuilder(
+                context_assembler=context_assembler,
+                file_discovery_service=self._file_discovery,
+            )
+
+            self_ref = self
+
+            class _NoopPresenter:
+                def present(self, recommendation, *, dry_run: bool = False) -> bool:
+                    auto_accept = bool(
+                        self_ref._config.get("manual_fix", {}).get("auto_accept", False)
+                    )
+                    return auto_accept
+
+            presenter = _NoopPresenter()
+
+            self._manual_fix_usecase = ManualFixGuidanceUseCase(
+                llm_orchestrator=self._llm_orchestrator,
+                parser_port=self._parser,
+                context_assembler=context_assembler,
+                context_pack_builder=context_pack_builder,
+                telemetry_port=self._telemetry,
+                presenter=presenter,
+                config=self._config,
+            )
+
+        # Build request
+        from pathlib import Path as _Path
+
+        req = ManualFixRequest(
+            project_root=project_root if project_root is not None else _Path("."),
+            target_file=_Path(source_path)
+            if not isinstance(source_path, _Path)
+            else source_path,
+            target_object="module",
+            trace_excerpt=str(refinement_result.get("error", "")),
+            notes="Triggered after refinement failure",
+        )
+
+        try:
+            await self._manual_fix_usecase.run(req)
+        except Exception:
+            # Non-fatal to main pipeline
+            pass

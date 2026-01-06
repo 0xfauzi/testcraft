@@ -226,6 +226,32 @@ class CoverageConfig(BaseModel):
         default=True, description="Enable JUnit XML for all coverage runs"
     )
 
+    # Adapter passthrough options (lightweight)
+    include: list[str] = Field(
+        default_factory=list,
+        description="Explicit source directories for coverage measurement",
+    )
+    omit: list[str] = Field(
+        default_factory=lambda: [
+            "*/tests/*",
+            "*/test_*.py",
+            "*_test.py",
+            "*/.venv/*",
+            "*/venv/*",
+            "*/site-packages/*",
+            "*/.tox/*",
+        ],
+        description="Patterns to omit from coverage",
+    )
+    data_dir: str = Field(
+        default=".artifacts/coverage",
+        description="Directory to store coverage data files and reports",
+    )
+    aggregate: bool = Field(
+        default=True,
+        description="Combine coverage data across multiple runs",
+    )
+
     runner: TestRunnerConfig = Field(
         default_factory=TestRunnerConfig, description="Test runner configuration"
     )
@@ -240,13 +266,20 @@ class MergeConfig(BaseModel):
     """Configuration for test merging strategies."""
 
     strategy: Literal["append", "ast-merge"] = Field(
-        default="append", description="Test merging strategy"
+        default="append",
+        description=(
+            "Test merging strategy (informational). Writer currently performs AST merge; "
+            "this option does not alter behavior yet."
+        ),
     )
 
     dry_run: bool = Field(default=False, description="Preview changes without applying")
 
     formatter: str = Field(
-        default="none", description="Code formatter to apply after merge"
+        default="none",
+        description=(
+            "Formatter to apply after merge (informational). Current writer controls formatting."
+        ),
     )
 
 
@@ -254,7 +287,10 @@ class PostGenerationTestRunnerConfig(BaseModel):
     """Configuration for post-generation test execution."""
 
     enable: bool = Field(
-        default=False, description="Enable post-generation test execution"
+        default=False,
+        description=(
+            "Enable post-generation test execution (not currently invoked by generation pipeline)."
+        ),
     )
 
     args: list[str] = Field(default_factory=list, description="Extra pytest args")
@@ -314,6 +350,20 @@ class RefineConfig(BaseModel):
 
     refinement_backoff_sec: float = Field(
         default=0.2, ge=0.0, le=5.0, description="Backoff between refinement iterations"
+    )
+
+    iteration_timeout_sec: float = Field(
+        default=30.0,
+        ge=1.0,
+        le=600.0,
+        description="Per-iteration timeout for refinement loop in seconds",
+    )
+
+    file_lock_timeout_sec: float = Field(
+        default=5.0,
+        ge=0.5,
+        le=60.0,
+        description="Timeout for acquiring file locks during refinement writes",
     )
 
     # Strict refinement policies (new)
@@ -1089,6 +1139,29 @@ class TelemetryConfig(BaseModel):
         return v
 
 
+class PlanningConfig(BaseModel):
+    """Configuration for planning workflow."""
+
+    enabled: bool = Field(
+        default=True, description="Enable planning stage before test generation"
+    )
+
+    auto_accept: bool = Field(
+        default=False, description="Auto-accept plans without user interaction"
+    )
+
+    prompt_template: str | None = Field(
+        default=None,
+        description="Custom prompt template for planning (uses default if None)",
+    )
+
+    max_retries: int = Field(
+        default=2,
+        ge=0,
+        description="Maximum retries for planning stage (delegates to OrchestratorConfig)",
+    )
+
+
 class TestCraftConfig(BaseModel):
     """Main configuration model for TestCraft."""
 
@@ -1154,6 +1227,44 @@ class TestCraftConfig(BaseModel):
     llm: LLMProviderConfig = Field(
         default_factory=LLMProviderConfig,
         description="Large Language Model provider configuration",
+    )
+
+    # Planning workflow configuration
+    planning: PlanningConfig = Field(
+        default_factory=PlanningConfig,
+        description="Planning workflow configuration",
+    )
+
+    # Manual fix guidance configuration
+    class ManualFixConfig(BaseModel):
+        enable: bool = Field(
+            default=True, description="Enable manual-fix guidance features"
+        )
+        on_fail: bool = Field(
+            default=False, description="Trigger manual-fix after refinement failure"
+        )
+        auto_accept: bool = Field(
+            default=False, description="Auto-accept manual-fix recommendations"
+        )
+        output_dir: str = Field(
+            default=".testcraft/manual_fixes",
+            description="Directory for Markdown artifacts",
+        )
+        model: str | None = Field(
+            default=None, description="Override model id (optional)"
+        )
+        max_tokens: int = Field(
+            default=8000, ge=512, description="Max tokens for guidance"
+        )
+        temperature: float = Field(
+            default=0.1, ge=0.0, le=2.0, description="LLM temperature"
+        )
+        prompt_version: str | None = Field(
+            default=None, description="Prompt version override"
+        )
+
+    manual_fix: ManualFixConfig = Field(
+        default_factory=ManualFixConfig, description="Manual-fix guidance configuration"
     )
 
     @field_validator("coverage")

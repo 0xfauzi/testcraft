@@ -30,14 +30,8 @@ class ConfigLoader:
 
     DEFAULT_CONFIG_FILES = [
         ".testcraft.toml",  # TOML files (preferred)
-        ".testcraft.yml",
-        ".testcraft.yaml",
         "testcraft.toml",
-        "testcraft.yml",
-        "testcraft.yaml",
         ".testgen.toml",  # Legacy support (TOML)
-        ".testgen.yml",  # Legacy support (YAML)
-        ".testgen.yaml",  # Legacy support (YAML)
     ]
 
     ENV_PREFIX = "TESTCRAFT_"
@@ -124,6 +118,10 @@ class ConfigLoader:
             if config_file.suffix.lower() == ".toml":
                 return self._load_toml_file(config_file)
             elif config_file.suffix.lower() in (".yml", ".yaml"):
+                # Deprecation notice for YAML when explicitly specified
+                logger.warning(
+                    "YAML config is deprecated. Prefer TOML (.testcraft.toml)."
+                )
                 return self._load_yaml_file(config_file)
             else:
                 logger.warning(f"Unknown configuration file type: {config_file}")
@@ -174,6 +172,8 @@ class ConfigLoader:
         """Load configuration from environment variables."""
         env_config: dict[str, Any] = {}
 
+        valid_root_keys = set(TestCraftConfig.model_fields.keys())
+
         for key, value in os.environ.items():
             if key.startswith(self.ENV_PREFIX):
                 # Remove prefix and convert to lowercase
@@ -182,6 +182,16 @@ class ConfigLoader:
                 # Convert environment variable name to nested dict structure
                 # e.g., TESTCRAFT_COVERAGE__MINIMUM_LINE_COVERAGE -> coverage.minimum_line_coverage
                 nested_keys = config_key.replace("__", ".").split(".")
+
+                # Skip helper/testing-only environment variables outside the config schema
+                root_key = nested_keys[0]
+                if root_key not in valid_root_keys:
+                    logger.debug(
+                        "Ignoring environment override %s (no config field for '%s')",
+                        key,
+                        root_key,
+                    )
+                    continue
 
                 # Parse value (try to convert to appropriate type)
                 parsed_value = self._parse_env_value(value)
@@ -262,202 +272,134 @@ class ConfigLoader:
         """Create a comprehensive sample configuration file.
 
         Args:
-            filepath: Path for the config file. Defaults to .testcraft.yml
+            filepath: Path for the config file. Defaults to .testcraft.toml
 
         Returns:
             Path to the created configuration file
         """
         if filepath is None:
-            filepath = Path(".testcraft.yml")
+            filepath = Path(".testcraft.toml")
         else:
             filepath = Path(filepath)
 
         # Generate comprehensive config with all options and explanations
-        config_content = """# TestCraft Configuration
-# This file contains all available configuration options with detailed explanations.
-# Uncomment and modify the sections you want to customize.
+        config_content = """# TestCraft Configuration (TOML)
+# Adjust and uncomment values as needed for your project.
 
-# =============================================================================
-# TEST DISCOVERY PATTERNS
-# =============================================================================
+[test_patterns]
+test_patterns = ["test_*.py", "*_test.py", "tests/**/test_*.py"]
+exclude = ["migrations/*", "*/deprecated/*", "__pycache__/*", "*.pyc"]
+exclude_dirs = []
 
-test_patterns:
-  # Patterns for finding test files (supports glob patterns)
-  test_patterns:
-    - 'test_*.py'
-    - '*_test.py'
-    - 'tests/**/test_*.py'
+[style]
+framework = "pytest"
+assertion_style = "pytest"
+mock_library = "unittest.mock"
 
-  # Files and patterns to exclude from test generation
-  exclude:
-    - 'migrations/*'
-    - '*/deprecated/*'
-    - '__pycache__/*'
-    - '*.pyc'
+[coverage]
+minimum_line_coverage = 80.0
+minimum_branch_coverage = 70.0
+regenerate_if_below = 60.0
+pytest_args = []
+junit_xml = true
 
-  # Additional directories to exclude (common ones are already included by default)
-  exclude_dirs: []
-    # - 'vendor'
-    # - 'third_party'
+[coverage.runner]
+mode = "python-module"
+python = ""
+pytest_path = "pytest"
+custom_cmd = []
+cwd = ""
+args = []
 
-# =============================================================================
-# TEST GENERATION STYLE
-# =============================================================================
+[coverage.env]
+propagate = true
+append_pythonpath = []
 
-style:
-  framework: 'pytest'              # Options: 'pytest', 'unittest'
-  assertion_style: 'pytest'       # Options: 'pytest', 'unittest', 'auto'
-  mock_library: 'unittest.mock'   # Options: 'unittest.mock', 'pytest-mock', 'auto'
+[coverage.env.extra]
+# "KEY" = "value"
 
-# =============================================================================
-# COVERAGE ANALYSIS & THRESHOLDS
-# =============================================================================
+[generation]
+include_docstrings = true
+generate_fixtures = true
+parametrize_similar_tests = true
+max_test_methods_per_class = 20
+always_analyze_new_files = false
+immediate_refinement = true
+enable_refinement = true
+batch_size = 5
+disable_ruff_format = false
 
-coverage:
-  # Coverage thresholds
-  minimum_line_coverage: 80.0      # Minimum line coverage percentage
-  minimum_branch_coverage: 70.0    # Minimum branch coverage percentage
-  regenerate_if_below: 60.0        # Regenerate tests if coverage drops below this
+[generation.test_runner]
+enable = false
+args = []
+cwd = ""
+junit_xml = true
 
-  # Additional pytest arguments for coverage runs
-  pytest_args: []                  # e.g., ['-v', '--tb=short']
-  junit_xml: true                  # Enable JUnit XML for all coverage runs
+[generation.merge]
+strategy = "append"
+dry_run = false
+formatter = "none"
 
-  # Test runner configuration
-  runner:
-    mode: 'python-module'          # Options: 'python-module', 'pytest-path', 'custom'
-    python: null                   # Python executable (null = current sys.executable)
-    pytest_path: 'pytest'         # Path to pytest when mode is 'pytest-path'
-    custom_cmd: []                 # Custom command when mode is 'custom'
-    cwd: null                      # Working directory (null = project root)
-    args: []                       # Runner-specific args before pytest_args
+[generation.refine]
+enable = false
+max_retries = 2
+backoff_base_sec = 1.0
+backoff_max_sec = 8.0
+stop_on_no_change = true
+max_total_minutes = 5.0
+strategy = "auto"
 
-  # Environment configuration for test runs
-  env:
-    propagate: true                # Inherit current environment variables
-    extra: {}                      # Additional environment variables
-    append_pythonpath: []          # Paths to append to PYTHONPATH
+[environment]
+auto_detect = true
+preferred_manager = "auto"
+respect_virtual_env = true
+dependency_validation = true
 
-# =============================================================================
-# TEST GENERATION BEHAVIOR
-# =============================================================================
+[llm]
+default_provider = "openai"  # "openai", "anthropic", "azure-openai", or "bedrock"
+temperature = 0.1
+max_retries = 3
+enable_streaming = false
+openai_model = "gpt-4.1"
+openai_timeout = 60.0
+openai_max_tokens = 12000
+openai_base_url = ""
+anthropic_model = "claude-sonnet-4"
+anthropic_timeout = 60.0
+anthropic_max_tokens = 100000
+azure_openai_deployment = "gpt-4.1"
+azure_openai_api_version = "2024-02-15-preview"
+azure_openai_timeout = 60.0
+bedrock_model_id = "anthropic.claude-3-7-sonnet-v1:0"
+bedrock_timeout = 60.0
 
-generation:
-  # Test content and structure options
-  include_docstrings: true         # Include docstrings in test methods (true, false, "minimal")
-  generate_fixtures: true          # Generate pytest fixtures for common setup
-  parametrize_similar_tests: true  # Use @pytest.mark.parametrize for similar tests
-  max_test_methods_per_class: 20   # Maximum test methods per class (0 for unlimited)
-  always_analyze_new_files: false  # Always analyze new files even if they have tests
+[manual_fix]
+enable = true
+on_fail = false
+auto_accept = false
+output_dir = ".testcraft/manual_fixes"
 
-  # Post-generation test runner (runs pytest after generating tests)
-  test_runner:
-    enable: false                  # Enable post-generation test execution
-    args: []                       # Extra pytest args, e.g., ['-q', '-x']
-    cwd: null                      # Working directory (null = project root)
-    junit_xml: true                # Generate JUnit XML for failure parsing
+[planning]
+enabled = true
+auto_accept = false
+max_retries = 2
 
-  # Test merging strategy
-  merge:
-    strategy: 'append'             # Options: 'append', 'ast-merge'
-    dry_run: false                 # Preview changes without applying
-    formatter: 'none'              # Code formatter to apply after merge
+[telemetry]
+enabled = false
+backend = "opentelemetry"
+service_name = "testcraft"
+environment = "development"
+capture_llm_calls = true
+collect_metrics = true
 
-  # Test refinement loop (AI-powered test fixing)
-  refine:
-    enable: false                  # Enable AI-powered test refinement
-    max_retries: 2                 # Maximum refinement attempts
-    backoff_base_sec: 1.0          # Base delay between refinement attempts
-    backoff_max_sec: 8.0           # Maximum delay between attempts
-    stop_on_no_change: true        # Stop if LLM returns no changes
-    max_total_minutes: 5.0         # Maximum total time for refinement
-    strategy: 'auto'               # Refinement strategy: 'auto', 'comprehensive', 'balanced',
-                                   # 'dependency_focused', 'logic_focused', 'setup_focused'
+[telemetry.global_attributes]
+# "feature_flag" = "beta"
 
-# =============================================================================
-# ENVIRONMENT DETECTION & MANAGEMENT
-# =============================================================================
-
-environment:
-  # Environment detection settings
-  auto_detect: true                # Auto-detect current environment manager
-  preferred_manager: 'auto'        # 'poetry' | 'pipenv' | 'conda' | 'uv' | 'venv' | 'auto'
-  respect_virtual_env: true        # Always use current virtual env
-  dependency_validation: true      # Validate deps before running tests
-
-  # Environment-specific overrides
-  overrides:
-    poetry:
-      use_poetry_run: true         # Use `poetry run pytest` instead of direct python
-      respect_poetry_venv: true
-    pipenv:
-      use_pipenv_run: true         # Use `pipenv run pytest`
-    conda:
-      activate_environment: true   # Ensure conda environment is active
-    uv:
-      use_uv_run: false           # Use direct python instead of `uv run`
-
-# =============================================================================
-# COST MANAGEMENT & OPTIMIZATION
-# =============================================================================
-
-cost_management:
-  # File size limits for cost control
-  max_file_size_kb: 50             # Skip files larger than this (KB)
-  max_context_size_chars: 100000   # Limit total context size
-  max_files_per_request: 15        # Override batch size for large files
-  use_cheaper_model_threshold_kb: 10 # Use cheaper model for files < this size
-  enable_content_compression: true  # Remove comments/whitespace in prompts
-
-  # Cost thresholds and limits
-  cost_thresholds:
-    daily_limit: 50.0              # Maximum daily cost in USD
-    per_request_limit: 2.0         # Maximum cost per request in USD
-    warning_threshold: 1.0         # Warn when request exceeds this cost
-
-  # Additional optimizations
-  skip_trivial_files: true         # Skip files with < 5 functions/classes
-  token_usage_logging: true        # Log token usage for cost tracking
-
-# =============================================================================
-# TEST QUALITY ANALYSIS
-# =============================================================================
-
-quality:
-  # Quality analysis settings
-  enable_quality_analysis: true    # Enable quality analysis by default
-  enable_mutation_testing: true    # Enable mutation testing by default
-  minimum_quality_score: 75.0      # Minimum acceptable quality score (%)
-  minimum_mutation_score: 80.0     # Minimum acceptable mutation score (%)
-  max_mutants_per_file: 50         # Maximum mutants per file for performance
-  mutation_timeout: 30             # Timeout in seconds for mutation testing
-  display_detailed_results: true   # Show detailed quality analysis results
-  enable_pattern_analysis: true    # Enable failure pattern analysis for smart refinement
-
-  # Modern Python Mutators
-  modern_mutators:
-    enable_type_hints: true        # Enable type hint mutations
-    enable_async_await: true       # Enable async/await mutations
-    enable_dataclass: true         # Enable dataclass mutations
-    type_hints_severity: 'medium'  # Severity: 'low', 'medium', 'high'
-    async_severity: 'high'         # Async mutations often critical
-    dataclass_severity: 'medium'   # Dataclass mutations typically medium severity
-
-# (Removed sections: security, prompt_engineering, context)
-
-# =============================================================================
-# ENVIRONMENT VARIABLE OVERRIDES
-# =============================================================================
-#
-# You can override any configuration value using environment variables with the prefix TESTCRAFT_
-# Use double underscores (__) to separate nested keys.
-#
-# Examples:
-#   TESTCRAFT_COVERAGE__MINIMUM_LINE_COVERAGE=85
-#   TESTCRAFT_GENERATION__TEST_RUNNER__ENABLE=true
-#   TESTCRAFT_COST_MANAGEMENT__DAILY_LIMIT=25.0
-#
-# =============================================================================
+[telemetry.backends.opentelemetry]
+endpoint = ""
+headers = {}
+insecure = false
+timeout = 10
 """
 
         with open(filepath, "w", encoding="utf-8") as f:

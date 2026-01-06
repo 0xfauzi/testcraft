@@ -5,9 +5,7 @@ This module defines the interface for code coverage measurement and reporting,
 including coverage analysis and metric collection.
 """
 
-from typing import Any
-
-from typing_extensions import Protocol
+from typing import Any, Protocol
 
 from ..domain.models import CoverageResult
 

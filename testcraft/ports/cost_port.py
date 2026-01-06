@@ -6,9 +6,7 @@ including usage tracking and cost summaries.
 """
 
 from datetime import datetime
-from typing import Any
-
-from typing_extensions import Protocol
+from typing import Any, Protocol
 
 
 class CostPort(Protocol):

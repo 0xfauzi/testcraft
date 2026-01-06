@@ -490,12 +490,11 @@ class ContextAssembler:
                         "neighbor_items": neighbor_items,
                         "snippet_items": snippet_items,
                     },
+                    enriched_context_string,
                 )
                 check_progress_and_resources("context_pack_building")
 
                 if context_pack:
-                    # Add the formatted context string
-                    context_pack.context = enriched_context_string
                     check_progress_and_resources("final_validation")
                     return context_pack
 
@@ -512,6 +511,7 @@ class ContextAssembler:
         source_path: Path | None,
         import_map: dict[str, Any] | ImportMap | None,
         context_data: dict[str, list[str]],
+        enriched_context: str | None,
     ) -> ContextPack | None:
         """
         Build a complete ContextPack with all components properly populated.
@@ -561,7 +561,7 @@ class ContextAssembler:
                 property_context=property_context,
                 conventions=conventions,
                 budget=budget,
-                context="",  # Will be set by caller
+                context=enriched_context or "",
             )
 
             # 8. Validate the ContextPack
@@ -770,8 +770,16 @@ class ContextAssembler:
             primary_element = plan.elements_to_test[0]
             object_name = primary_element.name
 
-            # Basic focal information (already available)
-            source = object_name
+            # Determine focal source snippet from the actual file when possible
+            source_snippet, placeholder_reason = self._extract_element_source_snippet(
+                source_path, primary_element
+            )
+            if source_snippet:
+                source = source_snippet
+            else:
+                source = object_name
+                placeholder_reason = placeholder_reason or "missing_source_snippet"
+
             docstring = primary_element.docstring
 
             # Extract complete signature using AST parsing
@@ -798,6 +806,8 @@ class ContextAssembler:
                 source=source,
                 signature=signature,
                 docstring=docstring,
+                is_placeholder=bool(placeholder_reason),
+                placeholder_reason=placeholder_reason,
                 parameters=parameters,
                 return_type=return_type,
                 line_number=line_number,
@@ -819,6 +829,8 @@ class ContextAssembler:
                     source=primary_element.name,
                     signature=f"def {primary_element.name}(...):",
                     docstring=primary_element.docstring,
+                    is_placeholder=True,
+                    placeholder_reason="focal_build_exception",
                 )
             except Exception as e:
                 logger.debug("Failed to create fallback focal object: %s", e)
@@ -828,6 +840,73 @@ class ContextAssembler:
         self, source_path: Path | None, element: Any
     ) -> str:
         """Extract complete signature from AST parsing."""
+        try:
+            if not source_path or not source_path.exists():
+                return f"def {element.name}(...):"
+
+            node = self._find_node_for_element_from_plan(source_path, element)
+            if node:
+                return self._get_signature(node, element, [])
+
+            return f"def {element.name}(...):"
+        except Exception as exc:
+            logger.debug("Failed to extract complete signature: %s", exc)
+            return f"def {element.name}(...):"
+
+    def _extract_element_source_snippet(
+        self, source_path: Path | None, element: Any
+    ) -> tuple[str | None, str | None]:
+        """Extract the concrete source snippet for the target element.
+
+        Returns a tuple of (source_snippet, placeholder_reason).
+        """
+        if not source_path:
+            return None, "missing_source_path"
+
+        try:
+            if not source_path.exists():
+                return None, "missing_source_file"
+        except OSError as exc:
+            logger.debug("Failed to stat %s: %s", source_path, exc)
+            return None, "missing_source_file"
+
+        source_code = safe_file_read(source_path)
+        if source_code is None:
+            return None, "unreadable_source_file"
+
+        node = self._find_node_for_element_from_plan(source_path, element)
+        if node is None:
+            return None, "target_not_found_in_ast"
+
+        snippet: str | None = None
+        try:
+            if isinstance(node, ast.ClassDef):
+                snippet = self._extract_class_source(node, source_code)
+            elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                snippet = self._extract_function_source(node, source_code)
+            elif isinstance(node, ast.Module):
+                snippet = source_code
+        except Exception as exc:
+            logger.debug("Failed to extract source snippet: %s", exc)
+            snippet = None
+
+        if not snippet:
+            return None, "empty_source_snippet"
+
+        stripped = snippet.strip()
+        if not stripped:
+            return None, "empty_source_snippet"
+
+        placeholder_patterns = {
+            element.name,
+            f"class {element.name}: ...",
+            f"def {element.name}(...): ...",
+        }
+        if stripped in placeholder_patterns:
+            return stripped, "placeholder_source_snippet"
+
+        return snippet, None
+
         try:
             if not source_path or not source_path.exists():
                 return f"def {element.name}(...):"
@@ -970,6 +1049,8 @@ class ContextAssembler:
                 return None
 
             object_name = element.name
+            element_type = getattr(element, "type", None)
+            element_type_str = str(getattr(element_type, "value", element_type)).lower()
 
             # Handle method case: "ClassName.method_name"
             if "." in object_name:
@@ -980,6 +1061,11 @@ class ContextAssembler:
                             if isinstance(item, ast.FunctionDef | ast.AsyncFunctionDef):
                                 if item.name == method_name:
                                     return item
+            elif element_type_str == "module" or str(object_name).lower() in {
+                "module",
+                "__module__",
+            }:
+                return ast_tree
             else:
                 # Handle function or class at module level
                 for node in ast.walk(ast_tree):
@@ -1045,6 +1131,20 @@ class ContextAssembler:
                     unique_defs.append(def_info)
 
             logger.debug("Populated %d resolved definitions", len(unique_defs))
+
+            for def_info in unique_defs:
+                if "kind" not in def_info:
+                    def_type = def_info.get("type")
+                    if isinstance(def_type, str):
+                        if def_type.lower() in {"function", "method"}:
+                            def_info["kind"] = "func"
+                        elif def_type.lower() == "class":
+                            def_info["kind"] = "class"
+                        elif def_type.lower() in {"fixture", "const", "enum"}:
+                            def_info["kind"] = def_type.lower()
+                if "body" not in def_info and "source" in def_info:
+                    def_info["body"] = def_info["source"]
+
             return unique_defs
 
         except Exception as e:

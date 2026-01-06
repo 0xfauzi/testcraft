@@ -398,24 +398,34 @@ class StructuredLogger:
             self.debug(message_text, extra={"debug_context": True, **context})
 
     # Standard logging methods with rich formatting
-    def info(self, message: str, **kwargs):
+    def info(self, message: str, *args, **kwargs):
         """Log info message with rich formatting."""
+        if args:
+            message = message % args
         self.logger.info(LoggerManager._prepare_message(message), **kwargs)
 
-    def debug(self, message: str, **kwargs):
+    def debug(self, message: str, *args, **kwargs):
         """Log debug message with rich formatting."""
+        if args:
+            message = message % args
         self.logger.debug(LoggerManager._prepare_message(message), **kwargs)
 
-    def warning(self, message: str, **kwargs):
+    def warning(self, message: str, *args, **kwargs):
         """Log warning message with rich formatting."""
+        if args:
+            message = message % args
         self.logger.warning(LoggerManager._prepare_message(message), **kwargs)
 
-    def error(self, message: str, **kwargs):
+    def error(self, message: str, *args, **kwargs):
         """Log error message with rich formatting."""
+        if args:
+            message = message % args
         self.logger.error(LoggerManager._prepare_message(message), **kwargs)
 
-    def critical(self, message: str, **kwargs):
+    def critical(self, message: str, *args, **kwargs):
         """Log critical message with rich formatting."""
+        if args:
+            message = message % args
         self.logger.critical(LoggerManager._prepare_message(message), **kwargs)
 
 

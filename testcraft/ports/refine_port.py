@@ -6,9 +6,7 @@ including existing test improvement and optimization.
 """
 
 from pathlib import Path
-from typing import Any
-
-from typing_extensions import Protocol
+from typing import Any, Protocol
 
 from ..domain.models import RefineOutcome
 

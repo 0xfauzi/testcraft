@@ -1,0 +1,17 @@
+[llm]
+default_provider = "openai"
+openai_model = "gpt-4.1"
+anthropic_model = "claude-sonnet-4"
+temperature = 0.1
+
+[style]
+framework = "pytest"
+assertion_style = "pytest"
+
+[coverage]
+minimum_line_coverage = 80.0
+minimum_branch_coverage = 70.0
+
+[generation.refine]
+enable = false
+annotate_failed_tests = true

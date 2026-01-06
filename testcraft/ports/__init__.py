@@ -9,7 +9,10 @@ from .context_port import ContextPort
 from .cost_port import CostPort
 from .coverage_port import CoveragePort
 from .llm_port import LLMPort
+from .manual_fix_port import ManualFixGuidancePort, ManualFixPresenterPort
 from .parser_port import ParserPort
+from .planning_port import PlanningPort
+from .planning_presenter_port import PlanningPresenterPort
 from .prompt_port import PromptPort
 from .refine_port import RefinePort
 from .report_port import ReportPort
@@ -31,4 +34,8 @@ __all__ = [
     "UIPort",
     "CostPort",
     "TelemetryPort",
+    "ManualFixGuidancePort",
+    "ManualFixPresenterPort",
+    "PlanningPort",
+    "PlanningPresenterPort",
 ]

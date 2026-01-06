@@ -8,8 +8,10 @@ definitions on demand during PLAN and REFINE stages.
 
 from __future__ import annotations
 
+import ast
 import json
 import logging
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -187,6 +189,10 @@ class LLMOrchestrator:
         self._symbol_resolver = symbol_resolver or SymbolResolver(parser_port)
         self._prompt_registry = prompt_registry or PromptRegistry()
         self._config = config or OrchestratorConfig()
+        self._stdlib_modules = self._compute_stdlib_modules()
+        self._stdlib_roots_lower = {
+            module.split(".")[0].lower() for module in self._stdlib_modules if module
+        }
 
         # Use config values or override with direct parameters
         self._max_plan_retries = (
@@ -331,7 +337,7 @@ class LLMOrchestrator:
             # Prepare context for user prompt
             context = {
                 "import_map": {
-                    "target_import": context_pack.import_map.target_import,
+                    "target_import": self._resolve_target_import(context_pack),
                 },
                 "focal": {
                     "source": context_pack.focal.source,
@@ -423,6 +429,140 @@ class LLMOrchestrator:
         except RefineStageFailedException as e:
             raise ValueError(f"REFINE stage failed: {e}") from e
 
+    def _validate_plan_response(self, plan: Any, *, retry_count: int) -> dict[str, Any]:
+        if not isinstance(plan, dict):
+            logger.error(
+                "PLAN response payload must be a JSON object, got %s",
+                type(plan).__name__,
+            )
+            raise PlanStageFailedException(
+                "PLAN response payload must be a JSON object",
+                retry_count=retry_count,
+            )
+
+        error_value = plan.get("error")
+        if isinstance(error_value, str):
+            if error_value.strip():
+                logger.error("PLAN response indicated error: %s", error_value)
+                raise PlanStageFailedException(
+                    f"PLAN stage refused to proceed: {error_value}",
+                    retry_count=retry_count,
+                )
+        elif error_value is not None:
+            logger.error(
+                "PLAN response 'error' must be a string, got %s",
+                type(error_value).__name__,
+            )
+            raise PlanStageFailedException(
+                "PLAN response failed schema validation: 'error' must be a string",
+                retry_count=retry_count,
+            )
+
+        plan_entries = plan.get("plan")
+        if not isinstance(plan_entries, list):
+            logger.error(
+                "PLAN response 'plan' field must be a list, got %s",
+                type(plan_entries).__name__,
+            )
+            raise PlanStageFailedException(
+                "PLAN response failed schema validation: 'plan' field must be a list",
+                retry_count=retry_count,
+            )
+
+        if plan_entries and not all(isinstance(entry, dict) for entry in plan_entries):
+            logger.error("PLAN response 'plan' entries must be JSON objects")
+            raise PlanStageFailedException(
+                "PLAN response failed schema validation: plan entries must be objects",
+                retry_count=retry_count,
+            )
+
+        if "missing_symbols" in plan:
+            missing_symbols = plan["missing_symbols"]
+            if not isinstance(missing_symbols, list) or not all(
+                isinstance(symbol, str) for symbol in missing_symbols
+            ):
+                logger.error(
+                    "PLAN response 'missing_symbols' must be a list of strings, got %r",
+                    missing_symbols,
+                )
+                raise PlanStageFailedException(
+                    "PLAN response failed schema validation: 'missing_symbols' must be a list of strings",
+                    retry_count=retry_count,
+                )
+
+        if "metadata" in plan and not isinstance(plan["metadata"], dict):
+            logger.error(
+                "PLAN response 'metadata' must be a JSON object, got %s",
+                type(plan["metadata"]).__name__,
+            )
+            raise PlanStageFailedException(
+                "PLAN response failed schema validation: 'metadata' must be an object",
+                retry_count=retry_count,
+            )
+
+        return plan
+
+    def _validate_refine_response(
+        self, response_data: Any, *, retry_count: int
+    ) -> dict[str, Any]:
+        if not isinstance(response_data, dict):
+            logger.error(
+                "REFINE response payload must be a JSON object, got %s",
+                type(response_data).__name__,
+            )
+            raise RefineStageFailedException(
+                "REFINE response payload must be a JSON object",
+                retry_count=retry_count,
+            )
+
+        if "missing_symbols" in response_data:
+            missing_symbols = response_data["missing_symbols"]
+            if not isinstance(missing_symbols, list) or not all(
+                isinstance(symbol, str) for symbol in missing_symbols
+            ):
+                logger.error(
+                    "REFINE response 'missing_symbols' must be a list of strings, got %r",
+                    missing_symbols,
+                )
+                raise RefineStageFailedException(
+                    "REFINE response failed schema validation: 'missing_symbols' must be a list of strings",
+                    retry_count=retry_count,
+                )
+
+        if "error" in response_data:
+            error_value = response_data["error"]
+            if isinstance(error_value, str):
+                if error_value.strip():
+                    logger.error("REFINE response indicated error: %s", error_value)
+                    raise RefineStageFailedException(
+                        f"REFINE stage refused to proceed: {error_value}",
+                        retry_count=retry_count,
+                    )
+            elif error_value is not None:
+                logger.error(
+                    "REFINE response 'error' must be a string, got %s",
+                    type(error_value).__name__,
+                )
+                raise RefineStageFailedException(
+                    "REFINE response failed schema validation: 'error' must be a string",
+                    retry_count=retry_count,
+                )
+
+        for key in ("refined_code", "tests"):
+            value = response_data.get(key)
+            if value is not None and not isinstance(value, str):
+                logger.error(
+                    "REFINE response '%s' must be a string, got %s",
+                    key,
+                    type(value).__name__,
+                )
+                raise RefineStageFailedException(
+                    f"REFINE response failed schema validation: '{key}' must be a string",
+                    retry_count=retry_count,
+                )
+
+        return response_data
+
     def _plan_stage(
         self, context_pack: ContextPack, project_root: Path | None = None
     ) -> dict[str, Any]:
@@ -445,34 +585,51 @@ class LLMOrchestrator:
                 f"Invalid max_plan_retries: {self._max_plan_retries}. Must be >= 0"
             )
 
+        if context_pack.focal.is_placeholder:
+            reason = context_pack.focal.placeholder_reason or "unspecified"
+            raise PlanStageFailedException(
+                f"Focal source is a placeholder: {reason}",
+                retry_count=0,
+            )
+
         current_context = context_pack
         retry_count = 0
         previous_errors: list[PlanStageFailedException] = []
+        unresolved_symbols_union: set[str] = set()
 
         while retry_count < self._max_plan_retries:
             try:
                 logger.info("Executing PLAN stage (attempt %d)", retry_count + 1)
 
-                # Create PLAN prompt
-                plan_prompt = self._create_plan_prompt(current_context)
+                # Create PLAN prompts (system + user)
+                system_prompt, user_prompt = self._build_plan_prompts(current_context)
 
                 # Call LLM for planning
-                response = self._llm.generate_tests(code_content=plan_prompt)
-                response_text = self._extract_response_text(response)
+                response = self._llm.generate_tests(
+                    code_content="",
+                    custom_system_prompt=system_prompt,
+                    custom_user_prompt=user_prompt,
+                    return_raw=True,
+                )
+                logger.debug("PLAN stage response payload: %r", response)
+                if isinstance(response, dict):
+                    response_text = response.get("raw") or response.get("tests") or ""
+                else:
+                    response_text = str(response)
+
+                logger.debug("PLAN stage raw response: %r", response_text)
 
                 # Parse response as JSON
                 try:
                     plan = json.loads(response_text)
+                    plan = self._validate_plan_response(plan, retry_count=retry_count)
                 except json.JSONDecodeError as e:
-                    logger.warning("Failed to parse PLAN response as JSON: %s", e)
-                    error = PlanStageFailedException(
-                        "Failed to parse PLAN response as JSON",
+                    logger.error("Failed to parse PLAN response as JSON: %s", e)
+                    raise PlanStageFailedException(
+                        "PLAN response contained malformed JSON",
                         retry_count=retry_count,
                         cause=e,
-                    )
-                    previous_errors.append(error)
-                    retry_count += 1
-                    continue
+                    ) from e
 
                 # Check for missing symbols
                 missing_symbols = plan.get("missing_symbols", [])
@@ -480,17 +637,101 @@ class LLMOrchestrator:
                     # No missing symbols - return the plan
                     return plan
 
+                dependency_metadata = current_context.dependency_metadata
+                internal_roots: set[str] = set()
+
+                target_module_path = current_context.target.module_path or ""
+                if target_module_path:
+                    internal_roots.add(target_module_path.split(".")[0].lower())
+
+                target_import_stmt = (
+                    current_context.import_map.target_import
+                    if current_context.import_map
+                    else ""
+                )
+                if target_import_stmt:
+                    try:
+                        import_target = target_import_stmt.replace(
+                            "import", "", 1
+                        ).strip()
+                        import_target = import_target.split("as")[0].strip()
+                        if import_target:
+                            internal_roots.add(import_target.split(".")[0].lower())
+                    except Exception as exc:  # pragma: no cover - defensive logging
+                        logger.debug(
+                            "Unable to parse target import %s: %s",
+                            target_import_stmt,
+                            exc,
+                        )
+
+                for resolved_def in current_context.resolved_defs or []:
+                    if resolved_def and resolved_def.name:
+                        internal_roots.add(resolved_def.name.split(".")[0].lower())
+
+                external_roots = {
+                    (module or "").split(".")[0].lower()
+                    for module in dependency_metadata.external_modules
+                    if module
+                }
+                stdlib_roots = self._stdlib_roots_lower
+
+                filtered_missing_symbols: list[str] = []
+                skipped_symbols: list[str] = []
+
+                for symbol in missing_symbols:
+                    root = (symbol or "").split(".")[0].lower()
+                    if (
+                        root
+                        and root not in internal_roots
+                        and (root in external_roots or root in stdlib_roots)
+                    ):
+                        skipped_symbols.append(symbol)
+                        continue
+                    filtered_missing_symbols.append(symbol)
+
+                if skipped_symbols:
+                    logger.debug(
+                        "Skipping missing_symbols treated as external/stdlib: %s",
+                        skipped_symbols,
+                    )
+
+                if not filtered_missing_symbols:
+                    plan["missing_symbols"] = []
+                    return plan
+
                 logger.info(
-                    "Found %d missing symbols in PLAN response", len(missing_symbols)
+                    "Found %d missing symbols in PLAN response",
+                    len(filtered_missing_symbols),
+                )
+
+                plan["missing_symbols"] = filtered_missing_symbols
+
+                self._symbol_resolver.update_environment_modules(
+                    external_modules=set(dependency_metadata.external_modules),
+                    stdlib_modules=set(self._stdlib_modules),
                 )
 
                 # Resolve missing symbols
                 resolved_defs = self._symbol_resolver.resolve_symbols(
-                    missing_symbols, project_root
+                    filtered_missing_symbols, project_root
                 )
 
                 if not resolved_defs:
-                    logger.warning("Could not resolve any missing symbols")
+                    unresolved_symbols_union.update(filtered_missing_symbols)
+                    logger.warning(
+                        "Could not resolve missing symbols on attempt %d",
+                        retry_count + 1,
+                    )
+                    if retry_count + 1 >= self._max_plan_retries:
+                        self._report_unresolved_symbols(
+                            unresolved_symbols_union, project_root
+                        )
+                        plan["missing_symbols"] = []
+                        metadata = plan.setdefault("metadata", {})
+                        metadata.setdefault("symbol_resolution", {})[
+                            "unresolved_symbols"
+                        ] = sorted(unresolved_symbols_union)
+                        return plan
                     # Continue retrying in case the next LLM call doesn't have missing symbols
                     retry_count += 1
                     continue
@@ -503,6 +744,7 @@ class LLMOrchestrator:
                     current_context, updated_resolved_defs
                 )
 
+                unresolved_symbols_union.clear()
                 retry_count += 1
                 logger.info(
                     "Retrying PLAN stage with resolved symbols (attempt %d)",
@@ -616,14 +858,26 @@ class LLMOrchestrator:
 
                 # Parse response as dict/JSON or extract code
                 if isinstance(response, dict):
-                    response_data = response
+                    response_data = self._validate_refine_response(
+                        response, retry_count=retry_count
+                    )
                 else:
                     response_text = self._extract_response_text(response)
                     if response_text.strip().startswith("{"):
                         try:
                             response_data = json.loads(response_text)
-                        except json.JSONDecodeError:
-                            response_data = None
+                            response_data = self._validate_refine_response(
+                                response_data, retry_count=retry_count
+                            )
+                        except json.JSONDecodeError as e:
+                            logger.error(
+                                "Failed to parse REFINE response as JSON: %s", e
+                            )
+                            raise RefineStageFailedException(
+                                "REFINE response contained malformed JSON",
+                                retry_count=retry_count,
+                                cause=e,
+                            ) from e
                     else:
                         response_data = None
 
@@ -659,9 +913,45 @@ class LLMOrchestrator:
                                     continue  # Retry with resolved symbols
 
                         # If no symbols to resolve, extract code from response
-                        refined_code = response_data.get("refined_code", existing_code)
-                    except Exception:
-                        refined_code = response_data.get("refined_code", existing_code)
+                        refined_payload = response_data.get("refined_code")
+                        if not (
+                            isinstance(refined_payload, str) and refined_payload.strip()
+                        ):
+                            tests_payload = response_data.get("tests")
+                            if isinstance(tests_payload, str) and tests_payload.strip():
+                                refined_payload = tests_payload
+
+                        if not (
+                            isinstance(refined_payload, str) and refined_payload.strip()
+                        ):
+                            logger.error(
+                                "REFINE response did not include usable code payload"
+                            )
+                            raise RefineStageFailedException(
+                                "REFINE response missing 'refined_code' or 'tests' content",
+                                retry_count=retry_count,
+                            )
+
+                        refined_code = refined_payload
+                    except RefineStageFailedException:
+                        raise
+                    except Exception as exc:
+                        refined_payload = response_data.get(
+                            "refined_code"
+                        ) or response_data.get("tests")
+                        if not (
+                            isinstance(refined_payload, str)
+                            and refined_payload
+                            and refined_payload.strip()
+                        ):
+                            logger.error(
+                                "REFINE response did not include usable code payload"
+                            )
+                            raise RefineStageFailedException(
+                                "REFINE response missing 'refined_code' or 'tests' content",
+                                retry_count=retry_count,
+                            ) from exc
+                        refined_code = refined_payload
                 else:
                     # Treat as code text
                     refined_code = self._extract_response_text(response)
@@ -700,40 +990,75 @@ class LLMOrchestrator:
             final_error.add_previous_error(error)
         raise final_error
 
-    def _create_plan_prompt(self, context_pack: ContextPack) -> str:
-        """Create PLAN stage prompt using PromptRegistry."""
-        # Get system prompt from registry
+    def _build_plan_prompts(self, context_pack: ContextPack) -> tuple[str, str]:
+        """Create PLAN stage system and user prompts using the registry."""
         system_prompt = self._prompt_registry.get_system_prompt("orchestrator_plan")
 
-        # Prepare context for user prompt
         context = {
             "target": {
                 "module_file": str(context_pack.target.module_file),
                 "object": context_pack.target.object,
             },
             "import_map": {
-                "target_import": context_pack.import_map.target_import,
+                "target_import": self._resolve_target_import(context_pack),
             },
             "focal": {
                 "source": context_pack.focal.source,
                 "signature": context_pack.focal.signature,
                 "docstring": context_pack.focal.docstring or "",
+                "is_placeholder": context_pack.focal.is_placeholder,
+                "placeholder_reason": context_pack.focal.placeholder_reason or "",
             },
             "resolved_defs_compact": self._format_resolved_defs(
                 context_pack.resolved_defs
             ),
-            "gwt_snippets": context_pack.property_context.gwt_snippets,
+            "gwt_snippets": context_pack.property_context.gwt_snippets.__dict__,
             "conventions": self._format_conventions(context_pack.conventions),
+            "dependency_metadata": self._format_dependency_metadata(
+                context_pack.dependency_metadata
+            ),
         }
 
-        # Get user prompt from registry
         user_prompt = self._prompt_registry.get_user_prompt(
             "orchestrator_plan",
             additional_context=context,
             version=self._prompt_registry.version,
         )
 
-        return f"{system_prompt}\n\n{user_prompt}"
+        return system_prompt, user_prompt
+
+    def _report_unresolved_symbols(
+        self, symbols: set[str], project_root: Path | None
+    ) -> None:
+        """Log aggregated unresolved symbols with actionable guidance."""
+
+        if not symbols:
+            return
+
+        sorted_symbols = sorted(symbols)
+        logger.warning(
+            "Symbol resolution could not resolve %d symbol(s): %s",
+            len(sorted_symbols),
+            ", ".join(sorted_symbols),
+        )
+
+        hints = [
+            "Ensure the listed modules live under configured source roots (e.g., src/ or tests/src).",
+            "Add __init__.py files for packages or include namespace directories in your TestCraft configuration.",
+        ]
+
+        if project_root is not None:
+            try:
+                hints.append(
+                    f"Project root used during resolution: {project_root.resolve()}"
+                )
+            except Exception:  # pragma: no cover - defensive logging
+                hints.append(
+                    "Project root used during resolution could not be resolved."
+                )
+
+        for hint in hints:
+            logger.info("Symbol resolution hint: %s", hint)
 
     def _create_generate_prompt(
         self, context_pack: ContextPack, plan: dict[str, Any]
@@ -745,10 +1070,12 @@ class LLMOrchestrator:
         # Prepare context for user prompt
         context = {
             "import_map": {
-                "target_import": context_pack.import_map.target_import,
+                "target_import": self._resolve_target_import(context_pack),
             },
             "focal": {
                 "source": context_pack.focal.source,
+                "is_placeholder": context_pack.focal.is_placeholder,
+                "placeholder_reason": context_pack.focal.placeholder_reason or "",
             },
             "resolved_defs_compact": self._format_resolved_defs(
                 context_pack.resolved_defs
@@ -758,6 +1085,9 @@ class LLMOrchestrator:
             ),
             "conventions": self._format_conventions(context_pack.conventions),
             "approved_plan_json": json.dumps(plan.get("plan", []), indent=2),
+            "dependency_metadata": self._format_dependency_metadata(
+                context_pack.dependency_metadata
+            ),
         }
 
         # Get user prompt from registry
@@ -779,10 +1109,12 @@ class LLMOrchestrator:
         # Prepare context for user prompt
         context = {
             "import_map": {
-                "target_import": context_pack.import_map.target_import,
+                "target_import": self._resolve_target_import(context_pack),
             },
             "focal": {
                 "source": context_pack.focal.source,
+                "is_placeholder": context_pack.focal.is_placeholder,
+                "placeholder_reason": context_pack.focal.placeholder_reason or "",
             },
             "current_tests": self._extract_failing_parts(existing_code, feedback),
             "feedback": {
@@ -816,7 +1148,19 @@ class LLMOrchestrator:
             property_context=context_pack.property_context,
             conventions=context_pack.conventions,
             budget=context_pack.budget,
+            context=context_pack.context,
+            dependency_metadata=context_pack.dependency_metadata,
         )
+
+    def _resolve_target_import(self, context_pack: ContextPack) -> str:
+        """Safely resolve the canonical import for prompt templating."""
+        import_map = context_pack.import_map
+        if import_map is None:
+            return "[import unavailable]"
+        target_import = getattr(import_map, "target_import", None)
+        if target_import:
+            return str(target_import)
+        return "[import unavailable]"
 
     def _format_resolved_defs(self, resolved_defs: list[ResolvedDef]) -> str:
         """Format resolved definitions for prompt."""
@@ -879,6 +1223,41 @@ class LLMOrchestrator:
 
         return "\n".join(context_parts) if context_parts else "None"
 
+    def _format_dependency_metadata(self, metadata) -> dict[str, str]:
+        """Format dependency metadata for inclusion in prompts."""
+
+        if metadata is None:
+            return {
+                "external_modules": "",
+                "distributions": "",
+            }
+
+        limit = 200
+
+        external_modules = ", ".join(metadata.external_modules[:limit])
+        distribution_items = list(metadata.distributions.items())[:limit]
+        distributions = ", ".join(
+            f"{name}{version}" if version else str(name)
+            for name, version in distribution_items
+        )
+
+        return {
+            "external_modules": external_modules,
+            "distributions": distributions,
+        }
+
+    @staticmethod
+    def _compute_stdlib_modules() -> set[str]:
+        """Collect standard library module names for resolver filtering."""
+        modules: set[str] = set(sys.builtin_module_names)
+        stdlib_names = getattr(sys, "stdlib_module_names", None)
+        if stdlib_names:
+            try:
+                modules.update(stdlib_names)
+            except Exception:
+                logger.debug("Unable to extend stdlib module names", exc_info=True)
+        return {module for module in modules if module}
+
     def _extract_failing_parts(
         self, existing_code: str, feedback: dict[str, Any]
     ) -> str:
@@ -890,6 +1269,24 @@ class LLMOrchestrator:
     def _extract_response_text(self, response) -> str:
         """Extract text from LLM response."""
         # Handle different response formats
+        if isinstance(response, dict):
+            # Common structured keys returned by adapters
+            for key in (
+                "tests",
+                "plan",
+                "content",
+                "generated_code",
+                "refined_code",
+                "manual_fix_response",
+            ):
+                value = response.get(key)
+                if isinstance(value, str) and value.strip():
+                    return value
+            # Fallback to JSON string for logging/debugging
+            try:
+                return json.dumps(response)
+            except TypeError:
+                return str(response)
         if hasattr(response, "choices") and response.choices:
             return response.choices[0].message.content
         elif hasattr(response, "content"):
@@ -908,6 +1305,20 @@ class LLMOrchestrator:
 
         if match:
             return match.group(1).strip()
+
+        # If no fenced block, see if the full response looks like Python code
+        stripped = response_text.strip()
+        if stripped:
+            try:
+                ast.parse(stripped)
+                logger.debug(
+                    "GENERATE response lacked fenced code block; using full response as code."
+                )
+                return stripped
+            except SyntaxError:
+                logger.debug(
+                    "Full response is not valid Python; falling back to heuristic extraction."
+                )
 
         # If no code blocks found, try to find the last Python code section
         lines = response_text.split("\n")

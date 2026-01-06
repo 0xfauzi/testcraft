@@ -249,7 +249,14 @@ def run_ruff_format_safe(content: str, timeout: int = 30) -> str:
             timeout=timeout,
         )
         if result.returncode == 0:
-            return result.stdout
+            output = result.stdout
+            # Older Ruff versions emit NOT_YET_IMPLEMENTED_* stubs for unsupported nodes.
+            if "NOT_YET_IMPLEMENTED_" in output:
+                raise SubprocessExecutionError(
+                    "Ruff format returned placeholder output (NOT_YET_IMPLEMENTED_*); "
+                    "treating as unsupported."
+                )
+            return output
         else:
             # If Ruff fails, log but don't raise - let caller handle fallback
             logger.debug(

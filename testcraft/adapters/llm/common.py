@@ -112,7 +112,7 @@ def try_parse_json(text: str) -> tuple[dict[str, Any] | None, Exception | None]:
 
     # Try parsing directly first
     try:
-        return json.loads(cleaned), None
+        return json.loads(cleaned, strict=False), None
     except json.JSONDecodeError as e:
         logger.debug(f"Initial JSON parse failed: {e}")
 
@@ -129,7 +129,7 @@ def try_parse_json(text: str) -> tuple[dict[str, Any] | None, Exception | None]:
         for i, strategy in enumerate(repair_strategies):
             try:
                 repaired = strategy(cleaned)
-                result = json.loads(repaired)
+                result = json.loads(repaired, strict=False)
                 logger.debug(f"JSON repair strategy {i + 1} succeeded")
                 return result, None
             except Exception as repair_err:
@@ -186,6 +186,7 @@ def parse_json_response(text: str) -> ParsedResponse:
     data, err = try_parse_json(norm)
     if data is not None:
         return ParsedResponse(success=True, data=data, raw=text)
+
     # Minimal repair: take substring from first '{' and attempt balanced parse
     brace_start = norm.find("{")
     if brace_start != -1:
@@ -194,6 +195,24 @@ def parse_json_response(text: str) -> ParsedResponse:
         if data2 is not None:
             return ParsedResponse(success=True, data=data2, raw=text, error=str(err))
         err = err2
+
+        # Additional repair: trim trailing text after the last closing brace
+        brace_end = candidate.rfind("}")
+        if brace_end != -1:
+            trimmed = candidate[: brace_end + 1]
+            data3, err3 = try_parse_json(trimmed)
+            if data3 is not None:
+                combined_error = " | ".join(
+                    part for part in (str(err), str(err2)) if part and part != "None"
+                )
+                return ParsedResponse(
+                    success=True,
+                    data=data3,
+                    raw=text,
+                    error=combined_error if combined_error else None,
+                )
+            err = err3
+
     return ParsedResponse(success=False, data=None, raw=text, error=str(err))
 
 

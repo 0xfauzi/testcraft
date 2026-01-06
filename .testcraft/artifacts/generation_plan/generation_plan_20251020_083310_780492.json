@@ -1,0 +1,26 @@
+{
+  "request": {
+    "target_file": "src/sample/calculator.py",
+    "target_object": "module",
+    "project_root": "/var/folders/3p/xvff9vpj09l5yndvhxhr5qr40000gn/T/tmp.qGPVBQRrMf",
+    "prompt_customization": null
+  },
+  "plan_option": {
+    "plan_id": "ad23f15bafa851fa5a01f1e25588cb7684c26cb0d20cf2cb529ddfb10d199a73",
+    "plan_content": {
+      "tests": "",
+      "coverage_focus": [],
+      "confidence": 0.0,
+      "metadata": {
+        "provider": "openai",
+        "noop": true
+      }
+    },
+    "model_used": "unknown",
+    "created_at": "2025-10-20T08:33:10.772635+00:00"
+  },
+  "accepted": true,
+  "rejected": false,
+  "edit_history": [],
+  "accepted_at": "2025-10-20T08:33:10.779701+00:00"
+}

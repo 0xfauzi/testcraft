@@ -384,6 +384,11 @@ class AzureOpenAIAdapter(LLMPort):
         # Check circuit breaker
         self._check_circuit_breaker()
 
+        custom_system_prompt = kwargs.pop("custom_system_prompt", None)
+        custom_user_prompt = kwargs.pop("custom_user_prompt", None)
+        return_raw = kwargs.pop("return_raw", False)
+        _ = kwargs.pop("response_format", None)
+
         # Calculate optimal max_tokens for this specific request
         input_length = self.token_calculator.estimate_input_tokens(
             code_content + (context or "")
@@ -396,6 +401,8 @@ class AzureOpenAIAdapter(LLMPort):
         system_prompt = self.prompt_registry.get_system_prompt(
             prompt_type="llm_test_generation", test_framework=test_framework
         )
+        if custom_system_prompt is not None:
+            system_prompt = custom_system_prompt
 
         additional_context = {"context": context} if context else {}
         user_prompt = self.prompt_registry.get_user_prompt(
@@ -404,6 +411,8 @@ class AzureOpenAIAdapter(LLMPort):
             additional_context=additional_context,
             test_framework=test_framework,
         )
+        if custom_user_prompt is not None:
+            user_prompt = custom_user_prompt
 
         def call() -> dict[str, Any]:
             return self._chat_completion(
@@ -416,6 +425,12 @@ class AzureOpenAIAdapter(LLMPort):
         try:
             result = with_retries(call, retries=self.max_retries)
             content = result.get("content", "")
+            if return_raw:
+                return {
+                    "raw": content,
+                    "usage": result.get("usage"),
+                    "metadata": result.get("metadata"),
+                }
             self._record_success()  # Record successful API call
 
             # Parse JSON response

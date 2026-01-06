@@ -6,6 +6,7 @@ for professional CLI output with tables, progress indicators, panels,
 and interactive elements.
 """
 
+from collections.abc import Sequence
 from enum import Enum
 from typing import Any
 
@@ -191,18 +192,37 @@ class RichUIAdapter(UIPort):
                 error_type if error_type and error_type != "general" else "Error"
             )
             details = kwargs.get("details")
+            suggestions = kwargs.get("suggestions")
+            primary_action = kwargs.get("primary_action")
+            docs_url = kwargs.get("docs_url")
+            context_data = kwargs.get("context")
 
-            self.rich_cli.display_error(error_message, title)
+            effective_suggestions: Sequence[str] | None = None
+            if isinstance(suggestions, (list, tuple)):
+                effective_suggestions = suggestions
+            elif isinstance(details, list):
+                effective_suggestions = details
 
-            if details:
-                if isinstance(details, dict):
-                    for key, value in details.items():
-                        self.console.print(f"[muted]{key}:[/] {value}")
-                elif isinstance(details, list):
-                    for item in details:
-                        self.console.print(f"[muted]• {item}[/]")
-                else:
-                    self.console.print(f"[muted]{details}[/]")
+            effective_context: dict[str, Any] | None = None
+            if isinstance(context_data, dict):
+                effective_context = context_data
+            elif isinstance(details, dict):
+                effective_context = details
+
+            self.rich_cli.display_error(
+                error_message,
+                title,
+                suggestions=effective_suggestions,
+                primary_action=primary_action,
+                docs_url=docs_url,
+                context=effective_context,
+            )
+
+            if details and not isinstance(details, (dict, list)):
+                self.console.print(f"[muted]{details}[/]")  # legacy string details
+
+            if kwargs.get("log_hint"):
+                self.console.print(f"[muted]{kwargs['log_hint']}[/]")
 
         except Exception as e:
             # Wrap errors in UIError for consistent test expectations

@@ -9,9 +9,7 @@ and A/B testing for prompt variants.
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Literal
-
-from typing_extensions import Protocol
+from typing import Any, Literal, Protocol
 
 
 @dataclass

@@ -223,7 +223,9 @@ class WriterASTMergeAdapter:
             project_root: Optional project root path for validation
             dry_run: Whether to run in dry-run mode (no actual writing)
         """
-        self.project_root = project_root
+        self.project_root: Path | None = None
+        if project_root is not None:
+            self.set_project_root(project_root)
         self.dry_run = dry_run
         self.merger = ASTMerger()
         self.logger = logging.getLogger(__name__)
@@ -231,6 +233,25 @@ class WriterASTMergeAdapter:
         self._ast_cache: dict[str, ast.Module] = {}
         self._cache_hits = 0
         self._cache_misses = 0
+
+    def set_project_root(self, project_root: Path | str | None) -> None:
+        """
+        Update the project root used for path validation and writes.
+
+        Args:
+            project_root: New project root path or None to clear the root scope.
+        """
+        if project_root is None:
+            self.project_root = None
+            return
+
+        resolved = Path(project_root)
+        try:
+            resolved = resolved.resolve()
+        except OSError:
+            resolved = resolved.absolute()
+
+        self.project_root = resolved
 
     def write_file(
         self,

@@ -5,6 +5,9 @@ This module provides Rich-based UI components for creating professional
 CLI output including tables, progress indicators, summaries, and themed layouts.
 """
 
+import json
+import os
+from collections.abc import Sequence
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Protocol
 
@@ -78,6 +81,12 @@ TESTCRAFT_THEME = Theme(
         # Minimal interactive elements
         "prompt": "cyan",
         "selected": "green",
+        "prompt_accent": "cyan",
+        # Semantic tokens for status badges
+        "token_positive": "green",
+        "token_negative": "red",
+        "token_warning": "yellow",
+        "token_info": "blue",
         # Clean borders with different styles
         "border": "dim white",
         "border_info": "blue",
@@ -117,6 +126,11 @@ MINIMAL_THEME = Theme(
         "status_fail": "red",
         "prompt": "cyan",
         "selected": "green",
+        "prompt_accent": "cyan",
+        "token_positive": "green",
+        "token_negative": "red",
+        "token_warning": "yellow",
+        "token_info": "cyan",
         "border_info": "cyan",
         "border_success": "green",
         "subheader": "white",
@@ -150,6 +164,32 @@ class RichCliComponents:
             console: Optional Rich Console instance (will create one if not provided)
         """
         self.console = console or Console(theme=TESTCRAFT_THEME)
+        self._emoji_enabled = self._detect_emoji_support()
+        self._wizard_cache_path = Path.home() / ".testcraft" / "wizard_state.json"
+
+    def _detect_emoji_support(self) -> bool:
+        """Determine whether the active console likely supports emoji glyphs."""
+        if os.getenv("TESTCRAFT_NO_EMOJI") == "1":
+            return False
+        encoding = getattr(self.console, "encoding", "") or ""
+        return "utf" in encoding.lower()
+
+    def _glyph(self, key: str, ascii_fallback: str) -> str:
+        """Return an emoji glyph or ASCII fallback based on terminal support."""
+        if not self._emoji_enabled:
+            return ascii_fallback
+        mapping = {
+            "success": "✅",
+            "error": "❌",
+            "warning": "⚠️",
+            "info": "ℹ️",
+            "action": "➜",
+            "docs": "📘",
+            "spark": "✨",
+            "rocket": "🚀",
+            "summary": "📊",
+        }
+        return mapping.get(key, ascii_fallback)
 
     def create_coverage_table(
         self, coverage_data: dict[str, Any], show_details: bool = True
@@ -432,7 +472,7 @@ class RichCliComponents:
                 test_status = (
                     "[success]✓ Has tests[/]" if has_tests else "[error]✗ No tests[/]"
                 )
-                reason_node.add(f"{Path(file_path).name} - {test_status}")
+                reason_node.add(f"{file_path} - {test_status}")
 
         return tree
 
@@ -492,7 +532,16 @@ class RichCliComponents:
 
         return _StatusWrapper(status, message)
 
-    def display_error(self, message: str, title: str = "Error") -> None:
+    def display_error(
+        self,
+        message: str,
+        title: str = "Error",
+        *,
+        suggestions: Sequence[str] | None = None,
+        primary_action: str | None = None,
+        docs_url: str | None = None,
+        context: dict[str, Any] | None = None,
+    ) -> None:
         """
         Display an error message with appropriate styling.
 
@@ -500,15 +549,37 @@ class RichCliComponents:
             message: Error message
             title: Error title
         """
-        # Inject title into body so tests can find it in captured output
-        body = f"{title}\n[error]{message}[/]"
+        body_lines = [f"[token_negative]{message}[/]"]
+
+        if context:
+            body_lines.append("")
+            for key, value in context.items():
+                body_lines.append(f"[muted]{key}[/]: {value}")
+
+        if suggestions:
+            body_lines.append("")
+            body_lines.append("[token_warning]Suggested actions[/]:")
+            for suggestion in suggestions:
+                body_lines.append(f"  [token_warning]•[/] {suggestion}")
+
+        if docs_url:
+            body_lines.append("")
+            body_lines.append(
+                f"[token_info]{self._glyph('docs', 'docs')}[/] {docs_url}"
+            )
+
+        header = f"{self._glyph('error', 'ERROR')} {title}"
         error_panel = Panel(
-            body,
-            title=f"❌ {title}",
-            border_style="red",
+            "\n".join(body_lines),
+            title=header,
+            border_style="token_negative",
             padding=(1, 2),
         )
         self.console.print(error_panel)
+        if primary_action:
+            self.console.print(
+                f"[prompt_accent]{self._glyph('action', '>')} {primary_action}[/]"
+            )
 
     def display_warning(self, message: str, title: str = "Warning") -> None:
         """
@@ -518,12 +589,11 @@ class RichCliComponents:
             message: Warning message
             title: Warning title
         """
-        # Inject title into body so tests can find it in captured output
-        body = f"{title}\n[warning]{message}[/]"
+        body = f"[token_warning]{message}[/]"
         warning_panel = Panel(
             body,
-            title=f"⚠️  {title}",
-            border_style="yellow",
+            title=f"{self._glyph('warning', 'WARN')} {title}",
+            border_style="token_warning",
             padding=(1, 2),
         )
         self.console.print(warning_panel)
@@ -537,9 +607,9 @@ class RichCliComponents:
             title: Success title
         """
         success_panel = Panel(
-            f"[success]{message}[/]",
-            title=f"✅ {title}",
-            border_style="green",
+            f"[token_positive]{message}[/]",
+            title=f"{self._glyph('success', 'OK')} {title}",
+            border_style="token_positive",
             padding=(1, 2),
         )
         self.console.print(success_panel)
@@ -552,12 +622,11 @@ class RichCliComponents:
             message: Info message
             title: Info title
         """
-        # Inject title into body so tests can find it in captured output
-        body = f"{title}\n[info]{message}[/]"
+        body = f"[token_info]{message}[/]"
         info_panel = Panel(
             body,
-            title=f"ℹ️  {title}",
-            border_style="blue",
+            title=f"{self._glyph('info', 'INFO')} {title}",
+            border_style="token_info",
             padding=(1, 2),
         )
         self.console.print(info_panel)
@@ -574,7 +643,7 @@ class RichCliComponents:
             User's choice
         """
         return Confirm.ask(
-            f"[highlight]{message}[/]", default=default, console=self.console
+            f"[prompt_accent]{message}[/]", default=default, console=self.console
         )
 
     def get_user_input(self, prompt: str, default: str | None = None) -> str:
@@ -590,10 +659,10 @@ class RichCliComponents:
         """
         if default is not None:
             return Prompt.ask(
-                f"[highlight]{prompt}[/]", default=default, console=self.console
+                f"[prompt_accent]{prompt}[/]", default=default, console=self.console
             )
         else:
-            return Prompt.ask(f"[highlight]{prompt}[/]", console=self.console)
+            return Prompt.ask(f"[prompt_accent]{prompt}[/]", console=self.console)
 
     def create_comprehensive_layout(
         self,
@@ -704,25 +773,16 @@ class RichCliComponents:
     def create_configuration_wizard(
         self, config_steps: list[dict[str, Any]]
     ) -> dict[str, Any]:
-        """
-        Create a beautiful interactive configuration wizard.
-
-        Args:
-            config_steps: List of configuration steps, each containing:
-                - title: Step title
-                - description: Step description
-                - fields: List of field definitions
-                - required: Whether step is required
-
-        Returns:
-            Dictionary of configuration values
-        """
+        """Interactive configuration wizard with progress tracking and resume support."""
         self.console.print()
-        welcome_panel = Panel(
-            "[title]🚀 TestCraft Configuration Wizard[/title]\n\n"
+        intro_text = (
+            f"[title]{self._glyph('rocket', '>>')} TestCraft Configuration Wizard[/title]\n\n"
             "[info]Welcome to TestCraft! Let's set up your configuration.[/]\n"
-            "[subtle]This wizard will guide you through the setup process.[/]",
-            title="[primary]✨ Welcome[/primary]",
+            "[subtle]This wizard will guide you through the setup process.[/]"
+        )
+        welcome_panel = Panel(
+            intro_text,
+            title=f"[primary]{self._glyph('spark', '*')} Welcome[/primary]",
             border_style="bright_magenta",
             padding=(1, 2),
             title_align="center",
@@ -730,29 +790,54 @@ class RichCliComponents:
         self.console.print(welcome_panel)
         self.console.print()
 
-        config_values = {}
+        total_steps = len(config_steps)
+        config_values: dict[str, Any] = {}
+        current_step = 0
 
-        for i, step in enumerate(config_steps, 1):
-            # Step header
-            step_title = step.get("title", f"Step {i}")
+        resume_state = self._load_wizard_cache()
+        if resume_state:
+            resume = self.get_user_confirmation(
+                "Resume previous configuration session?", default=True
+            )
+            if resume:
+                config_values.update(resume_state.get("values", {}))
+                saved_index = resume_state.get("step_index", 0)
+                if isinstance(saved_index, int) and saved_index < total_steps:
+                    current_step = saved_index
+                self.console.print(
+                    f"\n[token_info]Resuming from step {current_step + 1} of {total_steps}.[/]"
+                )
+            else:
+                self._clear_wizard_cache()
+
+        while current_step < total_steps:
+            step = config_steps[current_step]
+            step_number = current_step + 1
+            self._render_wizard_progress(step_number, total_steps, config_values)
+
+            step_title = step.get("title", f"Step {step_number}")
             step_desc = step.get("description", "")
 
-            self.console.rule(f"[header]Step {i}: {step_title}[/]", style="accent")
+            self.console.rule(
+                f"[header]Step {step_number}/{total_steps}: {step_title}[/]",
+                style="accent",
+            )
 
             if step_desc:
                 desc_panel = Panel(
                     f"[info]{step_desc}[/]", border_style="border_info", padding=(0, 1)
                 )
                 self.console.print(desc_panel)
+                self.console.print()
 
-            self.console.print()
-
-            # Process fields
             fields = step.get("fields", [])
-            step_values = {}
+            step_values: dict[str, Any] = {}
 
             for field in fields:
                 field_name = field.get("name")
+                if not field_name:
+                    continue
+
                 field_title = field.get("title", field_name)
                 field_type = field.get("type", "string")
                 field_desc = field.get("description", "")
@@ -760,180 +845,244 @@ class RichCliComponents:
                 field_choices = field.get("choices", [])
                 field_required = field.get("required", False)
 
-                # Display field info
+                existing_value = config_values.get(field_name)
+                if existing_value is not None:
+                    field_default = existing_value
+
                 prompt_text = f"[prompt]{field_title}[/]"
                 if field_desc:
                     prompt_text += f"\n[subtle]{field_desc}[/]"
-
                 self.console.print(prompt_text)
 
-                # Get user input based on field type
-                if field_type == "boolean":
-                    try:
-                        value = Confirm.ask(
-                            "[choice]Enable this option?[/]",
-                            default=field_default or False,
-                            console=self.console,
-                        )
-                    except KeyboardInterrupt:
-                        self.console.print("\n[warning]Operation cancelled by user[/]")
-                        return {}
+                try:
+                    value = self._prompt_wizard_field(
+                        field_type=field_type,
+                        choices=field_choices,
+                        default=field_default,
+                        required=field_required,
+                        field_definition=field,
+                    )
+                except KeyboardInterrupt:
+                    self.console.print("\n[warning]Operation cancelled by user[/]")
+                    self._save_wizard_cache(current_step, config_values)
+                    return {}
 
-                elif field_type == "choice" and field_choices:
-                    self.console.print("[choice]Available options:[/]")
-                    for j, choice in enumerate(field_choices, 1):
-                        choice_text = (
-                            choice
-                            if isinstance(choice, str)
-                            else choice.get("label", str(choice))
-                        )
-                        self.console.print(f"  [secondary]{j}.[/] {choice_text}")
-
-                    max_retries = 3
-                    retry_count = 0
-
-                    while retry_count < max_retries:
-                        try:
-                            choice_input = Prompt.ask(
-                                "[choice]Select option (number)[/]",
-                                default=str(field_default) if field_default else "1",
-                                console=self.console,
-                            )
-                            choice_index = int(choice_input) - 1
-                            if 0 <= choice_index < len(field_choices):
-                                choice_item = field_choices[choice_index]
-                                value = (
-                                    choice_item
-                                    if isinstance(choice_item, str)
-                                    else choice_item.get("value", choice_item)
-                                )
-                                break
-                            else:
-                                self.console.print(
-                                    f"[error]Please enter a number between 1 and {len(field_choices)}[/]"
-                                )
-                                retry_count += 1
-                        except ValueError:
-                            self.console.print("[error]Please enter a valid number[/]")
-                            retry_count += 1
-                        except KeyboardInterrupt:
-                            self.console.print(
-                                "\n[warning]Operation cancelled by user[/]"
-                            )
-                            return {}
-
-                    if retry_count >= max_retries:
-                        self.console.print(
-                            f"[error]Maximum retries ({max_retries}) exceeded. Skipping this field.[/]"
-                        )
-                        continue
-
-                elif field_type == "number":
-                    max_retries = 3
-                    retry_count = 0
-
-                    while retry_count < max_retries:
-                        try:
-                            num_input = Prompt.ask(
-                                "[choice]Enter value[/]",
-                                default=(
-                                    str(field_default)
-                                    if field_default is not None
-                                    else None
-                                ),
-                                console=self.console,
-                            )
-                            if num_input is None:
-                                value = 0 if field.get("integer", False) else 0.0
-                            else:
-                                value = (
-                                    int(num_input)
-                                    if field.get("integer", False)
-                                    else float(num_input)
-                                )
-                            break
-                        except ValueError:
-                            self.console.print("[error]Please enter a valid number[/]")
-                            retry_count += 1
-                        except KeyboardInterrupt:
-                            self.console.print(
-                                "\n[warning]Operation cancelled by user[/]"
-                            )
-                            return {}
-
-                    if retry_count >= max_retries:
-                        self.console.print(
-                            f"[error]Maximum retries ({max_retries}) exceeded. Skipping this field.[/]"
-                        )
-                        continue
-
-                else:  # string type
-                    try:
-                        value = Prompt.ask(
-                            "[choice]Enter value[/]",
-                            default=(
-                                str(field_default)
-                                if field_default is not None
-                                else None
-                            ),
-                            console=self.console,
-                        )
-                    except KeyboardInterrupt:
-                        self.console.print("\n[warning]Operation cancelled by user[/]")
-                        return {}
-
-                    if field_required and not value:
-                        self.console.print("[error]This field is required[/]")
-                        continue
+                if value is None and field_required:
+                    self.console.print(
+                        "[warning]This field is required. Leaving it blank may impact defaults.[/]"
+                    )
 
                 step_values[field_name] = value
                 self.console.print(f"[selected]✓ {field_title}: {value}[/]")
                 self.console.print()
 
             config_values.update(step_values)
+            self._save_wizard_cache(current_step + 1, config_values)
 
-            # Step completion
             completion_panel = Panel(
-                f"[success]✅ Step {i} completed![/]",
+                f"[token_positive]{self._glyph('spark', '*')} Step {step_number} captured[/]",
                 border_style="border_success",
                 padding=(0, 1),
             )
             self.console.print(completion_panel)
             self.console.print()
 
-        # Final summary
-        self.console.rule("[header]🎉 Configuration Complete![/]", style="success")
+            while True:
+                next_action = (
+                    Prompt.ask(
+                        "[prompt_accent]Next action[/] ([C]ontinue/[B]ack/[R]eview/[S]ave)",
+                        default="c",
+                        console=self.console,
+                    )
+                    .strip()
+                    .lower()
+                )
 
-        summary_text = "[title]Configuration Summary[/title]\n\n"
-        for key, value in config_values.items():
-            summary_text += (
-                f"[info]{key.replace('_', ' ').title()}:[/] [secondary]{value}[/]\n"
-            )
+                if next_action in ("c", "continue", ""):
+                    current_step += 1
+                    break
+                if next_action in ("b", "back"):
+                    current_step = max(0, current_step - 1)
+                    break
+                if next_action in ("r", "review"):
+                    self._render_configuration_summary(config_values)
+                    continue
+                if next_action in ("s", "save"):
+                    self._save_wizard_cache(current_step, config_values)
+                    self.console.print(
+                        "\n[token_info]Progress saved. Run the wizard again to resume where you left off.[/]"
+                    )
+                    return {}
+                self.console.print("[warning]Please choose C, B, R, or S.[/]")
 
-        summary_panel = Panel(
-            summary_text.strip(),
-            title="[primary]📋 Summary[/primary]",
-            border_style="border_success",
-            padding=(1, 2),
-            title_align="center",
+            if next_action in ("b", "back"):
+                continue
+
+        self._clear_wizard_cache()
+        self.console.rule(
+            f"[header]{self._glyph('summary', 'Summary')} Configuration Complete![/]",
+            style="success",
         )
-        self.console.print(summary_panel)
+        self._render_configuration_summary(config_values)
 
-        # Confirmation
         try:
             if Confirm.ask(
                 "\n[prompt]Save this configuration?[/]",
                 default=True,
                 console=self.console,
             ):
-                self.console.print("\n[success]🎊 Configuration saved successfully![/]")
+                self.console.print(
+                    f"\n[token_positive]{self._glyph('success', 'OK')} Configuration saved successfully![/]"
+                )
                 return config_values
             else:
-                self.console.print("\n[warning]⚠️ Configuration cancelled[/]")
+                self.console.print(
+                    f"\n[token_warning]{self._glyph('warning', 'WARN')} Configuration cancelled[/]"
+                )
                 return {}
         except KeyboardInterrupt:
             self.console.print("\n[warning]Operation cancelled by user[/]")
             return {}
+
+    def _prompt_wizard_field(
+        self,
+        *,
+        field_type: str,
+        choices: list[Any],
+        default: Any,
+        required: bool,
+        field_definition: dict[str, Any],
+    ) -> Any:
+        """Prompt for a single wizard field with validation."""
+        if field_type == "boolean":
+            return Confirm.ask(
+                "[choice]Enable this option?[/]",
+                default=bool(default) if default is not None else False,
+                console=self.console,
+            )
+
+        if field_type == "choice" and choices:
+            self.console.print("[choice]Available options:[/]")
+            for index, choice in enumerate(choices, 1):
+                choice_text = (
+                    choice
+                    if isinstance(choice, str)
+                    else choice.get("label", str(choice))
+                )
+                self.console.print(f"  [secondary]{index}.[/] {choice_text}")
+
+            max_retries = 3
+            for attempt in range(max_retries):
+                choice_input = Prompt.ask(
+                    "[choice]Select option (number)[/]",
+                    default=str(default) if default else "1",
+                    console=self.console,
+                )
+                try:
+                    choice_index = int(choice_input) - 1
+                except (TypeError, ValueError):
+                    self.console.print("[warning]Please enter a valid number[/]")
+                    continue
+                if 0 <= choice_index < len(choices):
+                    selected = choices[choice_index]
+                    return (
+                        selected
+                        if isinstance(selected, str)
+                        else selected.get("value", selected)
+                    )
+                self.console.print(
+                    f"[warning]Enter a number between 1 and {len(choices)}[/]"
+                )
+            self.console.print(
+                "[warning]Maximum retries exceeded. Using default choice.[/]"
+            )
+            return default if default in choices else choices[0]
+
+        if field_type == "number":
+            integer_mode = field_definition.get("integer", False)
+            max_retries = 3
+            for _ in range(max_retries):
+                num_input = Prompt.ask(
+                    "[choice]Enter value[/]",
+                    default=str(default) if default is not None else None,
+                    console=self.console,
+                )
+                try:
+                    if num_input is None or num_input == "":
+                        return 0 if integer_mode else 0.0
+                    return int(num_input) if integer_mode else float(num_input)
+                except ValueError:
+                    self.console.print("[warning]Please enter a valid number[/]")
+            self.console.print("[warning]Using default numeric value.[/]")
+            return default if default is not None else (0 if integer_mode else 0.0)
+
+        # Default: string input
+        while True:
+            value = Prompt.ask(
+                "[choice]Enter value[/]",
+                default=str(default) if default is not None else None,
+                console=self.console,
+            )
+            if required and not value:
+                self.console.print("[warning]This field is required.[/]")
+                continue
+            return value
+
+    def _render_wizard_progress(
+        self, step_number: int, total_steps: int, values: dict[str, Any]
+    ) -> None:
+        """Render a lightweight progress indicator for the wizard."""
+        completed = step_number - 1
+        ratio = completed / max(total_steps, 1)
+        slots = 10
+        filled = int(ratio * slots)
+        bar = "█" * filled + "░" * (slots - filled)
+        self.console.print(
+            f"[muted]Progress[/] [accent]{bar}[/] [muted]{completed}/{total_steps} • {len(values)} fields captured[/]"
+        )
+
+    def _render_configuration_summary(self, config_values: dict[str, Any]) -> None:
+        """Display a structured summary of collected configuration values."""
+        lines = ["[title]Configuration Summary[/title]", ""]
+        for key, value in config_values.items():
+            label = key.replace("_", " ").title()
+            lines.append(f"[info]{label}:[/] [secondary]{value}[/]")
+
+        summary_panel = Panel(
+            "\n".join(lines).strip(),
+            title=f"[primary]{self._glyph('summary', 'Summary')}[/primary]",
+            border_style="border_success",
+            padding=(1, 2),
+            title_align="center",
+        )
+        self.console.print(summary_panel)
+
+    def _save_wizard_cache(self, step_index: int, values: dict[str, Any]) -> None:
+        """Persist partial wizard progress to disk."""
+        payload = {"step_index": step_index, "values": values}
+        try:
+            self._wizard_cache_path.parent.mkdir(parents=True, exist_ok=True)
+            self._wizard_cache_path.write_text(json.dumps(payload, indent=2))
+        except Exception as exc:  # pragma: no cover - best effort logging
+            self.console.print(f"[warning]Unable to cache wizard progress: {exc}[/]")
+
+    def _load_wizard_cache(self) -> dict[str, Any] | None:
+        """Load cached wizard progress if available."""
+        try:
+            data = json.loads(self._wizard_cache_path.read_text())
+            return data if isinstance(data, dict) else None
+        except FileNotFoundError:
+            return None
+        except Exception:  # pragma: no cover - ignore corrupt caches
+            return None
+
+    def _clear_wizard_cache(self) -> None:
+        """Remove cached wizard progress."""
+        try:
+            if self._wizard_cache_path.exists():
+                self._wizard_cache_path.unlink()
+        except Exception:  # pragma: no cover - ignore cleanup failures
+            pass
 
     def display_code_snippet(
         self,

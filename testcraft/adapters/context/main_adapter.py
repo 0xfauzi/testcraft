@@ -350,6 +350,7 @@ class TestcraftContextAdapter(ContextPort):
                 raise FileNotFoundError(f"File not found: {path}")
 
             logger.info("Indexing file: %s", str(path))
+            kwargs.pop("project_root", None)
             index_id, chunks = self._indexer.index_file(path, content=content, **kwargs)
 
             context_summary = self._summarizer.summarize_file(path, content=content)

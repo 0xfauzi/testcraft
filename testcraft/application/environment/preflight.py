@@ -17,6 +17,8 @@ from typing import Any
 
 from ...config.models import TestCraftConfig
 
+REQUIRED_RUNTIME_PACKAGES = ("rich", "schedule")
+
 
 class EnvironmentValidator:
     """
@@ -53,6 +55,44 @@ class EnvironmentValidator:
             errors.append("Python 3.11+ is required to run TestCraft.")
             suggestions.append(
                 "Use uv to create/activate a 3.11 environment: 'uv venv --python 3.11 && source .venv/bin/activate'"
+            )
+
+        skip_env_check = os.getenv("TESTCRAFT_SKIP_ENV_CHECK") == "1"
+        in_virtualenv = sys.prefix != getattr(sys, "base_prefix", sys.prefix) or bool(
+            os.getenv("VIRTUAL_ENV")
+        )
+        checks.append(
+            {
+                "name": "virtualenv_active",
+                "ok": in_virtualenv or skip_env_check,
+                "details": sys.prefix,
+            }
+        )
+        if not in_virtualenv and not skip_env_check:
+            errors.append("TestCraft must run inside an activated virtual environment.")
+            suggestions.append(
+                "Activate your virtual environment (e.g., 'source .venv/bin/activate')."
+            )
+
+        missing_runtime_packages: list[str] = []
+        for package in REQUIRED_RUNTIME_PACKAGES:
+            if importlib.util.find_spec(package) is None:
+                missing_runtime_packages.append(package)
+
+        checks.append(
+            {
+                "name": "runtime_packages",
+                "ok": not missing_runtime_packages,
+                "details": missing_runtime_packages,
+            }
+        )
+        if missing_runtime_packages:
+            pkg_list = ", ".join(missing_runtime_packages)
+            errors.append(
+                f"Missing required runtime packages: {pkg_list}. Install them inside your virtual environment."
+            )
+            suggestions.append(
+                f"Install missing packages with uv: 'uv pip install {pkg_list}'"
             )
 
         # Pytest availability (always required for refinement, and generally expected)

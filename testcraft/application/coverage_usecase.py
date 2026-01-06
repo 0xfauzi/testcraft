@@ -64,6 +64,9 @@ class CoverageUseCase:
         self._state = state_port
         self._telemetry = telemetry_port
 
+        # Preserve raw config for threshold semantics
+        self._raw_config = config or {}
+
         # Initialize file discovery service
         self._file_discovery = file_discovery_service or FileDiscoveryService()
 
@@ -122,9 +125,22 @@ class CoverageUseCase:
                     "files_discovered", len(discovery_result["source_files"])
                 )
 
-                # Step 2: Measure coverage
+                # Step 2: Measure coverage (pass-through selected kwargs + config)
+                # Extract coverage-specific config and merge with kwargs
+                coverage_config = self._config.get("coverage", {})
+                adapter_kwargs = {
+                    "include": coverage_config.get("include", []),
+                    "omit": coverage_config.get("omit", []),
+                    "data_dir": coverage_config.get("data_dir", ".artifacts/coverage"),
+                    "aggregate": coverage_config.get("aggregate", True),
+                    "pytest_args": coverage_config.get("pytest_args", []),
+                    **kwargs,  # CLI overrides take precedence
+                }
+
                 coverage_data = await self._measure_coverage(
-                    discovery_result["source_files"], discovery_result["test_files"]
+                    discovery_result["source_files"],
+                    discovery_result["test_files"],
+                    **adapter_kwargs,
                 )
                 span.set_attribute("files_measured", len(coverage_data))
 
@@ -134,8 +150,8 @@ class CoverageUseCase:
                     "overall_coverage", coverage_summary.get("overall_line_coverage", 0)
                 )
 
-                # Step 4: Generate reports in requested formats
-                reports = await self._generate_reports(coverage_data)
+                # Step 4: Generate reports in requested formats (pass-through kwargs)
+                reports = await self._generate_reports(coverage_data, **kwargs)
                 span.set_attribute("reports_generated", len(reports))
 
                 # Step 5: Identify coverage gaps if enabled
@@ -145,6 +161,50 @@ class CoverageUseCase:
                         coverage_data, threshold=self._config["coverage_threshold"]
                     )
                     span.set_attribute("gaps_identified", len(coverage_gaps))
+
+                # Enforce thresholds if configured (optional behavior)
+                thresholds = {}
+                try:
+                    if isinstance(self._raw_config, dict):
+                        thresholds = self._raw_config.get("coverage", {}) or {}
+                except Exception:
+                    thresholds = {}
+                min_line = thresholds.get("minimum_line_coverage")
+                min_branch = thresholds.get("minimum_branch_coverage")
+                regenerate_if_below = thresholds.get("regenerate_if_below")
+
+                summary_line = coverage_summary.get("overall_line_coverage", 0) * 100
+                summary_branch = (
+                    coverage_summary.get("overall_branch_coverage", 0) * 100
+                )
+
+                threshold_violations: list[str] = []
+                if isinstance(min_line, (int, float)) and summary_line < float(
+                    min_line
+                ):
+                    threshold_violations.append(
+                        f"overall_line_coverage {summary_line:.1f}% < minimum_line_coverage {float(min_line):.1f}%"
+                    )
+                if isinstance(min_branch, (int, float)) and summary_branch < float(
+                    min_branch
+                ):
+                    threshold_violations.append(
+                        f"overall_branch_coverage {summary_branch:.1f}% < minimum_branch_coverage {float(min_branch):.1f}%"
+                    )
+
+                # Attach threshold info to span
+                if threshold_violations:
+                    span.set_attribute(
+                        "threshold_violations", "; ".join(threshold_violations)
+                    )
+
+                # Optional: mark suggestion to regenerate when below threshold
+                suggest_regenerate = False
+                if isinstance(
+                    regenerate_if_below, (int, float)
+                ) and summary_line < float(regenerate_if_below):
+                    suggest_regenerate = True
+                    span.set_attribute("regenerate_suggested", True)
 
                 # Step 6: Record state and telemetry
                 await self._record_coverage_state(coverage_data, coverage_summary)
@@ -166,6 +226,9 @@ class CoverageUseCase:
                     "overall_branch_coverage": coverage_summary.get(
                         "overall_branch_coverage", 0
                     ),
+                    # Threshold evaluation (if configured in config.coverage)
+                    "threshold_violations": threshold_violations,
+                    "regenerate_suggested": suggest_regenerate,
                     "metadata": {
                         "project_path": str(project_path),
                         "config_used": self._config,
@@ -286,7 +349,10 @@ class CoverageUseCase:
                 ) from e
 
     async def _measure_coverage(
-        self, source_files: list[str], test_files: list[str] | None = None
+        self,
+        source_files: list[str],
+        test_files: list[str] | None = None,
+        **kwargs: Any,
     ) -> dict[str, CoverageResult]:
         """
         Measure coverage for the specified files.
@@ -306,14 +372,16 @@ class CoverageUseCase:
                 if len(source_files) <= max_files:
                     # Process all files at once
                     coverage_data = self._coverage.measure_coverage(
-                        source_files, test_files
+                        source_files, test_files, **kwargs
                     )
                 else:
                     # Process in batches
                     coverage_data = {}
                     for i in range(0, len(source_files), max_files):
                         batch = source_files[i : i + max_files]
-                        batch_data = self._coverage.measure_coverage(batch, test_files)
+                        batch_data = self._coverage.measure_coverage(
+                            batch, test_files, **kwargs
+                        )
                         coverage_data.update(batch_data)
 
                 span.set_attribute("files_measured", len(coverage_data))
@@ -331,7 +399,7 @@ class CoverageUseCase:
                 ) from e
 
     async def _generate_reports(
-        self, coverage_data: dict[str, CoverageResult]
+        self, coverage_data: dict[str, CoverageResult], **kwargs: Any
     ) -> dict[str, dict[str, Any]]:
         """
         Generate coverage reports in requested formats.
@@ -350,8 +418,9 @@ class CoverageUseCase:
 
                 for format_name in output_formats:
                     try:
+                        # Forward relevant kwargs to adapter (e.g., xml_output, data_dir)
                         report_data = self._coverage.report_coverage(
-                            coverage_data, output_format=format_name
+                            coverage_data, output_format=format_name, **kwargs
                         )
                         reports[format_name] = report_data
 

@@ -6,10 +6,12 @@ and serialization. These models represent the fundamental entities in the
 test generation and analysis system.
 """
 
+from datetime import datetime
 from enum import Enum
+from pathlib import Path
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field, model_validator, validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 class TestCraftError(Exception):
@@ -46,7 +48,7 @@ class TestElement(BaseModel):
         None, description="Documentation string for the element"
     )
 
-    @validator("line_range")
+    @field_validator("line_range")
     def validate_line_range(cls, v: Any) -> Any:
         """Validate that line range is valid (start <= end)."""
         start, end = v
@@ -56,11 +58,7 @@ class TestElement(BaseModel):
             raise ValueError("Line numbers must be positive")
         return v
 
-    class Config:
-        """Pydantic configuration for TestElement."""
-
-        frozen = True  # Make immutable
-        use_enum_values = True
+    model_config = ConfigDict(frozen=True, use_enum_values=True)
 
 
 class CoverageResult(BaseModel):
@@ -81,7 +79,7 @@ class CoverageResult(BaseModel):
         default_factory=list, description="List of line numbers with no coverage"
     )
 
-    @validator("missing_lines")
+    @field_validator("missing_lines")
     def validate_missing_lines(cls, v: Any) -> Any:
         """Validate that missing lines are positive integers."""
         for line in v:
@@ -89,10 +87,7 @@ class CoverageResult(BaseModel):
                 raise ValueError("Line numbers must be positive")
         return sorted(set(v))  # Remove duplicates and sort
 
-    class Config:
-        """Pydantic configuration for CoverageResult."""
-
-        frozen = True  # Make immutable
+    model_config = ConfigDict(frozen=True)
 
 
 class GenerationResult(BaseModel):
@@ -110,17 +105,14 @@ class GenerationResult(BaseModel):
         None, description="Error message if generation failed"
     )
 
-    @validator("error_message")
-    def validate_error_message(cls, v: Any, values: Any) -> Any:
+    @model_validator(mode="after")
+    def ensure_error_message_when_unsuccessful(self) -> "GenerationResult":
         """Validate that error message is provided when success is False."""
-        if not values.get("success", True) and not v:
+        if not self.success and not self.error_message:
             raise ValueError("Error message must be provided when success is False")
-        return v
+        return self
 
-    class Config:
-        """Pydantic configuration for GenerationResult."""
-
-        frozen = True  # Make immutable
+    model_config = ConfigDict(frozen=True)
 
 
 class TestGenerationPlan(BaseModel):
@@ -140,18 +132,25 @@ class TestGenerationPlan(BaseModel):
     coverage_before: CoverageResult | None = Field(
         None, description="Coverage metrics before test generation"
     )
+    file_path: Path = Field(..., description="Source file path covered by this plan")
+    project_root: Path | None = Field(
+        None, description="Project root associated with this plan"
+    )
+    module_path: str | None = Field(
+        None, description="Canonical import path for the source file"
+    )
+    test_output_path: Path | None = Field(
+        None, description="Planned output path for generated tests"
+    )
 
-    @validator("elements_to_test")
+    @field_validator("elements_to_test")
     def validate_elements_not_empty(cls, v: Any) -> Any:
         """Validate that at least one element is provided."""
         if not v:
             raise ValueError("At least one element must be provided for testing")
         return v
 
-    class Config:
-        """Pydantic configuration for TestGenerationPlan."""
-
-        frozen = True  # Make immutable
+    model_config = ConfigDict(frozen=True)
 
 
 class RefineOutcome(BaseModel):
@@ -168,17 +167,80 @@ class RefineOutcome(BaseModel):
     rationale: str = Field(..., description="Explanation of why changes were made")
     plan: str | None = Field(None, description="Detailed plan for the refinement")
 
-    @validator("updated_files")
+    @field_validator("updated_files")
     def validate_updated_files_not_empty(cls, v: Any) -> Any:
         """Validate that at least one file was updated."""
         if not v:
             raise ValueError("At least one file must be updated")
         return v
 
-    class Config:
-        """Pydantic configuration for RefineOutcome."""
+    model_config = ConfigDict(frozen=True)
 
-        frozen = True  # Make immutable
+
+class PlanningRequest(BaseModel):
+    """
+    Request for plan generation.
+
+    This model captures the information needed to request a test generation plan,
+    including the target file, object, and optional prompt customizations.
+    """
+
+    target_file: Path = Field(..., description="Path to the target file")
+    target_object: str = Field(
+        ..., description="Target object (e.g., 'Class.method' or 'function')"
+    )
+    project_root: Path | None = Field(None, description="Project root directory")
+    prompt_customization: str | None = Field(
+        None, description="Custom prompt modifications"
+    )
+
+    model_config = ConfigDict(frozen=True)
+
+
+class PlanOption(BaseModel):
+    """
+    Individual plan alternative from LLM.
+
+    This model represents a single plan generated by the LLM, with unique
+    identification via hash and tracking of the model used.
+    """
+
+    plan_id: str = Field(..., description="SHA-256 hash of plan content")
+    plan_content: dict[str, Any] = Field(
+        ..., description="Plan content from LLMOrchestrator"
+    )
+    model_used: str = Field(..., description="LLM model used for generation")
+    created_at: datetime = Field(..., description="Creation timestamp (UTC)")
+
+    model_config = ConfigDict(frozen=True)
+
+
+class PlanningResult(BaseModel):
+    """
+    Result of planning with acceptance/edit history.
+
+    This model captures the complete planning workflow result, including
+    the original request, generated plan, acceptance status, and full
+    edit history for audit purposes.
+    """
+
+    request: PlanningRequest = Field(..., description="Original planning request")
+    plan_option: PlanOption = Field(..., description="Generated plan option")
+    accepted: bool = Field(default=False, description="Whether plan was accepted")
+    rejected: bool = Field(default=False, description="Whether plan was rejected")
+    edit_history: list[dict[str, Any]] = Field(
+        default_factory=list, description="Edit history with timestamps"
+    )
+    accepted_at: datetime | None = Field(None, description="Acceptance timestamp (UTC)")
+
+    @model_validator(mode="after")
+    def validate_acceptance_timestamp(self) -> "PlanningResult":
+        """Validate acceptance timestamp presence when accepted is True."""
+        if self.accepted and self.accepted_at is None:
+            raise ValueError("accepted_at must be provided when accepted is True")
+        return self
+
+    model_config = ConfigDict(frozen=True)
 
 
 class AnalysisReport(BaseModel):
@@ -199,7 +261,7 @@ class AnalysisReport(BaseModel):
         ..., description="Mapping of file paths to existing test presence"
     )
 
-    @validator("files_to_process")
+    @field_validator("files_to_process")
     def validate_files_not_empty(cls, v: Any) -> Any:
         """Validate that files_to_process is a valid list."""
         # Allow empty lists for empty projects - this is a valid scenario
@@ -207,30 +269,20 @@ class AnalysisReport(BaseModel):
             raise ValueError("files_to_process cannot be None")
         return v
 
-    @validator("reasons")
-    def validate_reasons_match_files(cls, v: Any, values: Any) -> Any:
-        """Validate that reasons are provided for all files."""
-        files = values.get("files_to_process", [])
+    @model_validator(mode="after")
+    def validate_dependency_mappings(self) -> "AnalysisReport":
+        """Validate that reasons and test presence map to every file."""
+        files = self.files_to_process or []
         for file_path in files:
-            if file_path not in v:
+            if file_path not in self.reasons:
                 raise ValueError(f"Reason must be provided for file: {file_path}")
-        return v
-
-    @validator("existing_test_presence")
-    def validate_test_presence_match_files(cls, v: Any, values: Any) -> Any:
-        """Validate that test presence info is provided for all files."""
-        files = values.get("files_to_process", [])
-        for file_path in files:
-            if file_path not in v:
+            if file_path not in self.existing_test_presence:
                 raise ValueError(
                     f"Test presence info must be provided for file: {file_path}"
                 )
-        return v
+        return self
 
-    class Config:
-        """Pydantic configuration for AnalysisReport."""
-
-        frozen = True  # Make immutable
+    model_config = ConfigDict(frozen=True)
 
 
 # Context Assembly Models (Repository-Aware Test Generation)
@@ -241,11 +293,26 @@ class Target(BaseModel):
 
     module_file: str = Field(..., description="Path to the target module file")
     object: str = Field(..., description="Target object (Class.method, function, etc.)")
+    module_path: str | None = Field(
+        None, description="Canonical module import path for the target"
+    )
+    relative_path: str | None = Field(
+        None, description="Path to the target relative to the project root"
+    )
+    class_name: str | None = Field(
+        None, description="Class name when target refers to a method"
+    )
+    method_name: str | None = Field(
+        None, description="Method name when target refers to a method"
+    )
+    is_method: bool = Field(
+        default=False, description="Whether the target refers to a method"
+    )
+    exists_in_source: bool = Field(
+        default=False, description="Whether the target was located in source code"
+    )
 
-    class Config:
-        """Pydantic configuration for Target."""
-
-        frozen = True
+    model_config = ConfigDict(frozen=True)
 
 
 class ImportMap(BaseModel):
@@ -276,10 +343,7 @@ class ImportMap(BaseModel):
             )
         return self
 
-    class Config:
-        """Pydantic configuration for ImportMap."""
-
-        frozen = True
+    model_config = ConfigDict(frozen=True)
 
 
 class Focal(BaseModel):
@@ -288,11 +352,16 @@ class Focal(BaseModel):
     source: str = Field(..., description="Source code of the focal element")
     signature: str = Field(..., description="Function/method signature")
     docstring: str | None = Field(None, description="Docstring if available")
+    is_placeholder: bool = Field(
+        default=False,
+        description="True when the focal source is a placeholder rather than real code",
+    )
+    placeholder_reason: str | None = Field(
+        default=None,
+        description="Explanation for placeholder focal source, when applicable",
+    )
 
-    class Config:
-        """Pydantic configuration for Focal."""
-
-        frozen = True
+    model_config = ConfigDict(frozen=True)
 
 
 class ResolvedDef(BaseModel):
@@ -306,10 +375,7 @@ class ResolvedDef(BaseModel):
     doc: str | None = Field(None, description="Documentation if available")
     body: str = Field(..., description="Implementation body or 'omitted' placeholder")
 
-    class Config:
-        """Pydantic configuration for ResolvedDef."""
-
-        frozen = True
+    model_config = ConfigDict(frozen=True)
 
 
 class RankedMethod(BaseModel):
@@ -323,10 +389,7 @@ class RankedMethod(BaseModel):
         ..., description="GIVEN/WHEN/THEN relation type"
     )
 
-    class Config:
-        """Pydantic configuration for RankedMethod."""
-
-        frozen = True
+    model_config = ConfigDict(frozen=True)
 
 
 class GwtSnippets(BaseModel):
@@ -336,10 +399,7 @@ class GwtSnippets(BaseModel):
     when: list[str] = Field(default_factory=list, description="WHEN snippets")
     then: list[str] = Field(default_factory=list, description="THEN snippets")
 
-    class Config:
-        """Pydantic configuration for GwtSnippets."""
-
-        frozen = True
+    model_config = ConfigDict(frozen=True)
 
 
 class TestBundle(BaseModel):
@@ -353,10 +413,7 @@ class TestBundle(BaseModel):
         default_factory=list, description="Assertion patterns"
     )
 
-    class Config:
-        """Pydantic configuration for TestBundle."""
-
-        frozen = True
+    model_config = ConfigDict(frozen=True)
 
 
 class PropertyContext(BaseModel):
@@ -372,10 +429,7 @@ class PropertyContext(BaseModel):
         default_factory=list, description="Related test bundles"
     )
 
-    class Config:
-        """Pydantic configuration for PropertyContext."""
-
-        frozen = True
+    model_config = ConfigDict(frozen=True)
 
 
 class DeterminismConfig(BaseModel):
@@ -387,10 +441,7 @@ class DeterminismConfig(BaseModel):
         default=True, description="Whether to freeze time in tests"
     )
 
-    class Config:
-        """Pydantic configuration for DeterminismConfig."""
-
-        frozen = True
+    model_config = ConfigDict(frozen=True)
 
 
 class IOPolicy(BaseModel):
@@ -403,10 +454,7 @@ class IOPolicy(BaseModel):
         default="tmp_path_only", description="Filesystem access policy"
     )
 
-    class Config:
-        """Pydantic configuration for IOPolicy."""
-
-        frozen = True
+    model_config = ConfigDict(frozen=True)
 
 
 class Conventions(BaseModel):
@@ -424,10 +472,7 @@ class Conventions(BaseModel):
         default_factory=IOPolicy, description="I/O policy for test safety"
     )
 
-    class Config:
-        """Pydantic configuration for Conventions."""
-
-        frozen = True
+    model_config = ConfigDict(frozen=True)
 
 
 class Budget(BaseModel):
@@ -437,17 +482,29 @@ class Budget(BaseModel):
         default=60000, description="Maximum input tokens for LLM context"
     )
 
-    @validator("max_input_tokens")
+    @field_validator("max_input_tokens")
     def validate_positive_tokens(cls, v: Any) -> Any:
         """Validate that token count is positive."""
         if v <= 0:
             raise ValueError("Token count must be positive")
         return v
 
-    class Config:
-        """Pydantic configuration for Budget."""
+    model_config = ConfigDict(frozen=True)
 
-        frozen = True
+
+class DependencyMetadata(BaseModel):
+    """Metadata about declared project dependencies for prompt and resolver context."""
+
+    external_modules: list[str] = Field(
+        default_factory=list,
+        description="Normalized module names declared as project dependencies",
+    )
+    distributions: dict[str, str] = Field(
+        default_factory=dict,
+        description="Mapping of declared dependency names to version specifiers",
+    )
+
+    model_config = ConfigDict(frozen=True)
 
 
 class ContextPack(BaseModel):
@@ -480,6 +537,10 @@ class ContextPack(BaseModel):
     )
     context: str | None = Field(
         None, description="Enriched context string for backward compatibility"
+    )
+    dependency_metadata: DependencyMetadata = Field(
+        default_factory=DependencyMetadata,
+        description="Metadata about dependencies available to the project runtime",
     )
 
     def dict(
@@ -523,9 +584,6 @@ class ContextPack(BaseModel):
 
     def __len__(self) -> int:
         """Return number of fields in ContextPack."""
-        return 8  # target, import_map, focal, resolved_defs, property_context, conventions, budget, context
+        return 9  # target, import_map, focal, resolved_defs, property_context, conventions, budget, context, dependency_metadata
 
-    class Config:
-        """Pydantic configuration for ContextPack."""
-
-        frozen = True
+    model_config = ConfigDict(frozen=True)

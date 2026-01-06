@@ -288,11 +288,21 @@ class CostManager:
         else:
             start_time = None
 
+        # Allow explicit overrides via kwargs
+        override_start = kwargs.get("start_time")
+        override_end = kwargs.get("end_time")
+        if override_start:
+            start_time = override_start
+
         # Filter entries
         filtered_entries = self.cost_entries
         if start_time:
             filtered_entries = [
                 e for e in filtered_entries if e.timestamp >= start_time
+            ]
+        if override_end:
+            filtered_entries = [
+                e for e in filtered_entries if e.timestamp <= override_end
             ]
         if service_filter:
             filtered_entries = [
